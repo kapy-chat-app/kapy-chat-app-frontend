@@ -497,7 +497,6 @@ export const useFriendsList = () => {
   return returnValue;
 };
 
-// NEW: Block Users Hook
 export const useBlockedUsers = () => {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(false);
@@ -509,9 +508,9 @@ export const useBlockedUsers = () => {
     process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
   ).current;
 
-  const hasLoadedRef = useRef(false);
+  // LOẠI BỎ hasLoadedRef và useEffect tự động load
+  // const hasLoadedRef = useRef(false);
 
-  // Load blocked users
   const loadBlockedUsers = useCallback(
     async (
       page = 1,
@@ -549,7 +548,12 @@ export const useBlockedUsers = () => {
         const result = await response.json();
 
         if (response.ok) {
-          setBlockedUsers(result.blockedUsers || []);
+          // Chỉ set state khi page = 1, hoặc append nếu page > 1
+          if (page === 1) {
+            setBlockedUsers(result.blockedUsers || []);
+          } else {
+            setBlockedUsers(prev => [...prev, ...(result.blockedUsers || [])]);
+          }
           setTotalCount(result.totalCount || 0);
           return {
             success: true,
@@ -583,7 +587,6 @@ export const useBlockedUsers = () => {
     [getToken, API_BASE_URL]
   );
 
-  // Block a user
   const blockUser = useCallback(
     async (userId: string, reason?: string): Promise<ApiResponse<null>> => {
       setLoading(true);
@@ -613,8 +616,8 @@ export const useBlockedUsers = () => {
         const result = await response.json();
 
         if (response.ok) {
-          // Reload blocked users list
-          await loadBlockedUsers();
+          // Reload blocked users list với page = 1
+          await loadBlockedUsers(1, "");
           return {
             success: true,
             error: null,
@@ -645,7 +648,6 @@ export const useBlockedUsers = () => {
     [getToken, API_BASE_URL, loadBlockedUsers]
   );
 
-  // Unblock a user
   const unblockUser = useCallback(
     async (userId: string): Promise<ApiResponse<null>> => {
       setLoading(true);
@@ -675,8 +677,9 @@ export const useBlockedUsers = () => {
         const result = await response.json();
 
         if (response.ok) {
-          // Remove from blocked users list
+          // Remove from blocked users list immediately
           setBlockedUsers((prev) => prev.filter((user) => user.id !== userId));
+          setTotalCount(prev => prev - 1);
           return {
             success: true,
             error: null,
@@ -707,13 +710,13 @@ export const useBlockedUsers = () => {
     [getToken, API_BASE_URL]
   );
 
-  // Load blocked users on mount
-  useEffect(() => {
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      loadBlockedUsers();
-    }
-  }, [loadBlockedUsers]);
+  // LOẠI BỎ useEffect tự động load
+  // useEffect(() => {
+  //   if (!hasLoadedRef.current) {
+  //     hasLoadedRef.current = true;
+  //     loadBlockedUsers();
+  //   }
+  // }, [loadBlockedUsers]);
 
   const clearError = useCallback(() => setError(null), []);
 

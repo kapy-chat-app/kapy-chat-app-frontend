@@ -33,6 +33,14 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
     return `${diffDays} days ago`;
   };
 
+  // Function to get avatar source
+  const getAvatarSource = () => {
+    if (friend.avatar && friend.avatar.trim() !== "") {
+      return { uri: friend.avatar };
+    }
+    return require("@/assets/images/default-avatar.png");
+  };
+
   // Menu options for the dropdown
   const menuOptions = [
     {
@@ -65,7 +73,7 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
       <View className="flex-row items-center">
         <View className="relative">
           <Image
-            source={{ uri: friend.avatar || "https://via.placeholder.com/50" }}
+            source={getAvatarSource()}
             className="w-12 h-12 rounded-full"
           />
           {friend.is_online && (

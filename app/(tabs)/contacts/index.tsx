@@ -12,7 +12,7 @@ import {
   useFriendSearch,
   useFriendsList,
 } from "@/hooks/friend/useFriends";
-import { router, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useMemo, useState, useCallback } from "react";
 import {
   Alert,

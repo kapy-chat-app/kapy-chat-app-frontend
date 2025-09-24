@@ -14,14 +14,20 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
   onAccept,
   onDecline,
 }) => {
+  // Function to get avatar source
+  const getAvatarSource = () => {
+    if (request.requester.avatar && request.requester.avatar.trim() !== "") {
+      return { uri: request.requester.avatar };
+    }
+    return require("@/assets/images/default-avatar.png");
+  };
+
   return (
     <View className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-3 mx-4 shadow-sm">
       <View className="flex flex-col items-center">
         <View className="relative">
           <Image
-            source={{
-              uri: request.requester.avatar || "https://via.placeholder.com/50",
-            }}
+            source={getAvatarSource()}
             className="w-12 h-12 rounded-full"
           />
           {/* Wave emoji for friend request */}

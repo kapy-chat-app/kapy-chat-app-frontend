@@ -1,13 +1,12 @@
 import Header from "@/components/shared/Header";
 import Sidebar from "@/components/shared/Sidebar";
 import Button from "@/components/ui/Button";
-import BackButton from "@/components/ui/BackButton";
-import MenuDropdown from "@/components/ui/MenuDropdown"; // Add this import
-import { useFriendRequests, useBlockedUsers } from "@/hooks/friend/useFriends"; // Add useBlockedUsers
+import MenuDropdown from "@/components/ui/MenuDropdown";
+import { useFriendRequests, useBlockedUsers } from "@/hooks/friend/useFriends";
 import { usePublicProfile } from "@/hooks/friend/usePublicProfile";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState, useMemo } from "react";
+import React, { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
   Alert,
   Image,
@@ -17,25 +16,167 @@ import {
   TouchableOpacity,
   useColorScheme,
   View,
+  Modal,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// Block Reason Modal Component - Completely isolated
+const BlockReasonModal = ({ 
+  visible, 
+  onCancel, 
+  onConfirm, 
+  onSkip, 
+  isLoading 
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+  onSkip: () => void;
+  isLoading: boolean;
+}) => {
+  const [reason, setReason] = useState("");
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+
+  // Reset reason when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setReason("");
+    }
+  }, [visible]);
+
+  const handleConfirm = () => {
+    onConfirm(reason.trim());
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      statusBarTranslucent={true}
+      onRequestClose={onCancel}
+    >
+      <View className="flex-1 justify-center items-center bg-black/50 px-4">
+        <View className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm">
+          <Text className="text-lg font-semibold mb-4 text-black dark:text-white">
+            Block Reason (Optional)
+          </Text>
+          
+          <Text className="text-gray-600 dark:text-gray-400 text-sm mb-4">
+            Why are you blocking this user? This will help us improve the platform.
+          </Text>
+          
+          <TextInput
+            value={reason}
+            onChangeText={setReason}
+            placeholder="Enter reason (optional)..."
+            placeholderTextColor="#9CA3AF"
+            className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 mb-6 text-black dark:text-white dark:bg-gray-700 min-h-[80px]"
+            multiline={true}
+            numberOfLines={3}
+            maxLength={500}
+            textAlignVertical="top"
+            editable={!isLoading}
+            autoFocus={false}
+            blurOnSubmit={false}
+            returnKeyType="default"
+          />
+          
+          <View className="flex-row space-x-3">
+            <TouchableOpacity
+              onPress={onCancel}
+              disabled={isLoading}
+              className={`flex-1 rounded-lg py-3 ${
+                isLoading 
+                  ? "bg-gray-100 dark:bg-gray-700" 
+                  : "bg-gray-200 dark:bg-gray-600"
+              }`}
+            >
+              <Text className={`text-center font-medium ${
+                isLoading 
+                  ? "text-gray-400" 
+                  : "text-gray-700 dark:text-gray-200"
+              }`}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={onSkip}
+              disabled={isLoading}
+              className={`flex-1 rounded-lg py-3 ${
+                isLoading 
+                  ? "bg-gray-100 dark:bg-gray-700" 
+                  : "bg-orange-100 dark:bg-orange-900"
+              }`}
+            >
+              <Text className={`text-center font-medium ${
+                isLoading 
+                  ? "text-gray-400" 
+                  : "text-orange-600 dark:text-orange-400"
+              }`}>
+                {isLoading ? "Blocking..." : "Skip"}
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={handleConfirm}
+              disabled={isLoading}
+              className={`flex-1 rounded-lg py-3 ${
+                isLoading 
+                  ? "bg-gray-100 dark:bg-gray-700" 
+                  : "bg-red-500"
+              }`}
+            >
+              <Text className={`text-center font-medium ${
+                isLoading 
+                  ? "text-gray-400" 
+                  : "text-white"
+              }`}>
+                {isLoading ? "Blocking..." : "Block"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+BlockReasonModal.displayName = 'BlockReasonModal';
 
 const PublicProfileScreen = () => {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Block reason modal states - simplified
+  const [showBlockReasonModal, setShowBlockReasonModal] = useState(false);
+  const [isBlocking, setIsBlocking] = useState(false);
 
   const { id } = useLocalSearchParams<{ id: string }>();
   
   // Get stable references from hooks
   const publicProfileHook = usePublicProfile();
   const friendRequestsHook = useFriendRequests();
-  const blockedUsersHook = useBlockedUsers(); // Add this hook
+  const blockedUsersHook = useBlockedUsers();
   
   const { profile, loading, error, getUserProfile, clearError, clearProfile } = publicProfileHook;
   const { sendFriendRequest, respondToRequest } = friendRequestsHook;
-  const { blockUser, unblockUser } = blockedUsersHook; // Destructure block functions
+  const { blockUser, unblockUser } = blockedUsersHook;
+
+  // Function to get avatar source
+  const getAvatarSource = useCallback(() => {
+    if (profile?.avatar && profile.avatar.trim() !== "") {
+      return { uri: profile.avatar };
+    }
+    return require("@/assets/images/default-avatar.png");
+  }, [profile?.avatar]);
 
   // Memoize stable handlers
   const handleMenuPress = useCallback(() => {
@@ -52,15 +193,14 @@ const PublicProfileScreen = () => {
     router.back();
   }, [clearProfile, clearError]);
 
-  // Load profile only when id changes, using stable function
+  // Load profile only when id changes
   useEffect(() => {
     if (id && typeof id === 'string') {
-      // Only clear and load if it's a different user
       getUserProfile(id);
     }
-  }, [id]); // Remove getUserProfile from dependencies
+  }, [id]);
 
-  // Refresh handler with stable dependencies
+  // Refresh handler
   const onRefresh = useCallback(async () => {
     if (!id || typeof id !== 'string') return;
 
@@ -70,21 +210,20 @@ const PublicProfileScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [id]); // Remove getUserProfile from dependencies
+  }, [id, getUserProfile]);
 
-  // Friend request handlers with stable dependencies
+  // Friend request handlers
   const handleSendFriendRequest = useCallback(async () => {
     if (!profile || !id) return;
 
     const result = await sendFriendRequest(profile.id);
     if (result.success) {
       Alert.alert("Success", "Friend request sent successfully");
-      // Refresh profile to get updated friendship status
       await getUserProfile(id as string);
     } else {
       Alert.alert("Error", result.error || "Failed to send friend request");
     }
-  }, [profile, id, sendFriendRequest]); // Remove getUserProfile from dependencies
+  }, [profile, id, sendFriendRequest, getUserProfile]);
 
   const handleAcceptRequest = useCallback(async () => {
     if (!profile || !id) return;
@@ -96,18 +235,17 @@ const PublicProfileScreen = () => {
     } else {
       Alert.alert("Error", result.error || "Failed to accept request");
     }
-  }, [profile, id, respondToRequest]); // Remove getUserProfile from dependencies
+  }, [profile, id, respondToRequest, getUserProfile]);
 
   const handleMessage = useCallback(() => {
     if (!profile) return;
     router.push(`/conversations/${profile.id}`);
   }, [profile]);
 
-  // Updated block handler with confirmation dialog and reason input
+  // Cross-platform block handler
   const handleBlock = useCallback(async () => {
     if (!profile) return;
 
-    // Show confirmation dialog with reason input
     Alert.alert(
       "Block User",
       `Are you sure you want to block ${profile.full_name}? They will no longer be able to contact you or see your profile.`,
@@ -119,63 +257,96 @@ const PublicProfileScreen = () => {
         {
           text: "Block",
           style: "destructive",
-          onPress: async () => {
-            // Optional: Ask for block reason
-            Alert.prompt(
-              "Block Reason (Optional)",
-              "Would you like to provide a reason for blocking this user?",
-              [
-                {
-                  text: "Skip",
-                  onPress: async () => {
-                    const result = await blockUser(profile.id);
-                    if (result.success) {
-                      Alert.alert("Success", "User blocked successfully", [
-                        {
-                          text: "OK",
-                          onPress: () => {
-                            // Go back since user is now blocked
-                            router.back();
-                          }
-                        }
-                      ]);
-                    } else {
-                      Alert.alert("Error", result.error || "Failed to block user");
-                    }
-                  }
-                },
-                {
-                  text: "Block with Reason",
-                  onPress: async (reason) => {
-                    const result = await blockUser(profile.id, reason || undefined);
-                    if (result.success) {
-                      Alert.alert("Success", "User blocked successfully", [
-                        {
-                          text: "OK",
-                          onPress: () => {
-                            // Go back since user is now blocked
-                            router.back();
-                          }
-                        }
-                      ]);
-                    } else {
-                      Alert.alert("Error", result.error || "Failed to block user");
-                    }
-                  }
-                }
-              ],
-              "plain-text",
-              "",
-              "default"
-            );
+          onPress: () => {
+            setShowBlockReasonModal(true);
           }
         }
       ]
     );
+  }, [profile]);
+
+  // Block user with reason
+  const handleBlockConfirm = useCallback(async (reason: string) => {
+    if (!profile) return;
+
+    setIsBlocking(true);
+    try {
+      console.log("Blocking user:", profile.id, "with reason:", reason);
+      
+      const result = await blockUser(profile.id, reason || undefined);
+      
+      console.log("Block result:", result);
+      
+      if (result.success) {
+        setShowBlockReasonModal(false);
+        
+        Alert.alert(
+          "Success", 
+          result.message || "User blocked successfully",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                router.back();
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", result.error || "Failed to block user");
+      }
+    } catch (error) {
+      console.error("Block error:", error);
+      Alert.alert("Error", "An unexpected error occurred while blocking user");
+    } finally {
+      setIsBlocking(false);
+    }
   }, [profile, blockUser]);
 
+  // Block without reason
+  const handleBlockSkipReason = useCallback(async () => {
+    if (!profile) return;
+
+    setIsBlocking(true);
+    try {
+      console.log("Blocking user without reason:", profile.id);
+      
+      const result = await blockUser(profile.id);
+      
+      console.log("Block result:", result);
+      
+      if (result.success) {
+        setShowBlockReasonModal(false);
+        
+        Alert.alert(
+          "Success", 
+          result.message || "User blocked successfully",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                router.back();
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Error", result.error || "Failed to block user");
+      }
+    } catch (error) {
+      console.error("Block error:", error);
+      Alert.alert("Error", "An unexpected error occurred while blocking user");
+    } finally {
+      setIsBlocking(false);
+    }
+  }, [profile, blockUser]);
+
+  // Cancel block modal
+  const handleCancelBlock = useCallback(() => {
+    setShowBlockReasonModal(false);
+  }, []);
+
   const handleShare = useCallback(() => {
-    // Implement share profile functionality
     console.log("Share profile:", profile?.id);
     Alert.alert("Info", "Share functionality not implemented yet");
   }, [profile]);
@@ -202,7 +373,6 @@ const PublicProfileScreen = () => {
         title: 'Decline Request',
         icon: 'close-circle-outline' as keyof typeof Ionicons.glyphMap,
         onPress: () => {
-          // Handle decline request
           console.log("Decline friend request");
           Alert.alert("Info", "Decline functionality not implemented yet");
         },
@@ -231,7 +401,6 @@ const PublicProfileScreen = () => {
       },
     ];
 
-    // Only show block option if user is not already blocked
     if (profile.friendshipStatus !== "blocked") {
       baseOptions.push({
         id: 'block',
@@ -245,7 +414,7 @@ const PublicProfileScreen = () => {
     return baseOptions;
   }, [profile, handleShare, handleReport, handleBlock]);
 
-  // Memoized utility functions  
+  // Utility functions  
   const formatDate = useCallback((date: Date | undefined) => {
     if (!date) return "Unknown";
     return new Date(date).toLocaleDateString();
@@ -273,7 +442,7 @@ const PublicProfileScreen = () => {
     return "Offline";
   }, [profile]);
 
-  // Memoized InfoRow component
+  // InfoRow component
   const InfoRow = useMemo(() => {
     const InfoRowComponent = React.memo(({
       label,
@@ -310,12 +479,11 @@ const PublicProfileScreen = () => {
     return InfoRowComponent;
   }, [isDark]);
 
-  // Memoized Action buttons component
+  // Action buttons component
   const ActionButtons = useMemo(() => {
     const ActionButtonsComponent = React.memo(() => {
       if (!profile) return null;
 
-      // Don't show action buttons if user is blocked
       if (profile.friendshipStatus === "blocked") {
         return (
           <View className="px-4 mt-6">
@@ -333,7 +501,6 @@ const PublicProfileScreen = () => {
 
       return (
         <View className="flex-row gap-3 px-4 mt-6">
-          {/* Add Friend Button */}
           {profile.friendshipStatus === "none" && (
             <Button
               title="Add Friend"
@@ -343,7 +510,6 @@ const PublicProfileScreen = () => {
             />
           )}
 
-          {/* Request Sent Status */}
           {profile.friendshipStatus === "sent" && (
             <View className="flex-1 bg-orange-100 dark:bg-orange-900 rounded-lg p-3">
               <Text className="text-orange-600 dark:text-orange-400 text-center font-medium">
@@ -352,7 +518,6 @@ const PublicProfileScreen = () => {
             </View>
           )}
 
-          {/* Pending Friend Request - Use MenuDropdown */}
           {profile.friendshipStatus === "pending" && (
             <View className="flex-1">
               <MenuDropdown
@@ -374,7 +539,6 @@ const PublicProfileScreen = () => {
             </View>
           )}
 
-          {/* Message Button for Friends */}
           {profile.friendshipStatus === "accepted" && (
             <Button
               title="Message"
@@ -384,7 +548,6 @@ const PublicProfileScreen = () => {
             />
           )}
 
-          {/* Profile Menu Dropdown */}
           <MenuDropdown
             options={profileMenuOptions}
             triggerIcon="ellipsis-horizontal"
@@ -404,6 +567,11 @@ const PublicProfileScreen = () => {
     ActionButtonsComponent.displayName = 'ActionButtons';
     return ActionButtonsComponent;
   }, [profile, handleSendFriendRequest, friendRequestMenuOptions, handleMessage, profileMenuOptions, isDark]);
+
+  // Render block modal directly without memo to prevent re-rendering issues
+  const renderBlockReasonModal = () => {
+    return null; // We'll use the external component instead
+  };
 
   // Loading state
   if (loading && !profile) {
@@ -472,11 +640,11 @@ const PublicProfileScreen = () => {
   return (
     <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
       <Header
-          title="Profile"
-          onMenuPress={handleMenuPress}
-          onBackPress={handleBackPress}
-          showBackButton={true}
-        />
+        title="Profile"
+        onMenuPress={handleMenuPress}
+        onBackPress={handleBackPress}
+        showBackButton={true}
+      />
 
       <ScrollView
         className="flex-1"
@@ -500,21 +668,11 @@ const PublicProfileScreen = () => {
           <View className="items-center pt-6">
             {/* Avatar */}
             <View className="w-32 h-32 rounded-full overflow-hidden bg-gray-300 dark:bg-gray-600 border-4 border-white dark:border-gray-800">
-              {profile.avatar ? (
-                <Image
-                  source={{ uri: profile.avatar }}
-                  className="w-full h-full"
-                  resizeMode="cover"
-                />
-              ) : (
-                <View className="w-full h-full justify-center items-center">
-                  <Ionicons
-                    name="person"
-                    size={60}
-                    color={isDark ? "#9CA3AF" : "#6B7280"}
-                  />
-                </View>
-              )}
+              <Image
+                source={getAvatarSource()}
+                className="w-full h-full"
+                resizeMode="cover"
+              />
             </View>
 
             {/* Name and Username */}
@@ -649,6 +807,15 @@ const PublicProfileScreen = () => {
         )}
       </ScrollView>
 
+      {/* Block Reason Modal - External Component */}
+      <BlockReasonModal
+        visible={showBlockReasonModal}
+        onCancel={handleCancelBlock}
+        onConfirm={handleBlockConfirm}
+        onSkip={handleBlockSkipReason}
+        isLoading={isBlocking}
+      />
+
       <Sidebar
         isVisible={isSidebarVisible}
         onClose={handleSidebarClose}
@@ -657,7 +824,6 @@ const PublicProfileScreen = () => {
   );
 };
 
-// Set display name for debugging
 PublicProfileScreen.displayName = "PublicProfileScreen";
 
 export default PublicProfileScreen;

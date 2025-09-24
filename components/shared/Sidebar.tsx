@@ -100,6 +100,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
       icon: 'settings-outline',
       route: '/(tabs)/settings',
     },
+    {
+      title:'Blocked Users',
+      icon:'ban-outline',
+      route:'/(tabs)/contacts/blocks'
+    }
   ];
 
   const handleNavigation = (route: string) => {
