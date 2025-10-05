@@ -15,6 +15,7 @@ export interface User {
 
 export interface Friend {
   id: string;
+  clerkId:string;
   username: string;
   full_name: string;
   avatar?: string;

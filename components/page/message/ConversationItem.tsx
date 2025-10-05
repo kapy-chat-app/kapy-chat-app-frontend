@@ -1,11 +1,6 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  useColorScheme,
-  TouchableOpacity,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
+import React from "react";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 
 interface Conversation {
   id: string;
@@ -21,14 +16,25 @@ interface ConversationItemProps {
   onPress: () => void;
 }
 
-const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onPress }) => {
+const ConversationItem: React.FC<ConversationItemProps> = ({
+  conversation,
+  onPress,
+}) => {
   return (
     <TouchableOpacity
       className="flex-row items-center px-4 py-5 bg-white dark:bg-black active:opacity-70"
       onPress={onPress}
     >
-      <View className="w-14 h-14 rounded-full border-2 border-orange-500 justify-center items-center mr-4 bg-gray-100 dark:bg-gray-800">
-        <Ionicons name="person" size={26} color="#FF8C42" />
+      <View className="w-14 h-14 rounded-full border-2 border-orange-500 justify-center items-center mr-4 bg-gray-100 dark:bg-gray-800 overflow-hidden">
+        {conversation.avatar ? (
+          <Image 
+            source={{ uri: conversation.avatar }}
+            className="w-full h-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <Ionicons name="person" size={26} color="#FF8C42" />
+        )}
       </View>
 
       <View className="flex-1">
@@ -41,7 +47,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({ conversation, onPre
           </Text>
         </View>
 
-        <Text 
+        <Text
           className="text-sm text-gray-500 dark:text-gray-400 leading-5"
           numberOfLines={1}
           ellipsizeMode="tail"

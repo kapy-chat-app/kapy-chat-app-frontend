@@ -26,6 +26,7 @@ function ProtectedLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="message" options={{headerShown:false}}/>
     </Stack>
   );
 }
@@ -35,6 +36,7 @@ export default function RootLayout() {
     <ClerkProvider
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       tokenCache={tokenCache}
+      telemetry={false}
     >
       <ProtectedLayout />
     </ClerkProvider>

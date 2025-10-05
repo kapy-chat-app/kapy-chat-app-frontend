@@ -97,7 +97,6 @@ const FriendsScreen = () => {
     const result = await respondToRequest(requestId, "accept");
     if (result.success) {
       Alert.alert("Success", "Friend request accepted!");
-      // Reload both friends list and requests
       loadFriends();
       loadFriendRequests();
     } else {
@@ -117,7 +116,6 @@ const FriendsScreen = () => {
           onPress: async () => {
             const result = await respondToRequest(requestId, "decline");
             if (result.success) {
-              // Reload requests after decline
               loadFriendRequests();
             } else {
               Alert.alert("Error", result.error || "Failed to decline request");
@@ -155,7 +153,6 @@ const FriendsScreen = () => {
         router.push(`contacts/public-profile/${item.id}`)
       }}
       onMenuPress={() => {
-        // Show friend menu options
         Alert.alert(item.full_name, "Choose an action", [
           { text: "View Profile", onPress: () => console.log("View profile") },
           { text: "Message", onPress: () => console.log("Message") },
@@ -262,9 +259,9 @@ const FriendsScreen = () => {
         style={{ marginHorizontal: 16, marginBottom: 16 }}
       />
 
-      {/* Friend Requests Section */}
+      {/* Friend Requests Section - Fixed height */}
       {requests.length > 0 && (
-        <>
+        <View className="mb-3">
           <TabHeader
             leftText="Friend requests"
             rightText="All requests"
@@ -274,10 +271,11 @@ const FriendsScreen = () => {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            className="mb-4"
+            style={{ maxHeight: 160 }}
+            contentContainerStyle={{ paddingRight: 16 }}
           >
             {requests.map((request) => (
-              <View key={request.id} className="w-80">
+              <View key={request.id} style={{ width: 320 }}>
                 <FriendRequestCard
                   request={request}
                   onAccept={handleAcceptRequest}
@@ -286,7 +284,7 @@ const FriendsScreen = () => {
               </View>
             ))}
           </ScrollView>
-        </>
+        </View>
       )}
 
       {/* My Friends Section */}
@@ -321,7 +319,6 @@ const FriendsScreen = () => {
             <AlphabetIndex
               alphabet={alphabet}
               onLetterPress={(letter) => {
-                // Scroll to section
                 console.log("Scroll to:", letter);
               }}
             />
@@ -337,7 +334,6 @@ const FriendsScreen = () => {
   );
 };
 
-// Set display name for debugging
 FriendsScreen.displayName = 'FriendsScreen';
 
 export default FriendsScreen;
