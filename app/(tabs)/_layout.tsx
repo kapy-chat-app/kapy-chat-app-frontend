@@ -80,12 +80,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="discover"
+        name="ai-chat"
         options={{
-          title: 'Discover',
+          title: 'AI',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
-              name={focused ? 'globe' : 'globe-outline'} 
+              name={focused ? 'sparkles' : 'sparkles-outline'} 
               size={size} 
               color={color} 
             />
