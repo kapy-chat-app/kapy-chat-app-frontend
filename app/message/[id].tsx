@@ -1,4 +1,4 @@
-// MessageScreen.tsx - Thêm scroll to message functionality
+// MessageScreen.tsx - COMPLETE FIXED VERSION
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
@@ -46,6 +46,7 @@ export default function MessageScreen() {
   const firstVisibleItemBeforeLoad = useRef<string | null>(null);
   const lastLoadTimeRef = useRef(0);
   const socketMessageCountRef = useRef(0);
+  const hasMarkedAsReadRef = useRef(false); // ✅ NEW: Track if already marked
   
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 10,
@@ -62,6 +63,7 @@ export default function MessageScreen() {
     addReaction,
     removeReaction,
     markAsRead,
+    markConversationAsRead,
     loadMoreMessages,
     hasMore,
     socketMessageCount,
@@ -78,7 +80,7 @@ export default function MessageScreen() {
     }
   }, [id, conversations]);
 
-  // ✅ NEW: Handle scroll to specific message
+  // ✅ Handle scroll to specific message
   useEffect(() => {
     if (scrollToMessageId && messages.length > 0 && hasScrolledToBottom) {
       const messageIndex = messages.findIndex((m) => m._id === scrollToMessageId);
@@ -88,13 +90,11 @@ export default function MessageScreen() {
           flatListRef.current?.scrollToIndex({
             index: messageIndex,
             animated: true,
-            viewPosition: 0.5, // Center the message
+            viewPosition: 0.5,
           });
           
-          // Highlight the message
           setHighlightedMessageId(scrollToMessageId);
           
-          // Remove highlight after 2 seconds
           setTimeout(() => {
             setHighlightedMessageId(null);
           }, 2000);
@@ -115,7 +115,6 @@ export default function MessageScreen() {
       
       return () => clearTimeout(timer);
     } else if (messages.length > 0 && !hasScrolledToBottom && scrollToMessageId) {
-      // Don't auto-scroll to bottom if we need to scroll to a specific message
       setHasScrolledToBottom(true);
       lastMessageCountRef.current = messages.length;
       socketMessageCountRef.current = socketMessageCount;
@@ -167,6 +166,39 @@ export default function MessageScreen() {
     }
   }, [socketMessageCount, isNearBottom, hasScrolledToBottom, messages.length]);
 
+  // ✅ FIXED: Mark conversation as read - chỉ chạy 1 lần khi vào conversation
+  useEffect(() => {
+    if (!userId || !id || messages.length === 0 || hasMarkedAsReadRef.current) {
+      return;
+    }
+
+    console.log('📖📖📖 Preparing to mark conversation as read:', {
+      conversationId: id,
+      messagesCount: messages.length,
+      userId: userId
+    });
+    
+    const timer = setTimeout(() => {
+      console.log('📖📖📖 CALLING markConversationAsRead NOW for:', id);
+      markConversationAsRead(id)
+        .then(() => {
+          console.log('✅✅✅ markConversationAsRead SUCCESS');
+          hasMarkedAsReadRef.current = true;
+        })
+        .catch((err) => {
+          console.error('❌ markConversationAsRead FAILED:', err);
+        });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [id, userId, messages.length, markConversationAsRead]);
+
+  // Reset hasMarkedAsReadRef when changing conversation
+  useEffect(() => {
+    hasMarkedAsReadRef.current = false;
+  }, [id]);
+
+  // ✅ MARK INDIVIDUAL UNREAD MESSAGES AS READ (keep existing)
   useEffect(() => {
     if (!userId) return;
 
@@ -176,9 +208,12 @@ export default function MessageScreen() {
         msg.sender?.clerkId !== userId
     );
 
-    unreadMessages.forEach((msg) => {
-      markAsRead(msg._id);
-    });
+    if (unreadMessages.length > 0) {
+      console.log(`📖 Marking ${unreadMessages.length} individual messages as read`);
+      unreadMessages.forEach((msg) => {
+        markAsRead(msg._id);
+      });
+    }
   }, [messages, markAsRead, userId]);
 
   const getConversationTitle = () => {

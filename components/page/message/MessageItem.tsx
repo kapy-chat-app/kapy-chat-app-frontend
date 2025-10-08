@@ -1,4 +1,4 @@
-// components/page/message/MessageItem.tsx
+// components/page/message/MessageItem.tsx - FIXED
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
@@ -49,8 +49,21 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const messageStatus = message.status || "sent";
   const isSending = messageStatus === "sending";
   const isFailed = messageStatus === "failed";
+  
+  // ✅ FIXED: Filter out current user AND populate userInfo
   const readBy = message.read_by?.filter((r: any) => r.user !== user?.id) || [];
   const hasBeenRead = readBy.length > 0;
+
+  console.log('📖 MessageItem read_by data:', {
+    messageId: message._id,
+    totalReadBy: message.read_by?.length,
+    filteredReadBy: readBy.length,
+    readByData: readBy.map((r: any) => ({
+      user: r.user,
+      hasUserInfo: !!r.userInfo,
+      userName: r.userInfo?.full_name
+    }))
+  });
 
   const handleLongPress = () => {
     if (!isSending && !showReadReceipts) {

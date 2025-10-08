@@ -1,4 +1,4 @@
-// hooks/useMessages.ts - COMPLETE với typing indicator
+// hooks/useMessages.ts - FIXED with populated read_by
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSocket } from "./useSocket";
@@ -25,9 +25,16 @@ export interface MessageReaction {
   created_at: Date;
 }
 
+// ✅ FIXED: Added userInfo field
 export interface MessageReadBy {
   user: string;
   read_at: Date;
+  userInfo?: {
+    clerkId: string;
+    full_name: string;
+    username: string;
+    avatar?: string;
+  };
 }
 
 export type MessageStatus = 'sending' | 'sent' | 'failed';
@@ -58,7 +65,6 @@ export interface CreateMessageData {
   replyTo?: string;
 }
 
-// ✅ NEW: Typing user interface
 export interface TypingUser {
   userId: string;
   userName: string;
@@ -80,8 +86,8 @@ interface MessageHookReturn {
   refreshMessages: () => Promise<void>;
   clearMessages: () => void;
   socketMessageCount: number;
-  typingUsers: TypingUser[]; // ✅ NEW
-  sendTypingIndicator: (isTyping: boolean) => void; // ✅ NEW
+  typingUsers: TypingUser[];
+  sendTypingIndicator: (isTyping: boolean) => void;
 }
 
 export const useMessages = (conversationId: string | null): MessageHookReturn => {
@@ -91,7 +97,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const [socketMessageCount, setSocketMessageCount] = useState(0);
-  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]); // ✅ NEW
+  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   
   const { socket, emit, on, off } = useSocket();
   const { user } = useUser();
@@ -113,14 +119,12 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
   useEffect(() => {
     if (socket && conversationId) {
-      // ✅ Check if socket is connected before emitting
       const joinRoom = () => {
         if (socket.connected) {
           emit("joinConversation", conversationId);
           console.log(`📥 Joined conversation: ${conversationId}`);
         } else {
           console.warn('⚠️ Socket not connected yet, waiting...');
-          // Retry after socket connects
           const checkConnection = setInterval(() => {
             if (socket.connected) {
               emit("joinConversation", conversationId);
@@ -129,7 +133,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
             }
           }, 100);
           
-          // Cleanup after 3 seconds
           setTimeout(() => clearInterval(checkConnection), 3000);
         }
       };
@@ -142,17 +145,14 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           console.log(`📤 Left conversation: ${conversationId}`);
         }
         
-        // Clear typing users when leaving
         setTypingUsers([]);
       };
     }
   }, [socket, conversationId, emit]);
 
-  // ✅ NEW: Send typing indicator
   const sendTypingIndicator = useCallback((isTyping: boolean) => {
     if (!socket || !conversationId || !user) return;
     
-    // ✅ Only emit if socket is connected
     if (!socket.connected) {
       console.warn('⚠️ Cannot send typing: socket not connected');
       return;
@@ -531,11 +531,21 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                   msg._id === id &&
                   !msg.read_by.some((r) => r.user === user.id)
                 ) {
+                  console.log(`✅ Locally marking message ${id} as read`);
                   return {
                     ...msg,
                     read_by: [
                       ...msg.read_by,
-                      { user: user.id, read_at: new Date() },
+                      { 
+                        user: user.id, 
+                        read_at: new Date(),
+                        userInfo: {
+                          clerkId: user.id,
+                          full_name: user.fullName || 'You',
+                          username: user.username || '',
+                          avatar: user.imageUrl
+                        }
+                      },
                     ],
                   };
                 }
@@ -548,7 +558,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         console.error("Failed to mark message as read:", err);
       }
     },
-    [user?.id, getToken, API_BASE_URL, conversationId]
+    [user?.id, user?.fullName, user?.username, user?.imageUrl, getToken, API_BASE_URL, conversationId]
   );
 
   const markConversationAsRead = useCallback(
@@ -569,6 +579,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           const result = await response.json();
 
           if (result.success && user?.id) {
+            console.log(`✅ Conversation ${conversationId} marked as read`);
             setMessages((prev) =>
               prev.map((msg) => {
                 const isAlreadyRead = msg.read_by.some(
@@ -579,7 +590,16 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                     ...msg,
                     read_by: [
                       ...msg.read_by,
-                      { user: user.id, read_at: new Date() },
+                      { 
+                        user: user.id, 
+                        read_at: new Date(),
+                        userInfo: {
+                          clerkId: user.id,
+                          full_name: user.fullName || 'You',
+                          username: user.username || '',
+                          avatar: user.imageUrl
+                        }
+                      },
                     ],
                   };
                 }
@@ -592,7 +612,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         console.error("Failed to mark conversation as read:", err);
       }
     },
-    [user?.id, getToken, API_BASE_URL]
+    [user?.id, user?.fullName, user?.username, user?.imageUrl, getToken, API_BASE_URL]
   );
 
   const loadMoreMessages = useCallback(async (): Promise<void> => {
@@ -615,12 +635,14 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     setHasMore(true);
     setError(null);
     setSocketMessageCount(0);
-    setTypingUsers([]); // ✅ Clear typing users
+    setTypingUsers([]);
   }, []);
 
-  // SOCKET EVENT HANDLERS
+  // ✅ SOCKET EVENT HANDLERS - COMPLETE WITH POPULATED READ_BY
   useEffect(() => {
     if (!socket || !conversationId) return;
+
+    console.log('🔌 Setting up message socket listeners for conversation:', conversationId);
 
     // 1. NEW MESSAGE
     const handleNewMessage = (data: any) => {
@@ -658,7 +680,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           const exists = prev.some((msg) => msg._id === newMessage._id);
           if (!exists) {
             setSocketMessageCount(prevCount => prevCount + 1);
-            console.log('New message from socket');
+            console.log('✅ New message from socket added');
             return [...prev, newMessage];
           }
           return prev;
@@ -668,7 +690,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
     // 2. UPDATE MESSAGE
     const handleUpdateMessage = (data: any) => {
-      console.log('Message updated:', data.message_id);
+      console.log('📝 Message updated:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -685,7 +707,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
     // 3. DELETE MESSAGE
     const handleDeleteMessage = (data: any) => {
-      console.log('Message deleted:', data.message_id, 'type:', data.delete_type);
+      console.log('🗑️ Message deleted:', data.message_id, 'type:', data.delete_type);
       if (data.delete_type === "both") {
         setMessages((prev) =>
           prev.filter((msg) => msg._id !== data.message_id)
@@ -703,7 +725,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
     // 4. NEW REACTION
     const handleNewReaction = (data: any) => {
-      console.log('Reaction added:', data.reaction, 'to message:', data.message_id);
+      console.log('👍 Reaction added:', data.reaction, 'to message:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -715,7 +737,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
     // 5. DELETE REACTION
     const handleDeleteReaction = (data: any) => {
-      console.log('Reaction removed from message:', data.message_id);
+      console.log('❌ Reaction removed from message:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -725,61 +747,33 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // 6. MARK AS READ
-    const handleMarkAsRead = (data: any) => {
-      console.log('Message read:', data.message_id, 'by:', data.user_id);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.message_id
-            ? {
-                ...msg,
-                read_by: [
-                  ...msg.read_by.filter((r) => r.user !== data.user_id),
-                  {
-                    user: data.user_id,
-                    read_at: new Date(data.read_at),
-                  },
-                ],
-              }
-            : msg
-        )
-      );
-    };
-
-    // 7. MARK CONVERSATION AS READ
-    const handleMarkConversationAsRead = (data: any) => {
-      console.log('Conversation marked as read by:', data.read_by);
-      if (data.read_by !== user?.id) {
-        setMessages((prev) =>
-          prev.map((msg) => {
-            const isAlreadyRead = msg.read_by.some((r) => r.user === data.read_by);
-            if (!isAlreadyRead && msg.sender.clerkId !== data.read_by) {
-              return {
-                ...msg,
-                read_by: [
-                  ...msg.read_by,
-                  {
-                    user: data.read_by,
-                    read_at: new Date(data.read_at),
-                  },
-                ],
-              };
-            }
-            return msg;
-          })
-        );
+    // ✅ 6. MESSAGE READ - FIXED WITH USER INFO
+    const handleMessageRead = (data: any) => {
+      console.log('📖 MESSAGE READ event received:', {
+        messageId: data.message_id,
+        conversationId: data.conversation_id,
+        userId: data.user_id,
+        userInfo: data.user_info,
+        currentConversation: conversationId
+      });
+      
+      if (data.conversation_id !== conversationId) {
+        console.log('⚠️ Different conversation, ignoring');
+        return;
       }
-    };
-
-     const handleMessageRead = (data: any) => {
-    console.log('📖 Message read event:', data);
-    
-    if (data.message_id) {
+      
+      if (data.user_id === user?.id) {
+        console.log('👤 Own read event, already updated locally');
+        return;
+      }
+      
       setMessages((prev) =>
         prev.map((msg) => {
           if (msg._id === data.message_id) {
             const isAlreadyRead = msg.read_by.some(r => r.user === data.user_id);
+            
             if (!isAlreadyRead) {
+              console.log(`✅ Adding ${data.user_id} to read_by for message ${data.message_id}`);
               return {
                 ...msg,
                 read_by: [
@@ -787,6 +781,11 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                   {
                     user: data.user_id,
                     read_at: new Date(data.read_at),
+                    userInfo: data.user_info || {
+                      clerkId: data.user_id,
+                      full_name: 'Unknown',
+                      username: 'unknown'
+                    }
                   },
                 ],
               };
@@ -795,15 +794,58 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           return msg;
         })
       );
-    }
-  };
+    };
 
-  on("messageRead", handleMessageRead);
+    // ✅ 7. CONVERSATION MARKED AS READ - FIXED WITH USER INFO
+    const handleConversationMarkedAsRead = (data: any) => {
+      console.log('📖 CONVERSATION MARKED AS READ event received:', {
+        conversationId: data.conversation_id,
+        readBy: data.read_by,
+        userInfo: data.user_info,
+        messagesUpdated: data.messages_updated,
+        currentConversation: conversationId
+      });
+      
+      if (data.conversation_id !== conversationId) {
+        console.log('⚠️ Different conversation, ignoring');
+        return;
+      }
+      
+      if (data.read_by === user?.id) {
+        console.log('👤 Own read event, already updated locally');
+        return;
+      }
+      
+      setMessages((prev) =>
+        prev.map((msg) => {
+          const isAlreadyRead = msg.read_by.some((r) => r.user === data.read_by);
+          
+          if (!isAlreadyRead && msg.sender.clerkId !== data.read_by) {
+            console.log(`✅ Adding ${data.read_by} to read_by for message ${msg._id}`);
+            return {
+              ...msg,
+              read_by: [
+                ...msg.read_by,
+                {
+                  user: data.read_by,
+                  read_at: new Date(data.read_at),
+                  userInfo: data.user_info || {
+                    clerkId: data.read_by,
+                    full_name: 'Unknown',
+                    username: 'unknown'
+                  }
+                },
+              ],
+            };
+          }
+          return msg;
+        })
+      );
+    };
 
-
-    // ✅ 8. USER TYPING - NEW
+    // 8. USER TYPING
     const handleUserTyping = (data: any) => {
-      console.log('🔔🔔🔔 RECEIVED userTyping event:', JSON.stringify(data)); // ✅ Log đầu tiên
+      console.log('⌨️ RECEIVED userTyping event:', JSON.stringify(data));
       
       if (data.conversation_id !== conversationId) {
         console.log('❌ Wrong conversation:', data.conversation_id, 'expected:', conversationId);
@@ -814,21 +856,18 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         return;
       }
 
-      console.log('✅✅✅ PROCESSING TYPING:', data.user_name, 'is_typing:', data.is_typing);
+      console.log('✅ PROCESSING TYPING:', data.user_name, 'is_typing:', data.is_typing);
 
       if (data.is_typing) {
-        // Add user to typing list
         setTypingUsers(prev => {
           const exists = prev.some(u => u.userId === data.user_id);
           if (exists) {
-            console.log('User already in typing list');
             return prev;
           }
           console.log('Adding user to typing list:', data.user_name);
           return [...prev, { userId: data.user_id, userName: data.user_name }];
         });
 
-        // Auto-remove after 3 seconds (fallback if stop event not received)
         if (typingTimeoutRef.current) {
           clearTimeout(typingTimeoutRef.current);
         }
@@ -837,21 +876,19 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           setTypingUsers(prev => prev.filter(u => u.userId !== data.user_id));
         }, 3000);
       } else {
-        // Remove user from typing list
         console.log('Removing user from typing list:', data.user_name);
         setTypingUsers(prev => prev.filter(u => u.userId !== data.user_id));
       }
     };
 
-    // Register all event handlers
     on("newMessage", handleNewMessage);
     on("updateMessage", handleUpdateMessage);
     on("deleteMessage", handleDeleteMessage);
     on("newReaction", handleNewReaction);
     on("deleteReaction", handleDeleteReaction);
-    on("markAsRead", handleMarkAsRead);
-    on("markConversationAsRead", handleMarkConversationAsRead);
-    on("userTyping", handleUserTyping); // ✅ NEW
+    on("messageRead", handleMessageRead);
+    on("conversationMarkedAsRead", handleConversationMarkedAsRead);
+    on("userTyping", handleUserTyping);
 
     return () => {
       off("newMessage", handleNewMessage);
@@ -859,11 +896,10 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       off("deleteMessage", handleDeleteMessage);
       off("newReaction", handleNewReaction);
       off("deleteReaction", handleDeleteReaction);
-      off("markAsRead", handleMarkAsRead);
-      off("markConversationAsRead", handleMarkConversationAsRead);
-      off("userTyping", handleUserTyping); // ✅ NEW
       off("messageRead", handleMessageRead);
-      // Clear timeout on cleanup
+      off("conversationMarkedAsRead", handleConversationMarkedAsRead);
+      off("userTyping", handleUserTyping);
+      
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -893,7 +929,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     refreshMessages,
     clearMessages,
     socketMessageCount,
-    typingUsers, // ✅ NEW
-    sendTypingIndicator, // ✅ NEW
+    typingUsers,
+    sendTypingIndicator,
   };
 };

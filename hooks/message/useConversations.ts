@@ -1,5 +1,5 @@
-// hooks/useConversations.ts
-import { useState, useEffect, useCallback, useMemo } from 'react';
+// hooks/useConversations.ts - Fixed with mark as read support
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket } from './useSocket';
 import { useAuth } from '@clerk/clerk-expo';
 
@@ -56,29 +56,39 @@ interface UseConversationsReturn {
   getConversationById: (id: string) => Promise<Conversation | null>;
 }
 
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+
 export const useConversations = (): UseConversationsReturn => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { socket, on, off } = useSocket();
-  const {getToken} =  useAuth();
-  const API_BASE_URL = useMemo(() => 
-    process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000', []
-  );
+  const { getToken, userId } = useAuth();
+  
+  // Use refs to keep stable references
+  const getTokenRef = useRef(getToken);
+  const userIdRef = useRef(userId);
+
+  // Update refs when values change
+  useEffect(() => {
+    getTokenRef.current = getToken;
+    userIdRef.current = userId;
+  }, [getToken, userId]);
+
   const fetchConversations = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const token = await getToken();
-      const response = await fetch(`${API_BASE_URL}/api/conversations`,{
-        method:'GET',
+      const token = await getTokenRef.current();
+      const response = await fetch(`${API_BASE_URL}/api/conversations`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
       });
       const result = await response.json();
-      console.log("conversation>>",result.data);
+      
       if (!result.success) {
         throw new Error(result.error || 'Failed to fetch conversations');
       }
@@ -95,7 +105,7 @@ export const useConversations = (): UseConversationsReturn => {
   const createConversation = useCallback(async (data: CreateConversationData): Promise<Conversation> => {
     try {
       setError(null);
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const response = await fetch(`${API_BASE_URL}/api/conversations`, {
         method: 'POST',
         headers: { 
@@ -125,12 +135,12 @@ export const useConversations = (): UseConversationsReturn => {
   const updateConversation = useCallback(async (id: string, data: any): Promise<Conversation> => {
     try {
       setError(null);
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const response = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
-           'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(data),
       });
@@ -157,10 +167,10 @@ export const useConversations = (): UseConversationsReturn => {
   const deleteConversation = useCallback(async (id: string): Promise<void> => {
     try {
       setError(null);
-      const token = await getToken();
+      const token = await getTokenRef.current();
       const response = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
         method: 'DELETE',
-        headers:{
+        headers: {
           'Authorization': `Bearer ${token}`,
         }
       });
@@ -182,14 +192,13 @@ export const useConversations = (): UseConversationsReturn => {
   const getConversationById = useCallback(async (id: string): Promise<Conversation | null> => {
     try {
       setError(null);
-      const token = await getToken();
-      const response = await fetch(`${API_BASE_URL}/api/conversations/${id}`,
-        {method:'GET',
-          headers:{
-            'Authorization':`Bearer ${token}`
-          }
+      const token = await getTokenRef.current();
+      const response = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      );
+      });
       const result = await response.json();
 
       if (!result.success) {
@@ -206,9 +215,16 @@ export const useConversations = (): UseConversationsReturn => {
 
   // Socket event handlers
   useEffect(() => {
-    if (!socket) return;
+    if (!socket) {
+      console.log('⚠️ Socket not available in useConversations');
+      return;
+    }
+
+    console.log('✅ Setting up conversation socket listeners');
 
     const handleNewConversation = (data: any) => {
+      console.log('🆕 New conversation:', data.conversation_id);
+      
       const conversationData = {
         _id: data.conversation_id,
         ...data,
@@ -224,6 +240,8 @@ export const useConversations = (): UseConversationsReturn => {
     };
 
     const handleConversationUpdated = (data: any) => {
+      console.log('📝 Conversation updated:', data.conversation_id);
+      
       setConversations(prev =>
         prev.map(conv => 
           conv._id === data.conversation_id 
@@ -234,51 +252,134 @@ export const useConversations = (): UseConversationsReturn => {
     };
 
     const handleConversationDeleted = (data: any) => {
+      console.log('🗑️ Conversation deleted:', data.conversation_id);
+      
       setConversations(prev => 
         prev.filter(conv => conv._id !== data.conversation_id)
       );
     };
 
     const handleNewMessage = (data: any) => {
-      if (!data.conversation_id) return;
+      if (!data.conversation_id) {
+        console.log('⚠️ newMessage event missing conversation_id:', data);
+        return;
+      }
       
-      setConversations(prev =>
-        prev.map(conv => {
-          if (conv._id === data.conversation_id) {
-            const updatedConv = {
-              ...conv,
-              last_message: {
-                _id: data.message_id,
-                content: data.message_content,
-                type: data.message_type,
-                sender: { clerkId: data.sender_id } as ConversationParticipant,
-                created_at: new Date(),
-              } as ConversationMessage,
-              last_activity: new Date(),
-            };
+      console.log('💬 NEW MESSAGE EVENT in useConversations:', {
+        conversation_id: data.conversation_id,
+        sender_id: data.sender_id,
+        currentUserId: userIdRef.current
+      });
+      
+      setConversations(prev => {
+        const conversationIndex = prev.findIndex(c => c._id === data.conversation_id);
+        
+        if (conversationIndex === -1) {
+          console.log('⚠️ Conversation not found in list');
+          return prev;
+        }
 
-            // Only increment unread count if message is not from current user
-            if (data.sender_id !== 'current_user_id') { 
-              updatedConv.unreadCount = (conv.unreadCount || 0) + 1;
-            }
+        const conversation = prev[conversationIndex];
+        
+        const updatedConv = {
+          ...conversation,
+          last_message: {
+            _id: data.message_id,
+            content: data.message_content,
+            type: data.message_type,
+            sender: {
+              clerkId: data.sender_id,
+              full_name: data.sender_name || 'Unknown',
+              username: data.sender_username || 'unknown',
+              avatar: data.sender_avatar,
+            } as ConversationParticipant,
+            created_at: new Date(),
+          } as ConversationMessage,
+          last_activity: new Date(),
+        };
 
-            return updatedConv;
-          }
-          return conv;
-        })
-      );
+        // ✅ Only increment unread if not from current user
+        if (data.sender_id !== userIdRef.current) {
+          updatedConv.unreadCount = (conversation.unreadCount || 0) + 1;
+          console.log('📈 Unread count increased to:', updatedConv.unreadCount);
+        } else {
+          console.log('👤 Message from current user, not incrementing unread');
+        }
+
+        // Move to top
+        const newConversations = [...prev];
+        newConversations.splice(conversationIndex, 1);
+        newConversations.unshift(updatedConv);
+        
+        return newConversations;
+      });
     };
 
+    // ✅ NEW: Handle messageRead event
+    const handleMessageRead = (data: any) => {
+      console.log('📖 Message read in useConversations:', {
+        conversationId: data.conversation_id,
+        userId: data.user_id,
+        currentUserId: userIdRef.current
+      });
+      
+      // ✅ Only decrement unread count if current user read the message
+      if (data.user_id === userIdRef.current && data.conversation_id) {
+        setConversations(prev =>
+          prev.map(conv => {
+            if (conv._id === data.conversation_id && conv.unreadCount > 0) {
+              console.log(`✅ Decrementing unread count for conversation ${conv._id}`);
+              return {
+                ...conv,
+                unreadCount: Math.max(0, conv.unreadCount - 1)
+              };
+            }
+            return conv;
+          })
+        );
+      }
+    };
+
+    // ✅ NEW: Handle conversationMarkedAsRead event
+    const handleConversationMarkedAsRead = (data: any) => {
+      console.log('📖 Conversation marked as read in useConversations:', {
+        conversationId: data.conversation_id,
+        readBy: data.read_by,
+        currentUserId: userIdRef.current
+      });
+      
+      // ✅ Only reset unread count if current user marked as read
+      if (data.read_by === userIdRef.current) {
+        setConversations(prev =>
+          prev.map(conv => {
+            if (conv._id === data.conversation_id) {
+              console.log(`✅ Resetting unread count for conversation ${conv._id}`);
+              return {
+                ...conv,
+                unreadCount: 0
+              };
+            }
+            return conv;
+          })
+        );
+      }
+    };
+
+    // ✅ Register all handlers including new ones
     on('newConversation', handleNewConversation);
     on('conversationUpdated', handleConversationUpdated);
     on('conversationDeleted', handleConversationDeleted);
     on('newMessage', handleNewMessage);
+    on('messageRead', handleMessageRead); // ✅ NEW
+    on('conversationMarkedAsRead', handleConversationMarkedAsRead); // ✅ NEW
 
     return () => {
       off('newConversation', handleNewConversation);
       off('conversationUpdated', handleConversationUpdated);
       off('conversationDeleted', handleConversationDeleted);
       off('newMessage', handleNewMessage);
+      off('messageRead', handleMessageRead); // ✅ NEW
+      off('conversationMarkedAsRead', handleConversationMarkedAsRead); // ✅ NEW
     };
   }, [socket, on, off]);
 
