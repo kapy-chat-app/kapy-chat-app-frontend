@@ -79,6 +79,19 @@ export default function TabLayout() {
           ),
         }}
       />
+       <Tabs.Screen
+        name="emotion"
+        options={{
+          title: 'Emotion',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons 
+              name={focused ? 'sparkles' : 'sparkles-outline'} 
+              size={size} 
+              color={color} 
+            />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="ai-chat"
         options={{
