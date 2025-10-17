@@ -1,4 +1,4 @@
-// app/(root)/(tabs)/conversations.tsx - UPDATED
+// app/(root)/(tabs)/conversations.tsx - IMPROVED WITH FREQUENT RECOMMENDATIONS
 import FloatingRecommendation from "@/components/page/ai/FloatingRecommendation";
 import ConversationItem from "@/components/page/message/ConversationItem";
 import CreateConversationModal from "@/components/page/message/CreateConversationModel";
@@ -26,7 +26,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const RECOMMENDATION_STORAGE_KEY = "emotion_recommendation_dismissed";
-const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const CHECK_INTERVAL = 2 * 60 * 1000; // 🔥 2 phút (thay vì 5 phút)
+const DISMISS_COOLDOWN = 15 * 60 * 1000; // 🔥 15 phút (thay vì 30 phút)
 
 export default function ConversationsScreen() {
   const colorScheme = useColorScheme();
@@ -51,71 +52,120 @@ export default function ConversationsScreen() {
 
   const { getRecommendations } = useEmotion();
 
-  // Floating recommendation state
+  // 🔥 Enhanced recommendation state
   const [showFloatingRec, setShowFloatingRec] = useState(false);
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [dominantEmotion, setDominantEmotion] = useState<string>("neutral");
+  const [emotionConfidence, setEmotionConfidence] = useState<number>(0);
   const [hasNewRecommendations, setHasNewRecommendations] = useState(false);
+  const [lastCheckTime, setLastCheckTime] = useState<number>(0);
 
-  // Check recommendations on mount and periodically
+  // 🔥 Check recommendations on mount and more frequently
   useEffect(() => {
+    // Initial check
     checkAndShowRecommendations();
 
-    // Check every 5 minutes
+    // Check every 2 minutes
     const interval = setInterval(checkAndShowRecommendations, CHECK_INTERVAL);
     return () => clearInterval(interval);
   }, []);
 
-  // Listen to socket events for real-time emotion updates
+  // 🔥 Listen to ALL emotion-related socket events
   useEffect(() => {
     if (!socket) return;
 
+    // Real-time recommendations from backend
     socket.on("sendRecommendations", (data: any) => {
-      console.log("📨 Received recommendations:", data);
-      handleNewRecommendations(data.recommendations, data.based_on?.emotion);
+      console.log("📨 Received AI recommendations:", data);
+      handleNewRecommendations(
+        data.recommendations, 
+        data.based_on?.emotion || data.emotion,
+        data.based_on?.confidence
+      );
     });
 
+    // Emotion analysis complete (for all emotions, not just negative)
     socket.on("emotionAnalysisComplete", (data: any) => {
       console.log("😊 Emotion analyzed:", data);
       const emotion = data.emotion_data.dominant_emotion;
+      const confidence = data.emotion_data.confidence_score;
 
-      // Show recommendations for negative emotions
-      if (["sadness", "anger", "fear"].includes(emotion)) {
+      // 🔥 Show recommendations for ALL strong emotions (confidence > 0.6)
+      if (confidence > 0.6) {
+        console.log(`🎯 Strong ${emotion} detected, fetching recommendations...`);
         checkAndShowRecommendations();
       }
+    });
+
+    // Combined emotion + recommendations
+    socket.on("emotionAnalyzedWithRecommendations", (data: any) => {
+      console.log("🎁 Emotion + Recommendations received:", data);
+      if (data.recommendations && data.recommendations.length > 0) {
+        handleNewRecommendations(
+          data.recommendations,
+          data.emotion_data.emotion,
+          data.emotion_data.confidence
+        );
+      }
+    });
+
+    // Emotion recommendations (dedicated event)
+    socket.on("emotionRecommendations", (data: any) => {
+      console.log("💡 Emotion recommendations:", data);
+      handleNewRecommendations(
+        data.recommendations,
+        data.emotion || data.based_on?.emotion,
+        data.based_on?.confidence
+      );
     });
 
     return () => {
       socket.off("sendRecommendations");
       socket.off("emotionAnalysisComplete");
+      socket.off("emotionAnalyzedWithRecommendations");
+      socket.off("emotionRecommendations");
     };
   }, [socket]);
 
   const checkAndShowRecommendations = async () => {
     try {
+      const now = Date.now();
+
       // Check if user dismissed recommendations recently
       const dismissed = await AsyncStorage.getItem(RECOMMENDATION_STORAGE_KEY);
       const dismissedTime = dismissed ? parseInt(dismissed) : 0;
-      const now = Date.now();
 
-      // Don't show if dismissed less than 30 minutes ago
-      if (now - dismissedTime < 30 * 60 * 1000) {
+      // Don't show if dismissed less than 15 minutes ago
+      if (now - dismissedTime < DISMISS_COOLDOWN) {
+        console.log(`⏳ Cooldown active, ${Math.round((DISMISS_COOLDOWN - (now - dismissedTime)) / 60000)}m remaining`);
         return;
       }
+
+      // Don't check too frequently (at least 1 minute between checks)
+      if (now - lastCheckTime < 60000) {
+        return;
+      }
+
+      setLastCheckTime(now);
+      console.log("🔍 Checking for recommendations...");
 
       const data = await getRecommendations();
 
       if (data?.recommendations && data.recommendations.length > 0) {
         const emotion = data.based_on?.dominant_pattern || "neutral";
+        const confidence = data.based_on?.confidence || 0.5;
 
-        // Only show floating notification for negative emotions
-        if (["sadness", "anger", "fear"].includes(emotion)) {
-          handleNewRecommendations(data.recommendations, emotion);
+        console.log(`✅ Got ${data.recommendations.length} recommendations for ${emotion}`);
+
+        // 🔥 Show floating for ALL emotions with medium+ confidence (>0.5)
+        if (confidence > 0.5) {
+          handleNewRecommendations(data.recommendations, emotion, confidence);
         } else {
-          // Just set badge for positive/neutral emotions
+          // Just set badge for low confidence
           setHasNewRecommendations(true);
           setRecommendations(data.recommendations);
           setDominantEmotion(emotion);
+          setEmotionConfidence(confidence);
         }
       }
     } catch (error) {
@@ -125,14 +175,18 @@ export default function ConversationsScreen() {
 
   const handleNewRecommendations = (
     recs: string[],
-    emotion: string = "neutral"
+    emotion: string = "neutral",
+    confidence: number = 0.5
   ) => {
+    console.log(`🎯 Handling new recommendations: ${emotion} (${(confidence * 100).toFixed(0)}%)`);
+    
     setRecommendations(recs);
     setDominantEmotion(emotion);
+    setEmotionConfidence(confidence);
     setHasNewRecommendations(true);
 
-    // Show floating notification for concerning emotions
-    if (["sadness", "anger", "fear"].includes(emotion)) {
+    // 🔥 Show floating for all emotions with confidence > 0.5
+    if (confidence > 0.5) {
       setShowFloatingRec(true);
     }
   };
@@ -144,12 +198,24 @@ export default function ConversationsScreen() {
       RECOMMENDATION_STORAGE_KEY,
       Date.now().toString()
     );
+    console.log("✅ Recommendations dismissed");
   };
 
-  const handleAIChatPress = () => {
+  // 🔥 Navigate to AI chat with recommendations context
+  const handleAIChatPress = async (fromFloating: boolean = false) => {
     setHasNewRecommendations(false);
     setShowFloatingRec(false);
-    router.push("/ai-chat");
+
+    // Pass recommendations to AI chat screen
+    router.push({
+      pathname: "/ai-chat",
+      params: {
+        emotion: dominantEmotion,
+        confidence: emotionConfidence.toString(),
+        hasRecommendations: fromFloating ? "true" : "false",
+        recommendationCount: recommendations.length.toString(),
+      },
+    });
   };
 
   useEffect(() => {
@@ -361,19 +427,21 @@ export default function ConversationsScreen() {
               />
             </TouchableOpacity>
 
-            {/* AI Chatbot Button with Badge */}
+            {/* 🔥 AI Chatbot Button with Enhanced Badge */}
             <TouchableOpacity
               className="p-1 relative"
-              onPress={handleAIChatPress}
+              onPress={() => handleAIChatPress(false)}
             >
               <View className="w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center bg-orange-50 dark:bg-orange-900/20">
                 <Ionicons name="happy" size={20} color="#F97316" />
               </View>
 
-              {/* Notification Badge */}
+              {/* Animated Notification Badge */}
               {hasNewRecommendations && (
-                <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 items-center justify-center border-2 border-white dark:border-black">
-                  <View className="w-2 h-2 rounded-full bg-white" />
+                <View className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 border-white dark:border-black">
+                  <Text className="text-white text-[9px] font-bold">
+                    {recommendations.length}
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -412,13 +480,14 @@ export default function ConversationsScreen() {
         />
       )}
 
-      {/* Floating Recommendation */}
+      {/* 🔥 Enhanced Floating Recommendation */}
       <FloatingRecommendation
         visible={showFloatingRec}
         recommendations={recommendations}
         dominantEmotion={dominantEmotion}
+        confidence={emotionConfidence}
         onClose={handleCloseFloating}
-        onOpenAIChat={handleAIChatPress}
+        onOpenAIChat={() => handleAIChatPress(true)}
       />
 
       <Sidebar

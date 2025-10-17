@@ -246,12 +246,16 @@ export default function MessageScreen() {
     return otherParticipant?.is_online ? "Online" : "Offline";
   };
 
-  const handleSendMessage = async (messageData: any) => {
+    const handleSendMessage = async (messageData: any) => {
     try {
       await sendMessage(messageData);
+      // Scroll ngay lập tức sau khi optimistic message được add
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+        setIsNearBottom(true);
+        setNewMessagesCount(0);
+        setShowScrollButton(false);
+      }, 50);
     } catch (error) {
       console.error("Send message error:", error);
     }
