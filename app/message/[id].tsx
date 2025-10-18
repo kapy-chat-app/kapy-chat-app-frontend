@@ -1,4 +1,4 @@
-// MessageScreen.tsx - COMPLETE FIXED VERSION
+// MessageScreen.tsx - COMPLETE WITH VIDEO/AUDIO CALL
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
@@ -23,16 +23,22 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import axios from "axios";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function MessageScreen() {
   const router = useRouter();
   const { id, scrollToMessageId } = useLocalSearchParams<{ id: string; scrollToMessageId?: string }>();
-  const { userId } = useAuth();
+  const { userId, getToken } = useAuth();
   const colorScheme = useColorScheme();
   const flatListRef = useRef<FlatList>(null);
   const [replyTo, setReplyTo] = useState<any>(null);
   const [conversation, setConversation] = useState<any>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  
+  // Call states
+  const [isInitiatingCall, setIsInitiatingCall] = useState(false);
   
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
@@ -46,7 +52,7 @@ export default function MessageScreen() {
   const firstVisibleItemBeforeLoad = useRef<string | null>(null);
   const lastLoadTimeRef = useRef(0);
   const socketMessageCountRef = useRef(0);
-  const hasMarkedAsReadRef = useRef(false); // ✅ NEW: Track if already marked
+  const hasMarkedAsReadRef = useRef(false);
   
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 10,
@@ -166,23 +172,23 @@ export default function MessageScreen() {
     }
   }, [socketMessageCount, isNearBottom, hasScrolledToBottom, messages.length]);
 
-  // ✅ FIXED: Mark conversation as read - chỉ chạy 1 lần khi vào conversation
+  // ✅ Mark conversation as read
   useEffect(() => {
     if (!userId || !id || messages.length === 0 || hasMarkedAsReadRef.current) {
       return;
     }
 
-    console.log('📖📖📖 Preparing to mark conversation as read:', {
+    console.log('📖 Preparing to mark conversation as read:', {
       conversationId: id,
       messagesCount: messages.length,
       userId: userId
     });
     
     const timer = setTimeout(() => {
-      console.log('📖📖📖 CALLING markConversationAsRead NOW for:', id);
+      console.log('📖 CALLING markConversationAsRead NOW for:', id);
       markConversationAsRead(id)
         .then(() => {
-          console.log('✅✅✅ markConversationAsRead SUCCESS');
+          console.log('✅ markConversationAsRead SUCCESS');
           hasMarkedAsReadRef.current = true;
         })
         .catch((err) => {
@@ -193,12 +199,10 @@ export default function MessageScreen() {
     return () => clearTimeout(timer);
   }, [id, userId, messages.length, markConversationAsRead]);
 
-  // Reset hasMarkedAsReadRef when changing conversation
   useEffect(() => {
     hasMarkedAsReadRef.current = false;
   }, [id]);
 
-  // ✅ MARK INDIVIDUAL UNREAD MESSAGES AS READ (keep existing)
   useEffect(() => {
     if (!userId) return;
 
@@ -215,6 +219,146 @@ export default function MessageScreen() {
       });
     }
   }, [messages, markAsRead, userId]);
+
+  // ========================================
+  // CALL HANDLERS
+  // ========================================
+
+  const handleVideoCall = async () => {
+    if (!id || isInitiatingCall) return;
+
+    try {
+      setIsInitiatingCall(true);
+      
+      Alert.alert(
+        'Start Video Call',
+        `Do you want to start a video call with ${getConversationTitle()}?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setIsInitiatingCall(false),
+          },
+          {
+            text: 'Call',
+            onPress: async () => {
+              try {
+                const token = await getToken();
+                const response = await axios.post(
+                  `${API_URL}/api/calls/initiate`,
+                  {
+                    conversationId: id,
+                    type: 'video',
+                  },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  }
+                );
+
+                const { call } = response.data;
+                
+                console.log('📞 Video call initiated:', call);
+                
+                // Navigate to video call screen
+                router.push({
+                  pathname: '/call/[id]' as any,
+                  params: {
+                    id: call.id,
+                    channelName: call.channelName,
+                    conversationId: id,
+                    callType: 'video',
+                  },
+                });
+              } catch (error: any) {
+                console.error('❌ Error starting video call:', error);
+                Alert.alert(
+                  'Error', 
+                  error.response?.data?.error || 'Failed to start video call'
+                );
+              } finally {
+                setIsInitiatingCall(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Error:', error);
+      setIsInitiatingCall(false);
+    }
+  };
+
+  const handleAudioCall = async () => {
+    if (!id || isInitiatingCall) return;
+
+    try {
+      setIsInitiatingCall(true);
+      
+      Alert.alert(
+        'Start Audio Call',
+        `Do you want to start an audio call with ${getConversationTitle()}?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setIsInitiatingCall(false),
+          },
+          {
+            text: 'Call',
+            onPress: async () => {
+              try {
+                const token = await getToken();
+                const response = await axios.post(
+                  `${API_URL}/api/calls/initiate`,
+                  {
+                    conversationId: id,
+                    type: 'audio',
+                  },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  }
+                );
+
+                const { call } = response.data;
+                
+                console.log('📞 Audio call initiated:', call);
+                
+                // Navigate to call screen (audio mode)
+                router.push({
+                  pathname: '/call/[id]' as any,
+                  params: {
+                    id: call.id,
+                    channelName: call.channelName,
+                    conversationId: id,
+                    callType: 'audio',
+                  },
+                });
+              } catch (error: any) {
+                console.error('❌ Error starting audio call:', error);
+                Alert.alert(
+                  'Error', 
+                  error.response?.data?.error || 'Failed to start audio call'
+                );
+              } finally {
+                setIsInitiatingCall(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Error:', error);
+      setIsInitiatingCall(false);
+    }
+  };
+
+  // ========================================
+  // HELPER FUNCTIONS
+  // ========================================
 
   const getConversationTitle = () => {
     if (!conversation) return "Chat";
@@ -246,10 +390,9 @@ export default function MessageScreen() {
     return otherParticipant?.is_online ? "Online" : "Offline";
   };
 
-    const handleSendMessage = async (messageData: any) => {
+  const handleSendMessage = async (messageData: any) => {
     try {
       await sendMessage(messageData);
-      // Scroll ngay lập tức sau khi optimistic message được add
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
         setIsNearBottom(true);
@@ -358,6 +501,10 @@ export default function MessageScreen() {
     }
   };
 
+  // ========================================
+  // RENDER FUNCTIONS
+  // ========================================
+
   const renderMessage = ({ item }: { item: any }) => (
     <View className={highlightedMessageId === item._id ? "bg-orange-100 dark:bg-orange-900/30 rounded-lg" : ""}>
       <MessageItem
@@ -445,22 +592,33 @@ export default function MessageScreen() {
           </View>
         </View>
 
-        <TouchableOpacity className="p-2">
+        {/* Audio Call Button */}
+        <TouchableOpacity 
+          className="p-2" 
+          onPress={handleAudioCall}
+          disabled={isInitiatingCall}
+        >
           <Ionicons
             name="call"
             size={24}
-            color={colorScheme === "dark" ? "#fff" : "#000"}
+            color={isInitiatingCall ? "#ccc" : (colorScheme === "dark" ? "#fff" : "#000")}
           />
         </TouchableOpacity>
 
-        <TouchableOpacity className="p-2">
+        {/* Video Call Button */}
+        <TouchableOpacity 
+          className="p-2" 
+          onPress={handleVideoCall}
+          disabled={isInitiatingCall}
+        >
           <Ionicons
             name="videocam"
             size={24}
-            color={colorScheme === "dark" ? "#fff" : "#000"}
+            color={isInitiatingCall ? "#ccc" : (colorScheme === "dark" ? "#fff" : "#000")}
           />
         </TouchableOpacity>
         
+        {/* Info Button */}
         <TouchableOpacity 
           className="p-2" 
           onPress={() => router.push({

@@ -1,4 +1,6 @@
 // app/_layout.tsx
+import IncomingCallModal from "@/components/page/call/IncomingCallModal";
+import { useIncomingCalls } from "@/hooks/call/useIncomingCalls";
 import { useProfileCheck } from "@/hooks/user/useProfileCheck";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
@@ -8,6 +10,8 @@ import "./global.css";
 
 function ProtectedLayout() {
   const { isCheckingProfile } = useProfileCheck();
+  const { incomingCall, showIncomingCall, answerCall, rejectCall } =
+    useIncomingCalls();
 
   // Hiển thị loading khi đang check profile
   if (isCheckingProfile) {
@@ -22,12 +26,24 @@ function ProtectedLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="complete-profile" options={{ headerShown: false }} />
-      <Stack.Screen name="message" options={{headerShown:false}}/>
-    </Stack>
+    <>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="complete-profile"
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen name="message" options={{ headerShown: false }} />
+        <Stack.Screen name="call/[id]" options={{ headerShown: false }} />
+      </Stack>
+      <IncomingCallModal
+        visible={showIncomingCall}
+        callData={incomingCall}
+        onAnswer={answerCall}
+        onReject={rejectCall}
+      />
+    </>
   );
 }
 
