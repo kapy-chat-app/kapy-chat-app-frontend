@@ -1,4 +1,4 @@
-// components/IncomingCallModal.tsx
+// components/IncomingCallModal.tsx - Group Call Support
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
@@ -24,6 +24,10 @@ interface IncomingCallProps {
     call_type: 'video' | 'audio';
     channel_name: string;
     conversation_id: string;
+    conversation_type?: 'private' | 'group';
+    conversation_name?: string;
+    conversation_avatar?: string;
+    participants_count?: number;
   } | null;
   onAnswer: (callId: string) => void;
   onReject: (callId: string) => void;
@@ -39,7 +43,6 @@ export default function IncomingCallModal({
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const pulseAnim = useState(new Animated.Value(1))[0];
 
-  // Play ringtone and vibrate
   useEffect(() => {
     if (visible && callData) {
       playRingtone();
@@ -59,7 +62,7 @@ export default function IncomingCallModal({
   const playRingtone = async () => {
     try {
       const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/sounds/ringtone.mp3'), // Add your ringtone
+        require('@/assets/sounds/ringtone.mp3'),
         { shouldPlay: true, isLooping: true }
       );
       setSound(sound);
@@ -108,7 +111,6 @@ export default function IncomingCallModal({
       stopVibration();
       onAnswer(callData.call_id);
       
-      // Navigate to call screen
       router.push({
         pathname: '/call/[id]' as any,
         params: {
@@ -131,6 +133,17 @@ export default function IncomingCallModal({
 
   if (!visible || !callData) return null;
 
+  const isGroupCall = callData.conversation_type === 'group';
+  
+  // Determine what to display
+  const displayAvatar = isGroupCall 
+    ? callData.conversation_avatar 
+    : callData.caller_avatar;
+  
+  const displayName = isGroupCall
+    ? callData.conversation_name || 'Group Call'
+    : callData.caller_name;
+
   return (
     <Modal
       visible={visible}
@@ -140,27 +153,56 @@ export default function IncomingCallModal({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          {/* Caller Avatar */}
+          {/* Avatar */}
           <Animated.View 
             style={[
               styles.avatarContainer,
               { transform: [{ scale: pulseAnim }] }
             ]}
           >
-            {callData.caller_avatar ? (
+            {displayAvatar ? (
               <Image
-                source={{ uri: callData.caller_avatar }}
+                source={{ uri: displayAvatar }}
                 style={styles.avatar}
               />
             ) : (
               <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={60} color="#fff" />
+                <Ionicons 
+                  name={isGroupCall ? 'people' : 'person'} 
+                  size={60} 
+                  color="#fff" 
+                />
+              </View>
+            )}
+            
+            {/* Group Call Badge */}
+            {isGroupCall && (
+              <View style={styles.groupBadge}>
+                <Ionicons name="people" size={16} color="#fff" />
+                {callData.participants_count && callData.participants_count > 0 && (
+                  <Text style={styles.groupBadgeText}>
+                    {callData.participants_count}
+                  </Text>
+                )}
               </View>
             )}
           </Animated.View>
 
           {/* Call Info */}
-          <Text style={styles.callerName}>{callData.caller_name}</Text>
+          <View style={styles.infoContainer}>
+            {/* Group name or caller name */}
+            <Text style={styles.primaryName}>{displayName}</Text>
+            
+            {/* For group calls, show caller name below */}
+            {isGroupCall && (
+              <View style={styles.callerInfoContainer}>
+                <Ionicons name="person-circle-outline" size={18} color="#9ca3af" />
+                <Text style={styles.callerName}>{callData.caller_name}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Call Type */}
           <View style={styles.callTypeContainer}>
             <Ionicons
               name={callData.call_type === 'video' ? 'videocam' : 'call'}
@@ -171,6 +213,16 @@ export default function IncomingCallModal({
               Incoming {callData.call_type} call...
             </Text>
           </View>
+
+          {/* Additional Info for Group Calls */}
+          {isGroupCall && callData.participants_count && callData.participants_count > 0 && (
+            <View style={styles.participantsInfoContainer}>
+              <Ionicons name="people-outline" size={16} color="#9ca3af" />
+              <Text style={styles.participantsInfoText}>
+                {callData.participants_count} {callData.participants_count === 1 ? 'person' : 'people'} already in call
+              </Text>
+            </View>
+          )}
 
           {/* Action Buttons */}
           <View style={styles.buttonContainer}>
@@ -193,7 +245,7 @@ export default function IncomingCallModal({
 
           <View style={styles.labelContainer}>
             <Text style={styles.label}>Decline</Text>
-            <Text style={styles.label}>Answer</Text>
+            <Text style={styles.label}>{isGroupCall ? 'Join' : 'Answer'}</Text>
           </View>
         </View>
       </View>
@@ -211,9 +263,11 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     padding: 20,
+    width: '100%',
   },
   avatarContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
+    position: 'relative',
   },
   avatar: {
     width: 120,
@@ -232,21 +286,72 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  callerName: {
+  groupBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#f97316',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  groupBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  infoContainer: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  primaryName: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 10,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  callerInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(156, 163, 175, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  callerName: {
+    fontSize: 16,
+    color: '#9ca3af',
   },
   callTypeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 12,
   },
   callTypeText: {
     fontSize: 16,
     color: '#9ca3af',
     marginLeft: 8,
+  },
+  participantsInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 40,
+  },
+  participantsInfoText: {
+    fontSize: 14,
+    color: '#9ca3af',
   },
   buttonContainer: {
     flexDirection: 'row',

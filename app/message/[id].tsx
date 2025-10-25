@@ -1,4 +1,4 @@
-// MessageScreen.tsx - COMPLETE WITH VIDEO/AUDIO CALL
+// MessageScreen.tsx - COMPLETE WITH GROUP VIDEO/AUDIO CALL
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
@@ -86,7 +86,7 @@ export default function MessageScreen() {
     }
   }, [id, conversations]);
 
-  // ✅ Handle scroll to specific message
+  // Handle scroll to specific message
   useEffect(() => {
     if (scrollToMessageId && messages.length > 0 && hasScrolledToBottom) {
       const messageIndex = messages.findIndex((m) => m._id === scrollToMessageId);
@@ -172,23 +172,15 @@ export default function MessageScreen() {
     }
   }, [socketMessageCount, isNearBottom, hasScrolledToBottom, messages.length]);
 
-  // ✅ Mark conversation as read
+  // Mark conversation as read
   useEffect(() => {
     if (!userId || !id || messages.length === 0 || hasMarkedAsReadRef.current) {
       return;
     }
-
-    console.log('📖 Preparing to mark conversation as read:', {
-      conversationId: id,
-      messagesCount: messages.length,
-      userId: userId
-    });
     
     const timer = setTimeout(() => {
-      console.log('📖 CALLING markConversationAsRead NOW for:', id);
       markConversationAsRead(id)
         .then(() => {
-          console.log('✅ markConversationAsRead SUCCESS');
           hasMarkedAsReadRef.current = true;
         })
         .catch((err) => {
@@ -213,7 +205,6 @@ export default function MessageScreen() {
     );
 
     if (unreadMessages.length > 0) {
-      console.log(`📖 Marking ${unreadMessages.length} individual messages as read`);
       unreadMessages.forEach((msg) => {
         markAsRead(msg._id);
       });
@@ -221,7 +212,7 @@ export default function MessageScreen() {
   }, [messages, markAsRead, userId]);
 
   // ========================================
-  // CALL HANDLERS
+  // CALL HANDLERS - Enhanced for Group Calls
   // ========================================
 
   const handleVideoCall = async () => {
@@ -230,9 +221,16 @@ export default function MessageScreen() {
     try {
       setIsInitiatingCall(true);
       
+      const isGroup = conversation?.type === 'group';
+      const displayName = isGroup 
+        ? (conversation?.name || 'Group')
+        : getConversationTitle();
+      
       Alert.alert(
-        'Start Video Call',
-        `Do you want to start a video call with ${getConversationTitle()}?`,
+        `Start Video Call`,
+        isGroup 
+          ? `Do you want to start a video call in ${displayName}?`
+          : `Do you want to start a video call with ${displayName}?`,
         [
           {
             text: 'Cancel',
@@ -296,9 +294,16 @@ export default function MessageScreen() {
     try {
       setIsInitiatingCall(true);
       
+      const isGroup = conversation?.type === 'group';
+      const displayName = isGroup 
+        ? (conversation?.name || 'Group')
+        : getConversationTitle();
+      
       Alert.alert(
-        'Start Audio Call',
-        `Do you want to start an audio call with ${getConversationTitle()}?`,
+        `Start Audio Call`,
+        isGroup 
+          ? `Do you want to start an audio call in ${displayName}?`
+          : `Do you want to start an audio call with ${displayName}?`,
         [
           {
             text: 'Cancel',
@@ -549,6 +554,7 @@ export default function MessageScreen() {
 
   const renderHeader = () => {
     const avatarUrl = getConversationAvatar();
+    const isGroup = conversation?.type === 'group';
 
     return (
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
@@ -569,7 +575,7 @@ export default function MessageScreen() {
           ) : (
             <View className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-700 items-center justify-center mr-3">
               <Ionicons
-                name={conversation?.type === "group" ? "people" : "person"}
+                name={isGroup ? "people" : "person"}
                 size={20}
                 color={colorScheme === "dark" ? "#fff" : "#666"}
               />
@@ -583,6 +589,10 @@ export default function MessageScreen() {
             {typingUsers.length > 0 ? (
               <Text className="text-sm text-orange-500 italic">
                 typing...
+              </Text>
+            ) : isGroup ? (
+              <Text className="text-sm text-gray-500 dark:text-gray-400">
+                {conversation?.participants?.length || 0} members
               </Text>
             ) : getOnlineStatus() ? (
               <Text className="text-sm text-gray-500 dark:text-gray-400">
