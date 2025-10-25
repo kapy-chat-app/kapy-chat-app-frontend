@@ -1,4 +1,4 @@
-// hooks/useIncomingCalls.ts
+// hooks/useIncomingCalls.ts - Enhanced for Group Calls
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import io, { Socket } from 'socket.io-client';
@@ -15,6 +15,10 @@ interface IncomingCallData {
   call_type: 'video' | 'audio';
   channel_name: string;
   conversation_id: string;
+  conversation_type?: 'private' | 'group';
+  conversation_name?: string;
+  conversation_avatar?: string;
+  participants_count?: number;
 }
 
 export const useIncomingCalls = () => {
@@ -39,12 +43,12 @@ export const useIncomingCalls = () => {
     newSocket.on('connect', () => {
       console.log('📞 Socket connected, ID:', newSocket.id);
       
-      // ⭐ Join personal room với format đúng
+      // Join personal room
       const personalRoom = `user:${userId}`;
       newSocket.emit('join', personalRoom);
       console.log(`📞 Joined personal room: ${personalRoom}`);
       
-      // Legacy support - vẫn giữ để backward compatible
+      // Legacy support
       newSocket.emit('addNewUsers', {
         _id: userId,
       });
@@ -54,7 +58,6 @@ export const useIncomingCalls = () => {
       console.log('📞 Socket disconnected');
     });
 
-    // ⭐ Confirm room join
     newSocket.on('roomJoined', (room: string) => {
       console.log(`✅ Successfully joined room: ${room}`);
     });
@@ -63,27 +66,45 @@ export const useIncomingCalls = () => {
     newSocket.on('incomingCall', (data: IncomingCallData) => {
       console.log('📞 Incoming call received:', data);
       
-      // ⭐ Không hiển thị incoming call nếu mình là caller
+      // Don't show incoming call if I'm the caller
       if (data.caller_id === userId) {
         console.log('📞 Ignoring incoming call from self');
         return;
+      }
+      
+      // For group calls, show additional info
+      if (data.conversation_type === 'group') {
+        console.log(`📞 Group call from ${data.caller_name} in ${data.conversation_name}`);
+        console.log(`📞 ${data.participants_count || 0} participants already in call`);
       }
       
       setIncomingCall(data);
       setShowIncomingCall(true);
     });
 
-    // Listen for call answered (if caller)
+    // Listen for call answered
     newSocket.on('callAnswered', (data: any) => {
       console.log('📞 Call answered event received:', data);
-      // ⭐ Có thể thêm logic để update UI khi call được answer
+      
+      // For group calls, multiple people can answer
+      // Don't hide the incoming call dialog automatically
+      if (data.conversation_type !== 'group' && data.answered_by !== userId) {
+        // For 1-1 calls, if someone else answered, hide dialog
+        console.log('📞 Someone else answered the 1-1 call');
+        setShowIncomingCall(false);
+        setIncomingCall(null);
+      }
     });
 
     // Listen for call rejected
     newSocket.on('callRejected', (data: any) => {
       console.log('📞 Call rejected event received:', data);
-      setIncomingCall(null);
-      setShowIncomingCall(false);
+      
+      // Only hide if I rejected
+      if (data.rejected_by === userId) {
+        setIncomingCall(null);
+        setShowIncomingCall(false);
+      }
     });
 
     // Listen for call ended
@@ -91,6 +112,22 @@ export const useIncomingCalls = () => {
       console.log('📞 Call ended event received:', data);
       setIncomingCall(null);
       setShowIncomingCall(false);
+    });
+
+    // Listen for participant updates in group calls
+    newSocket.on('callParticipantsUpdated', (data: { 
+      call_id: string, 
+      participants_count: number 
+    }) => {
+      console.log('📞 Participants count updated:', data);
+      
+      // Update current incoming call data if it matches
+      if (incomingCall && incomingCall.call_id === data.call_id) {
+        setIncomingCall(prev => prev ? {
+          ...prev,
+          participants_count: data.participants_count,
+        } : null);
+      }
     });
 
     setSocket(newSocket);
@@ -118,11 +155,21 @@ export const useIncomingCalls = () => {
       );
 
       console.log('✅ Call answered successfully:', response.data);
+      
+      // Hide incoming call dialog after answering
       setShowIncomingCall(false);
       
       return response.data;
     } catch (error: any) {
       console.error('❌ Error answering call:', error.response?.data || error.message);
+      
+      // If already in call (group call scenario), still proceed
+      if (error.response?.data?.message === "Already in call") {
+        console.log('✅ Already in call, proceeding...');
+        setShowIncomingCall(false);
+        return error.response.data;
+      }
+      
       throw error;
     }
   }, [getToken]);
