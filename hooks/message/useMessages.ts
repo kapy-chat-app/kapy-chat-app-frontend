@@ -1,6 +1,7 @@
-// hooks/useMessages.ts - FIXED with populated read_by
+// hooks/useMessages.ts - FIXED VERSION với proper socket decryption
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEncryption } from "./useEncryption";
 import { useSocket } from "./useSocket";
 
 export interface MessageSender {
@@ -25,7 +26,6 @@ export interface MessageReaction {
   created_at: Date;
 }
 
-// ✅ FIXED: Added userInfo field
 export interface MessageReadBy {
   user: string;
   read_at: Date;
@@ -37,13 +37,20 @@ export interface MessageReadBy {
   };
 }
 
-export type MessageStatus = 'sending' | 'sent' | 'failed';
+export type MessageStatus = 'sending' | 'sent' | 'failed' | 'encrypting' | 'decrypting';
 
 export interface Message {
   _id: string;
   conversation: string;
   sender: MessageSender;
   content?: string;
+  encrypted_content?: string;
+  encryption_metadata?: {
+    type: "PreKeyWhisperMessage" | "WhisperMessage";
+    registration_id?: number;
+    pre_key_id?: number;
+    signed_pre_key_id?: number;
+  };
   type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location";
   attachments: MessageAttachment[];
   reply_to?: Message;
@@ -56,6 +63,7 @@ export interface Message {
   status?: MessageStatus;
   tempId?: string;
   localUri?: string[];
+  decryption_error?: boolean;
 }
 
 export interface CreateMessageData {
@@ -88,6 +96,7 @@ interface MessageHookReturn {
   socketMessageCount: number;
   typingUsers: TypingUser[];
   sendTypingIndicator: (isTyping: boolean) => void;
+  retryDecryption: (messageId: string) => Promise<void>;
 }
 
 export const useMessages = (conversationId: string | null): MessageHookReturn => {
@@ -102,6 +111,8 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
   const { socket, emit, on, off } = useSocket();
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { encryptMessage, decryptMessage, isInitialized: encryptionInitialized } = useEncryption();
+  
   const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -116,6 +127,79 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // ✨ Helper function to decrypt message content
+  const decryptMessageContent = useCallback(
+    async (message: Message): Promise<string> => {
+      if (!message.encrypted_content) {
+        return message.content || '';
+      }
+
+      if (!encryptionInitialized) {
+        console.warn('⚠️ E2EE not initialized, cannot decrypt');
+        return '[🔒 Encrypted]';
+      }
+
+      try {
+        const decrypted = await decryptMessage(
+          message.sender.clerkId,
+          message.encrypted_content
+        );
+        return decrypted;
+      } catch (error) {
+        console.error('❌ Failed to decrypt message:', error);
+        return '[🔒 Decryption failed]';
+      }
+    },
+    [decryptMessage, encryptionInitialized]
+  );
+
+  // ✨ Retry decryption for a specific message
+  const retryDecryption = useCallback(
+    async (messageId: string) => {
+      try {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? { ...msg, status: 'decrypting' as MessageStatus }
+              : msg
+          )
+        );
+
+        const message = messages.find((m) => m._id === messageId);
+        if (!message || !message.encrypted_content) {
+          throw new Error('Message not found or not encrypted');
+        }
+
+        const decrypted = await decryptMessageContent(message);
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? {
+                  ...msg,
+                  content: decrypted,
+                  status: 'sent' as MessageStatus,
+                  decryption_error: false,
+                }
+              : msg
+          )
+        );
+
+        console.log('✅ Message decrypted successfully');
+      } catch (error) {
+        console.error('❌ Retry decryption failed:', error);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? { ...msg, status: 'failed' as MessageStatus, decryption_error: true }
+              : msg
+          )
+        );
+      }
+    },
+    [messages, decryptMessageContent]
+  );
 
   useEffect(() => {
     if (socket && conversationId) {
@@ -168,61 +252,108 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     console.log(`⌨️ Sent typing indicator: ${isTyping}`);
   }, [socket, conversationId, user, emit]);
 
+  // ✨ Fetch and decrypt messages
   const fetchMessages = useCallback(
-    async (pageNum: number = 1, append: boolean = false) => {
-      if (!conversationId || loadingRef.current) return;
+  async (pageNum: number = 1, append: boolean = false) => {
+    if (!conversationId || loadingRef.current) return;
 
-      try {
-        loadingRef.current = true;
-        setLoading(true);
-        setError(null);
-        const token = await getToken();
+    try {
+      loadingRef.current = true;
+      setLoading(true);
+      setError(null);
+      const token = await getToken();
 
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await fetch(
+        `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
         }
+      );
 
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "Failed to fetch messages");
-        }
-
-        const newMessages = result.data.messages || [];
-        const pagination = result.data.pagination;
-
-        if (append) {
-          setMessages((prev) => [...newMessages, ...prev]);
-        } else {
-          setMessages(newMessages);
-        }
-
-        setHasMore(pagination?.hasNext || false);
-        
-        console.log(`✅ Loaded ${newMessages.length} messages (page ${pageNum})`);
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to fetch messages";
-        setError(errorMessage);
-        console.error("Error fetching messages:", err);
-      } finally {
-        setLoading(false);
-        loadingRef.current = false;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    },
-    [conversationId, getToken, API_BASE_URL, MESSAGES_PER_PAGE]
-  );
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to fetch messages");
+      }
+
+      const encryptedMessages = result.data.messages || [];
+      const pagination = result.data.pagination;
+
+      console.log(`📦 Fetched ${encryptedMessages.length} messages from DB, starting decryption...`);
+
+      // ✨ FIXED: Decrypt all messages sequentially với proper error handling
+      const decryptedMessages = await Promise.all(
+        encryptedMessages.map(async (msg: Message) => {
+          // ✅ Chỉ decrypt nếu có encrypted_content
+          if (msg.encrypted_content && encryptionInitialized) {
+            try {
+              console.log(`🔓 Decrypting message ${msg._id} from sender ${msg.sender.clerkId}`);
+              
+              // ✅ Decrypt với sender's clerkId
+              const decrypted = await decryptMessage(
+                msg.sender.clerkId, // ✅ IMPORTANT: Use sender's clerkId
+                msg.encrypted_content
+              );
+              
+              console.log(`✅ Message ${msg._id} decrypted successfully:`, decrypted.substring(0, 50));
+              
+              return {
+                ...msg,
+                content: decrypted,
+                status: 'sent' as MessageStatus,
+                decryption_error: false,
+              };
+            } catch (error) {
+              console.error(`❌ Failed to decrypt message ${msg._id}:`, error);
+              return {
+                ...msg,
+                content: '[🔒 Decryption failed - Tap to retry]',
+                status: 'failed' as MessageStatus,
+                decryption_error: true,
+              };
+            }
+          }
+          
+          // ✅ Nếu không có encrypted_content, trả về nguyên bản
+          console.log(`⚠️ Message ${msg._id} has no encrypted_content`);
+          return {
+            ...msg,
+            content: msg.content || '[No content]',
+          };
+        })
+      );
+
+      console.log(`✅ Decryption complete: ${decryptedMessages.length} messages processed`);
+
+      if (append) {
+        setMessages((prev) => [...decryptedMessages, ...prev]);
+      } else {
+        setMessages(decryptedMessages);
+      }
+
+      setHasMore(pagination?.hasNext || false);
+      
+      console.log(`✅ Loaded and decrypted ${decryptedMessages.length} messages (page ${pageNum})`);
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to fetch messages";
+      setError(errorMessage);
+      console.error("❌ Error fetching messages:", err);
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
+    }
+  },
+  [conversationId, getToken, API_BASE_URL, MESSAGES_PER_PAGE, decryptMessage, encryptionInitialized]
+);
 
   const createOptimisticMessage = useCallback((
     data: CreateMessageData | FormData,
@@ -236,19 +367,10 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     
     if (data instanceof FormData) {
       messageType = (data.get('type') as Message['type']) || 'text';
-      content = (data.get('content') as string) || '';
-      
-      const files = data.getAll('files') as any[];
-      attachmentPreviews = files.map((file, index) => ({
-        _id: `temp_att_${Date.now()}_${index}`,
-        file_name: file.name || `file-${index}`,
-        file_type: file.type || 'application/octet-stream',
-        file_size: file.size || 0,
-        url: file.uri || '',
-      }));
+      content = String(data.get('content') || '');
     } else {
       messageType = data.type;
-      content = data.content || '';
+      content = String(data.content || '');
     }
 
     return {
@@ -259,7 +381,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         _id: user?.id || '',
         clerkId: user?.id || '',
         full_name: user?.fullName || 'You',
-        username: user?.username || '',
+        username: user?.username || 'you',
         avatar: user?.imageUrl,
       },
       content,
@@ -270,85 +392,225 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       read_by: [],
       created_at: new Date(),
       updated_at: new Date(),
-      status: 'sending',
+      status: 'encrypting' as MessageStatus,
       localUri: localUris,
-    } as Message;
+    };
   }, [conversationId, user]);
 
+  // ✨ Send message with encryption
   const sendMessage = useCallback(
-    async (data: FormData | CreateMessageData): Promise<Message> => {
+    async (data: CreateMessageData | FormData): Promise<Message> => {
       if (!conversationId) {
         throw new Error("No conversation selected");
       }
 
-      let localUris: string[] = [];
-      if (data instanceof FormData) {
-        const files = data.getAll('files') as any[];
-        localUris = files.map(f => f.uri).filter(Boolean);
+      if (!encryptionInitialized) {
+        throw new Error("E2EE not initialized. Please initialize encryption first.");
       }
 
-      const optimisticMessage = createOptimisticMessage(data, localUris);
-      setMessages(prev => [...prev, optimisticMessage]);
-
       try {
-        setError(null);
         const token = await getToken();
-
-        const headers: HeadersInit = {
-          'Authorization': `Bearer ${token}`,
-        };
-
-        if (!(data instanceof FormData)) {
-          headers['Content-Type'] = 'application/json';
+        if (!token) {
+          throw new Error("Authentication token not available");
         }
 
+        // 2. Prepare data
+        let messageContent = '';
+        let messageType: Message['type'] = 'text';
+        let attachmentIds: string[] = [];
+        let replyToId: string | undefined;
+
+        if (data instanceof FormData) {
+          messageContent = (data.get('content') as string) || '';
+          messageType = (data.get('type') as Message['type']) || 'text';
+          replyToId = (data.get('replyTo') as string) || undefined;
+        } else {
+          messageContent = String(data.content || '').trim();
+          messageType = data.type;
+          attachmentIds = data.attachments || [];
+          replyToId = data.replyTo;
+        }
+
+        console.log('📝 Message preparation:', {
+          messageContent: messageContent.substring(0, 50),
+          messageType,
+          contentType: typeof messageContent,
+          contentLength: messageContent.length
+        });
+
+        // Validate content type
+        if (typeof messageContent !== 'string') {
+          console.error('❌ Invalid content type:', typeof messageContent, messageContent);
+          throw new Error('Message content must be a string');
+        }
+
+        // 1. Create optimistic message
+        const optimisticMessage = createOptimisticMessage(
+          data instanceof FormData ? data : {
+            ...data,
+            content: messageContent,
+          }
+        );
+        setMessages((prev) => [...prev, optimisticMessage]);
+
+        // ✨ 3. Encrypt message content (chỉ encrypt text messages)
+        let encryptedContent = '';
+        let encryptionMetadata = null;
+
+        if (messageType === 'text' && messageContent) {
+          try {
+            const conversationResponse = await fetch(
+              `${API_BASE_URL}/api/conversations/${conversationId}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            const convResult = await conversationResponse.json();
+            const participants = convResult.data.participants || [];
+            const recipientId = participants.find(
+              (p: any) => p.clerkId !== user?.id
+            )?.clerkId;
+
+            if (!recipientId) {
+              throw new Error('Recipient not found');
+            }
+
+            console.log('🔒 Encrypting message for:', recipientId);
+            const encrypted = await encryptMessage(recipientId, String(messageContent));
+            encryptedContent = encrypted.encryptedContent;
+            encryptionMetadata = encrypted.encryptionMetadata;
+
+            console.log('✅ Encryption complete:', {
+              encryptedLength: encryptedContent.length,
+              metadataType: encryptionMetadata?.type,
+              hasEncryptedContent: !!encryptedContent,
+              hasMetadata: !!encryptionMetadata
+            });
+
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.tempId === optimisticMessage.tempId
+                  ? { ...msg, status: 'sending' as MessageStatus }
+                  : msg
+              )
+            );
+          } catch (encryptError) {
+            console.error('❌ Encryption failed:', encryptError);
+            setMessages((prev) =>
+              prev.filter((msg) => msg.tempId !== optimisticMessage.tempId)
+            );
+            throw new Error(`Encryption failed: ${encryptError}`);
+          }
+        }
+
+        // ✨ 4. Build request body
+        const requestBody: any = {
+          conversationId,
+          type: messageType,
+        };
+
+        // Add replyTo if present
+        if (replyToId) {
+          requestBody.replyTo = replyToId;
+        }
+
+        // ✅ For text messages: ONLY send encrypted content
+        if (messageType === 'text') {
+          if (!encryptedContent) {
+            throw new Error('Failed to encrypt message - no encrypted content');
+          }
+          
+          requestBody.encryptedContent = encryptedContent;
+          requestBody.encryptionMetadata = encryptionMetadata;
+          
+          console.log('📦 Text message request body:', {
+            conversationId: requestBody.conversationId,
+            type: requestBody.type,
+            hasEncryptedContent: !!requestBody.encryptedContent,
+            hasEncryptionMetadata: !!requestBody.encryptionMetadata,
+            encryptedContentLength: requestBody.encryptedContent?.length,
+            metadataType: requestBody.encryptionMetadata?.type,
+            replyTo: requestBody.replyTo,
+            hasPlaintextContent: !!requestBody.content
+          });
+        } else {
+          // For non-text messages (images, files, etc.)
+          if (messageContent) {
+            requestBody.content = messageContent;
+          }
+          
+          console.log('📦 Non-text message request body:', {
+            conversationId: requestBody.conversationId,
+            type: requestBody.type,
+            hasContent: !!requestBody.content,
+            replyTo: requestBody.replyTo
+          });
+        }
+
+        // Add attachments if present
+        if (attachmentIds.length > 0) {
+          requestBody.attachments = attachmentIds;
+        }
+
+        // ✨ 5. Send to server
         const response = await fetch(
           `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
           {
             method: "POST",
-            headers,
-            body: data instanceof FormData ? data : JSON.stringify(data),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(requestBody),
           }
         );
 
+        console.log('📥 Response status:', response.status);
+
         const result = await response.json();
 
-        if (!response.ok || !result.success) {
-          throw new Error(result.error || `HTTP error! status: ${response.status}`);
+        console.log('📥 Server response:', {
+          success: result.success,
+          hasData: !!result.data,
+          error: result.error
+        });
+
+        if (!result.success) {
+          console.error('❌ Server error:', result.error);
+          throw new Error(result.error || "Failed to send message");
         }
 
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.tempId === optimisticMessage.tempId 
-              ? { 
-                  ...result.data, 
+        const serverMessage = result.data;
+
+        // ✅ FIX: Update optimistic message với decrypted content
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.tempId === optimisticMessage.tempId
+              ? {
+                  ...serverMessage,
+                  content: messageContent, // ✅ Keep plaintext locally
                   status: 'sent' as MessageStatus,
-                  tempId: optimisticMessage.tempId
                 }
               : msg
           )
         );
 
-        return result.data;
-
+        console.log('✅ Message sent successfully with E2EE');
+        return serverMessage;
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to send message";
-        console.error("❌ Send message error:", errorMessage);
-
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.tempId === optimisticMessage.tempId 
-              ? { ...msg, status: 'failed' as MessageStatus }
-              : msg
-          )
+        console.error('❌ sendMessage failed:', err);
+        
+        // Remove optimistic message on error
+        setMessages((prev) =>
+          prev.filter((msg) => !msg.tempId || msg.tempId !== prev.find(m => m.tempId)?.tempId)
         );
 
-        setError(errorMessage);
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to send message";
         throw new Error(errorMessage);
       }
     },
-    [conversationId, getToken, API_BASE_URL, createOptimisticMessage]
+    [conversationId, getToken, user, createOptimisticMessage, encryptMessage, encryptionInitialized, API_BASE_URL]
   );
 
   const editMessage = useCallback(
@@ -356,14 +618,17 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       try {
         setError(null);
         const token = await getToken();
-        const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({ action: "edit", content }),
-        });
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ action: "edit", content }),
+          }
+        );
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -394,22 +659,21 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
   const deleteMessage = useCallback(
     async (id: string, type: "only_me" | "both" = "only_me"): Promise<void> => {
+      if (!conversationId) return;
       try {
         setError(null);
         const token = await getToken();
-        const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=${type}`, {
-          method: "DELETE",
-          headers: {
-            "Authorization": `Bearer ${token}`
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=${type}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           }
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        );
 
         const result = await response.json();
-
         if (!result.success) {
           throw new Error(result.error || "Failed to delete message");
         }
@@ -419,9 +683,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         } else {
           setMessages((prev) =>
             prev.map((msg) =>
-              msg._id === id
-                ? { ...msg, content: "This message was deleted" }
-                : msg
+              msg._id === id ? { ...msg, content: "This message was deleted" } : msg
             )
           );
         }
@@ -432,29 +694,28 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         throw new Error(errorMessage);
       }
     },
-    [getToken, API_BASE_URL, conversationId]
+    [conversationId, getToken, API_BASE_URL]
   );
 
   const addReaction = useCallback(
     async (id: string, reaction: string): Promise<void> => {
+      if (!conversationId) return;
       try {
         setError(null);
         const token = await getToken();
-        const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({ action: "reaction", reactionType: reaction }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ action: "reaction", reactionType: reaction }),
+          }
+        );
 
         const result = await response.json();
-
         if (!result.success) {
           throw new Error(result.error || "Failed to add reaction");
         }
@@ -471,107 +732,59 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         throw new Error(errorMessage);
       }
     },
-    [getToken, API_BASE_URL, conversationId]
+    [conversationId, getToken, API_BASE_URL]
   );
 
-  const removeReaction = useCallback(async (id: string): Promise<void> => {
-    try {
-      setError(null);
-      const token = await getToken();
-      const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=remove_reaction`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`
+  const removeReaction = useCallback(
+    async (id: string): Promise<void> => {
+      if (!conversationId) return;
+      try {
+        setError(null);
+        const token = await getToken();
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=remove_reaction`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to remove reaction");
         }
-      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
+          )
+        );
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to remove reaction";
+        setError(errorMessage);
+        throw new Error(errorMessage);
       }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to remove reaction");
-      }
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
-        )
-      );
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to remove reaction";
-      setError(errorMessage);
-      throw new Error(errorMessage);
-    }
-  }, [getToken, API_BASE_URL, conversationId]);
+    },
+    [conversationId, getToken, API_BASE_URL]
+  );
 
   const markAsRead = useCallback(
     async (id: string): Promise<void> => {
-      try {
-        const token = await getToken();
-        const response = await fetch(`${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({ action: "read" }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-
-          if (result.success && user?.id) {
-            setMessages((prev) =>
-              prev.map((msg) => {
-                if (
-                  msg._id === id &&
-                  !msg.read_by.some((r) => r.user === user.id)
-                ) {
-                  console.log(`✅ Locally marking message ${id} as read`);
-                  return {
-                    ...msg,
-                    read_by: [
-                      ...msg.read_by,
-                      { 
-                        user: user.id, 
-                        read_at: new Date(),
-                        userInfo: {
-                          clerkId: user.id,
-                          full_name: user.fullName || 'You',
-                          username: user.username || '',
-                          avatar: user.imageUrl
-                        }
-                      },
-                    ],
-                  };
-                }
-                return msg;
-              })
-            );
-          }
-        }
-      } catch (err) {
-        console.error("Failed to mark message as read:", err);
-      }
-    },
-    [user?.id, user?.fullName, user?.username, user?.imageUrl, getToken, API_BASE_URL, conversationId]
-  );
-
-  const markConversationAsRead = useCallback(
-    async (conversationId: string): Promise<void> => {
+      if (!conversationId) return;
       try {
         const token = await getToken();
         const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/read`,
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
           {
             method: "PUT",
             headers: {
-              "Authorization": `Bearer ${token}`
-            }
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ action: "read" }),
           }
         );
 
@@ -579,26 +792,22 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           const result = await response.json();
 
           if (result.success && user?.id) {
-            console.log(`✅ Conversation ${conversationId} marked as read`);
             setMessages((prev) =>
               prev.map((msg) => {
-                const isAlreadyRead = msg.read_by.some(
-                  (r) => r.user === user.id
-                );
-                if (!isAlreadyRead && msg.sender.clerkId !== user.id) {
+                if (msg._id === id && !msg.read_by.some((r) => r.user === user.id)) {
                   return {
                     ...msg,
                     read_by: [
                       ...msg.read_by,
-                      { 
-                        user: user.id, 
+                      {
+                        user: user.id,
                         read_at: new Date(),
                         userInfo: {
                           clerkId: user.id,
                           full_name: user.fullName || 'You',
                           username: user.username || '',
-                          avatar: user.imageUrl
-                        }
+                          avatar: user.imageUrl,
+                        },
                       },
                     ],
                   };
@@ -609,23 +818,73 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           }
         }
       } catch (err) {
-        console.error("Failed to mark conversation as read:", err);
+        console.error("Error marking message as read:", err);
       }
     },
-    [user?.id, user?.fullName, user?.username, user?.imageUrl, getToken, API_BASE_URL]
+    [conversationId, getToken, user, API_BASE_URL]
   );
 
-  const loadMoreMessages = useCallback(async (): Promise<void> => {
-    if (!hasMore || loading || loadingRef.current) return;
+  const markConversationAsRead = useCallback(
+    async (convId: string): Promise<void> => {
+      try {
+        const token = await getToken();
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${convId}/read`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-    const nextPage = page + 1;
-    setPage(nextPage);
-    await fetchMessages(nextPage, true);
-  }, [hasMore, loading, page, fetchMessages]);
+        if (response.ok) {
+          const result = await response.json();
 
-  const refreshMessages = useCallback(async (): Promise<void> => {
+          if (result.success && user?.id && convId === conversationId) {
+            setMessages((prev) =>
+              prev.map((msg) => {
+                const isAlreadyRead = msg.read_by.some((r) => r.user === user.id);
+                if (!isAlreadyRead && msg.sender.clerkId !== user.id) {
+                  return {
+                    ...msg,
+                    read_by: [
+                      ...msg.read_by,
+                      {
+                        user: user.id,
+                        read_at: new Date(),
+                        userInfo: {
+                          clerkId: user.id,
+                          full_name: user.fullName || 'Unknown',
+                          username: user.username || 'unknown',
+                          avatar: user.imageUrl,
+                        },
+                      },
+                    ],
+                  };
+                }
+                return msg;
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Error marking conversation as read:", err);
+      }
+    },
+    [conversationId, getToken, user, API_BASE_URL]
+  );
+
+  const loadMoreMessages = useCallback(async () => {
+    if (hasMore && !loadingRef.current) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      await fetchMessages(nextPage, true);
+    }
+  }, [hasMore, page, fetchMessages]);
+
+  const refreshMessages = useCallback(async () => {
     setPage(1);
-    setHasMore(true);
     await fetchMessages(1, false);
   }, [fetchMessages]);
 
@@ -633,62 +892,107 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     setMessages([]);
     setPage(1);
     setHasMore(true);
-    setError(null);
     setSocketMessageCount(0);
-    setTypingUsers([]);
   }, []);
 
-  // ✅ SOCKET EVENT HANDLERS - COMPLETE WITH POPULATED READ_BY
+  // ✅ Socket event handlers - FIXED VERSION
   useEffect(() => {
     if (!socket || !conversationId) return;
 
-    console.log('🔌 Setting up message socket listeners for conversation:', conversationId);
+    console.log('🔌 Setting up socket listeners for conversation:', conversationId);
 
-    // 1. NEW MESSAGE
-    const handleNewMessage = (data: any) => {
-      if (data.conversation_id === conversationId) {
-        if (data.sender_id === user?.id) {
-          console.log('Skipping own message from socket');
-          return;
-        }
+    // ✅ FIXED: Handle newMessage - decrypt cả message của mình và người khác
+    const handleNewMessage = async (data: any) => {
+      console.log('📩 NEW MESSAGE event received:', {
+        messageId: data.message_id,
+        senderId: data.sender_id,
+        currentUserId: user?.id,
+        hasEncryptedContent: !!data.encrypted_content,
+        hasMessage: !!data.message
+      });
 
-        const messageFromSocket = data.message;
-        
-        const newMessage: Message = {
-          _id: messageFromSocket._id || data.message_id || `temp_${Date.now()}`,
-          conversation: data.conversation_id,
-          sender: {
-            _id: data.sender_id,
-            clerkId: data.sender_id,
-            full_name: data.sender_name || "Unknown",
-            username: data.sender_username || "unknown",
-            avatar: data.sender_avatar,
-          } as MessageSender,
-          content: data.message_content,
-          type: data.message_type || "text",
-          attachments: messageFromSocket?.attachments || [],
-          reply_to: messageFromSocket?.reply_to,
-          reactions: messageFromSocket?.reactions || [],
-          is_edited: false,
-          read_by: messageFromSocket?.read_by || [],
-          created_at: new Date(messageFromSocket?.created_at || Date.now()),
-          updated_at: new Date(messageFromSocket?.updated_at || Date.now()),
-          status: 'sent',
-        };
-
-        setMessages((prev) => {
-          const exists = prev.some((msg) => msg._id === newMessage._id);
-          if (!exists) {
-            setSocketMessageCount(prevCount => prevCount + 1);
-            console.log('✅ New message from socket added');
-            return [...prev, newMessage];
-          }
-          return prev;
-        });
+      if (data.conversation_id !== conversationId) {
+        console.log('⚠️ Different conversation, ignoring');
+        return;
       }
+
+      if (!data.message) {
+        console.warn('⚠️ No message data in socket event');
+        return;
+      }
+
+      let newMessage = data.message;
+
+      // ✅ FIX: Xử lý cả message của mình (từ socket - có encrypted content)
+      // và message của người khác (cũng có encrypted content)
+      
+      // Nếu là message của mình, update optimistic message đã có
+      if (data.sender_id === user?.id) {
+        console.log('👤 Own message from socket - updating optimistic message');
+        
+        setMessages((prev) => {
+          // Tìm optimistic message (có tempId)
+          const optimisticIndex = prev.findIndex(msg => msg.tempId && msg.status === 'sending');
+          
+          if (optimisticIndex !== -1) {
+            // Update optimistic message với server message
+            const updated = [...prev];
+            updated[optimisticIndex] = {
+              ...newMessage,
+              content: prev[optimisticIndex].content, // Keep plaintext from optimistic
+              status: 'sent' as MessageStatus,
+            };
+            console.log('✅ Updated optimistic message with server response');
+            return updated;
+          } else {
+            // Nếu không tìm thấy optimistic message, có thể là reload
+            console.log('⚠️ No optimistic message found - might be reload');
+            return prev;
+          }
+        });
+        
+        return; // ✅ QUAN TRỌNG: Return để không thêm duplicate
+      }
+
+      // ✅ Message từ người khác - decrypt và add
+      if (newMessage.encrypted_content && encryptionInitialized) {
+        try {
+          console.log('🔓 Decrypting received message from:', data.sender_id);
+          const decrypted = await decryptMessage(
+            data.sender_id,
+            newMessage.encrypted_content
+          );
+          newMessage = {
+            ...newMessage,
+            content: decrypted,
+            status: 'sent' as MessageStatus,
+            decryption_error: false,
+          };
+          console.log('✅ Message decrypted:', decrypted.substring(0, 50));
+        } catch (error) {
+          console.error('❌ Failed to decrypt received message:', error);
+          newMessage = {
+            ...newMessage,
+            content: '[🔒 Decryption failed]',
+            status: 'failed' as MessageStatus,
+            decryption_error: true,
+          };
+        }
+      }
+
+      // Add message từ người khác
+      setMessages((prev) => {
+        const exists = prev.some((msg) => msg._id === newMessage._id);
+        if (!exists) {
+          setSocketMessageCount(prevCount => prevCount + 1);
+          console.log('✅ New message from another user added');
+          return [...prev, newMessage];
+        }
+        console.log('⚠️ Message already exists, skipping');
+        return prev;
+      });
     };
 
-    // 2. UPDATE MESSAGE
     const handleUpdateMessage = (data: any) => {
       console.log('📝 Message updated:', data.message_id);
       setMessages((prev) =>
@@ -705,7 +1009,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // 3. DELETE MESSAGE
     const handleDeleteMessage = (data: any) => {
       console.log('🗑️ Message deleted:', data.message_id, 'type:', data.delete_type);
       if (data.delete_type === "both") {
@@ -723,7 +1026,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       }
     };
 
-    // 4. NEW REACTION
     const handleNewReaction = (data: any) => {
       console.log('👍 Reaction added:', data.reaction, 'to message:', data.message_id);
       setMessages((prev) =>
@@ -735,7 +1037,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // 5. DELETE REACTION
     const handleDeleteReaction = (data: any) => {
       console.log('❌ Reaction removed from message:', data.message_id);
       setMessages((prev) =>
@@ -747,7 +1048,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // ✅ 6. MESSAGE READ - FIXED WITH USER INFO
     const handleMessageRead = (data: any) => {
       console.log('📖 MESSAGE READ event received:', {
         messageId: data.message_id,
@@ -796,7 +1096,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // ✅ 7. CONVERSATION MARKED AS READ - FIXED WITH USER INFO
     const handleConversationMarkedAsRead = (data: any) => {
       console.log('📖 CONVERSATION MARKED AS READ event received:', {
         conversationId: data.conversation_id,
@@ -843,7 +1142,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       );
     };
 
-    // 8. USER TYPING
     const handleUserTyping = (data: any) => {
       console.log('⌨️ RECEIVED userTyping event:', JSON.stringify(data));
       
@@ -904,7 +1202,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [socket, conversationId, on, off, user?.id]);
+  }, [socket, conversationId, on, off, user?.id, decryptMessage, encryptionInitialized]);
 
   useEffect(() => {
     if (conversationId) {
@@ -931,5 +1229,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     socketMessageCount,
     typingUsers,
     sendTypingIndicator,
+    retryDecryption,
   };
 };

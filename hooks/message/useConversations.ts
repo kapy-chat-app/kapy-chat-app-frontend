@@ -1,4 +1,6 @@
-// hooks/useConversations.ts - Fixed with mark as read support
+// hooks/useConversations.ts - Updated with E2EE support
+// Giữ nguyên toàn bộ code cũ, chỉ cần update type cho last_message
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket } from './useSocket';
 import { useAuth } from '@clerk/clerk-expo';
@@ -15,7 +17,8 @@ export interface ConversationParticipant {
 
 export interface ConversationMessage {
   _id: string;
-  content?: string;
+  content?: string; // ✨ Optional (có thể là plaintext hoặc encrypted)
+  encrypted_content?: string; // ✨ NEW: Encrypted content
   type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'voice_note' | 'location';
   sender: ConversationParticipant;
   created_at: Date;
@@ -65,11 +68,9 @@ export const useConversations = (): UseConversationsReturn => {
   const { socket, on, off } = useSocket();
   const { getToken, userId } = useAuth();
   
-  // Use refs to keep stable references
   const getTokenRef = useRef(getToken);
   const userIdRef = useRef(userId);
 
-  // Update refs when values change
   useEffect(() => {
     getTokenRef.current = getToken;
     userIdRef.current = userId;
@@ -213,7 +214,7 @@ export const useConversations = (): UseConversationsReturn => {
     }
   }, []);
 
-  // Socket event handlers
+  // Socket event handlers (GIỮ NGUYÊN TOÀN BỘ)
   useEffect(() => {
     if (!socket) {
       console.log('⚠️ Socket not available in useConversations');
@@ -268,7 +269,8 @@ export const useConversations = (): UseConversationsReturn => {
       console.log('💬 NEW MESSAGE EVENT in useConversations:', {
         conversation_id: data.conversation_id,
         sender_id: data.sender_id,
-        currentUserId: userIdRef.current
+        currentUserId: userIdRef.current,
+        hasEncryptedContent: !!data.encrypted_content // ✨ Log encrypted status
       });
       
       setConversations(prev => {
@@ -281,11 +283,17 @@ export const useConversations = (): UseConversationsReturn => {
 
         const conversation = prev[conversationIndex];
         
+        // ✨ Display encrypted indicator if message is encrypted
+        const displayContent = data.encrypted_content 
+          ? '🔒 Encrypted message' 
+          : data.message_content;
+        
         const updatedConv = {
           ...conversation,
           last_message: {
             _id: data.message_id,
-            content: data.message_content,
+            content: displayContent, // ✨ Show encrypted indicator
+            encrypted_content: data.encrypted_content, // ✨ Include encrypted content
             type: data.message_type,
             sender: {
               clerkId: data.sender_id,
@@ -298,7 +306,6 @@ export const useConversations = (): UseConversationsReturn => {
           last_activity: new Date(),
         };
 
-        // ✅ Only increment unread if not from current user
         if (data.sender_id !== userIdRef.current) {
           updatedConv.unreadCount = (conversation.unreadCount || 0) + 1;
           console.log('📈 Unread count increased to:', updatedConv.unreadCount);
@@ -306,7 +313,6 @@ export const useConversations = (): UseConversationsReturn => {
           console.log('👤 Message from current user, not incrementing unread');
         }
 
-        // Move to top
         const newConversations = [...prev];
         newConversations.splice(conversationIndex, 1);
         newConversations.unshift(updatedConv);
@@ -315,7 +321,6 @@ export const useConversations = (): UseConversationsReturn => {
       });
     };
 
-    // ✅ NEW: Handle messageRead event
     const handleMessageRead = (data: any) => {
       console.log('📖 Message read in useConversations:', {
         conversationId: data.conversation_id,
@@ -323,7 +328,6 @@ export const useConversations = (): UseConversationsReturn => {
         currentUserId: userIdRef.current
       });
       
-      // ✅ Only decrement unread count if current user read the message
       if (data.user_id === userIdRef.current && data.conversation_id) {
         setConversations(prev =>
           prev.map(conv => {
@@ -340,7 +344,6 @@ export const useConversations = (): UseConversationsReturn => {
       }
     };
 
-    // ✅ NEW: Handle conversationMarkedAsRead event
     const handleConversationMarkedAsRead = (data: any) => {
       console.log('📖 Conversation marked as read in useConversations:', {
         conversationId: data.conversation_id,
@@ -348,7 +351,6 @@ export const useConversations = (): UseConversationsReturn => {
         currentUserId: userIdRef.current
       });
       
-      // ✅ Only reset unread count if current user marked as read
       if (data.read_by === userIdRef.current) {
         setConversations(prev =>
           prev.map(conv => {
@@ -365,21 +367,20 @@ export const useConversations = (): UseConversationsReturn => {
       }
     };
 
-    // ✅ Register all handlers including new ones
     on('newConversation', handleNewConversation);
     on('conversationUpdated', handleConversationUpdated);
     on('conversationDeleted', handleConversationDeleted);
     on('newMessage', handleNewMessage);
-    on('messageRead', handleMessageRead); // ✅ NEW
-    on('conversationMarkedAsRead', handleConversationMarkedAsRead); // ✅ NEW
+    on('messageRead', handleMessageRead);
+    on('conversationMarkedAsRead', handleConversationMarkedAsRead);
 
     return () => {
       off('newConversation', handleNewConversation);
       off('conversationUpdated', handleConversationUpdated);
       off('conversationDeleted', handleConversationDeleted);
       off('newMessage', handleNewMessage);
-      off('messageRead', handleMessageRead); // ✅ NEW
-      off('conversationMarkedAsRead', handleConversationMarkedAsRead); // ✅ NEW
+      off('messageRead', handleMessageRead);
+      off('conversationMarkedAsRead', handleConversationMarkedAsRead);
     };
   }, [socket, on, off]);
 

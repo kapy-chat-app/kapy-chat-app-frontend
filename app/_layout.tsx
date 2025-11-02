@@ -1,12 +1,20 @@
 // app/_layout.tsx
 import IncomingCallModal from "@/components/page/call/IncomingCallModal";
+import { EncryptionInitProvider } from "@/components/page/message/EncryptionInitProvider";
 import { useIncomingCalls } from "@/hooks/call/useIncomingCalls";
 import { useProfileCheck } from "@/hooks/user/useProfileCheck";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
+import { Buffer } from "buffer";
 import { Stack } from "expo-router";
 import { ActivityIndicator, Text, View } from "react-native";
+import "react-native-get-random-values";
+import { TextDecoder, TextEncoder } from "text-encoding";
+import "../polyfills/text-encoding";
 import "./global.css";
+global.Buffer = Buffer;
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
 
 function ProtectedLayout() {
   const { isCheckingProfile } = useProfileCheck();
@@ -54,7 +62,9 @@ export default function RootLayout() {
       tokenCache={tokenCache}
       telemetry={false}
     >
-      <ProtectedLayout />
+      <EncryptionInitProvider>
+        <ProtectedLayout />
+      </EncryptionInitProvider>
     </ClerkProvider>
   );
 }
