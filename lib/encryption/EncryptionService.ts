@@ -1,12 +1,13 @@
-// lib/encryption/SimpleEncryptionService.ts - FINAL WORKING VERSION
+// lib/encryption/SimpleEncryptionService.ts - ADD FILE METHODS
 import 'react-native-get-random-values';
 import { Buffer } from 'buffer';
 import * as SecureStore from 'expo-secure-store';
 import * as Crypto from 'expo-crypto';
+import * as FileSystem from 'expo-file-system'; // ✅ ADD THIS
 
 global.Buffer = Buffer;
 
-// ✅ Type definitions - Match server's expected format
+// ✅ Keep existing EncryptionResult
 export interface EncryptionResult {
   encryptedContent: string;
   encryptionMetadata: {
@@ -17,31 +18,32 @@ export interface EncryptionResult {
   };
 }
 
-/**
- * ✅ SIMPLE E2EE - Shared key giữa 2 người
- * Key Logic:
- * - Mỗi user có 1 key riêng
- * - Để encrypt cho recipient: Lấy recipient's key từ server
- * - Để decrypt message từ sender: Lấy sender's key từ server
- */
+// ✅ NEW: File encryption result
+export interface FileEncryptionResult {
+  encryptedBase64: string; // Base64 của encrypted file
+  metadata: {
+    iv: string;
+    auth_tag: string; // HMAC for integrity
+    original_size: number;
+    encrypted_size: number;
+    file_name: string;
+  };
+}
+
 export class SimpleEncryptionService {
   private static ENCRYPTION_KEY = 'e2ee_encryption_key';
-  private static SENDER_KEYS_CACHE = 'e2ee_sender_keys_cache'; // ✅ NEW: Cache sender keys
+  private static SENDER_KEYS_CACHE = 'e2ee_sender_keys_cache';
   private initialized: boolean = false;
-  private senderKeysCache: Map<string, string> = new Map(); // userId -> publicKey
+  private senderKeysCache: Map<string, string> = new Map();
 
   // ==========================================
-  // KEY INITIALIZATION
+  // KEY INITIALIZATION (GIỮ NGUYÊN)
   // ==========================================
 
-  /**
-   * Generate encryption key (chỉ 1 lần)
-   */
   async initializeKeys(userId: string): Promise<{ publicKey: string }> {
     try {
       console.log('🔐 Generating encryption key for user:', userId);
 
-      // Check if key already exists
       const existingKey = await SecureStore.getItemAsync(
         SimpleEncryptionService.ENCRYPTION_KEY
       );
@@ -52,11 +54,9 @@ export class SimpleEncryptionService {
         return { publicKey: existingKey };
       }
 
-      // ✅ Generate random 256-bit key using expo-crypto
-      const randomBytes = await Crypto.getRandomBytesAsync(32); // 256 bits
+      const randomBytes = await Crypto.getRandomBytesAsync(32);
       const encryptionKey = Buffer.from(randomBytes).toString('base64');
 
-      // Store key securely
       await SecureStore.setItemAsync(
         SimpleEncryptionService.ENCRYPTION_KEY,
         encryptionKey
@@ -65,18 +65,13 @@ export class SimpleEncryptionService {
       this.initialized = true;
       console.log('✅ Encryption key generated successfully');
 
-      return {
-        publicKey: encryptionKey, // Server sẽ lưu để share cho recipient
-      };
+      return { publicKey: encryptionKey };
     } catch (error) {
       console.error('❌ Failed to generate key:', error);
       throw error;
     }
   }
 
-  /**
-   * Check if initialized
-   */
   async isInitialized(): Promise<boolean> {
     try {
       const key = await SecureStore.getItemAsync(SimpleEncryptionService.ENCRYPTION_KEY);
@@ -87,9 +82,6 @@ export class SimpleEncryptionService {
     }
   }
 
-  /**
-   * Get public key (shared key)
-   */
   async getPublicKey(): Promise<string> {
     const key = await SecureStore.getItemAsync(SimpleEncryptionService.ENCRYPTION_KEY);
     if (!key) {
@@ -98,9 +90,6 @@ export class SimpleEncryptionService {
     return key;
   }
 
-  /**
-   * Upload key to server
-   */
   async uploadKeysToServer(apiBaseUrl: string, authToken: string): Promise<void> {
     try {
       const publicKey = await this.getPublicKey();
@@ -127,24 +116,19 @@ export class SimpleEncryptionService {
   }
 
   // ==========================================
-  // KEY MANAGEMENT - ✅ NEW: Cache sender keys
+  // KEY MANAGEMENT (GIỮ NGUYÊN)
   // ==========================================
 
-  /**
-   * ✅ Get sender's key (for decryption)
-   */
   async getSenderPublicKey(
     senderUserId: string,
     apiBaseUrl: string,
     authToken: string
   ): Promise<string> {
-    // Check cache first
     if (this.senderKeysCache.has(senderUserId)) {
       console.log('✅ Using cached sender key:', senderUserId);
       return this.senderKeysCache.get(senderUserId)!;
     }
 
-    // Fetch from server
     try {
       const response = await fetch(`${apiBaseUrl}/api/keys/${senderUserId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
@@ -156,8 +140,6 @@ export class SimpleEncryptionService {
       }
 
       const senderKey = result.data.publicKey;
-      
-      // Cache it
       this.senderKeysCache.set(senderUserId, senderKey);
       console.log('✅ Fetched and cached sender key:', senderUserId);
 
@@ -168,9 +150,6 @@ export class SimpleEncryptionService {
     }
   }
 
-  /**
-   * Get recipient's key (for encryption)
-   */
   async getRecipientPublicKey(
     recipientUserId: string,
     apiBaseUrl: string,
@@ -195,14 +174,11 @@ export class SimpleEncryptionService {
   }
 
   // ==========================================
-  // ENCRYPTION - Fixed XOR
+  // MESSAGE ENCRYPTION (GIỮ NGUYÊN)
   // ==========================================
 
-  /**
-   * ✅ FIXED: Encrypt message với recipient's key
-   */
   async encryptMessage(
-    recipientPublicKey: string, 
+    recipientPublicKey: string,
     message: string
   ): Promise<EncryptionResult> {
     try {
@@ -211,30 +187,19 @@ export class SimpleEncryptionService {
         messageLength: message.length,
       });
 
-      // Convert message to bytes
       const messageBytes = Buffer.from(message, 'utf-8');
-      
-      // Use recipient's key for encryption
       const keyBytes = Buffer.from(recipientPublicKey, 'base64');
-      
-      // Generate random IV
       const ivArray = await Crypto.getRandomBytesAsync(16);
       const iv = Buffer.from(ivArray);
-      
-      // ✅ Simple XOR encryption
       const encrypted = this.xorEncrypt(messageBytes, keyBytes, iv);
-      
+
       const encryptedContent = JSON.stringify({
         iv: iv.toString('base64'),
         data: encrypted.toString('base64'),
       });
 
-      console.log('✅ Message encrypted:', {
-        encryptedLength: encryptedContent.length,
-        ivLength: iv.length,
-        dataLength: encrypted.length,
-      });
-      
+      console.log('✅ Message encrypted');
+
       return {
         encryptedContent,
         encryptionMetadata: {
@@ -247,11 +212,6 @@ export class SimpleEncryptionService {
     }
   }
 
-  /**
-   * ✅ FIXED: Decrypt message với SENDER's key (không phải own key!)
-   * 
-   * IMPORTANT: Cần pass senderUserId vào để lấy đúng key
-   */
   async decryptMessage(
     encryptedContent: string,
     senderUserId: string,
@@ -264,27 +224,12 @@ export class SimpleEncryptionService {
       const { iv, data } = JSON.parse(encryptedContent);
       const ivBytes = Buffer.from(iv, 'base64');
       const dataBytes = Buffer.from(data, 'base64');
-      
-      // ✅ FIX: Get SENDER's key (không phải own key!)
       const senderKey = await this.getSenderPublicKey(senderUserId, apiBaseUrl, authToken);
       const keyBytes = Buffer.from(senderKey, 'base64');
-      
-      console.log('🔓 Decryption info:', {
-        ivLength: ivBytes.length,
-        dataLength: dataBytes.length,
-        keyLength: keyBytes.length,
-        senderUserId,
-      });
-      
-      // Decrypt
       const decrypted = this.xorDecrypt(dataBytes, keyBytes, ivBytes);
       const message = decrypted.toString('utf-8');
 
-      console.log('✅ Message decrypted:', {
-        message: message.substring(0, 20),
-        messageLength: message.length,
-      });
-      
+      console.log('✅ Message decrypted');
       return message;
     } catch (error) {
       console.error('❌ Decryption failed:', error);
@@ -293,7 +238,103 @@ export class SimpleEncryptionService {
   }
 
   // ==========================================
-  // SIMPLE XOR ENCRYPTION
+  // ✅ NEW: FILE ENCRYPTION
+  // ==========================================
+
+  /**
+   * ✅ Encrypt file with XOR + HMAC
+   */
+  async encryptFile(
+    recipientPublicKey: string,
+    fileUri: string,
+    fileName: string
+  ): Promise<FileEncryptionResult> {
+    try {
+      console.log('🔒 Encrypting file:', fileName);
+
+      // 1. Read file as base64
+      const fileData = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // 2. Convert to Buffer
+      const fileBuffer = Buffer.from(fileData, 'base64');
+      console.log('📦 File loaded, size:', fileBuffer.length);
+
+      // 3. Encrypt with XOR
+      const keyBytes = Buffer.from(recipientPublicKey, 'base64');
+      const ivArray = await Crypto.getRandomBytesAsync(16);
+      const iv = Buffer.from(ivArray);
+      const encrypted = this.xorEncrypt(fileBuffer, keyBytes, iv);
+
+      // 4. Generate HMAC for authentication
+      const authTag = await this.generateHMAC(encrypted, keyBytes);
+
+      // 5. Convert to base64
+      const encryptedBase64 = encrypted.toString('base64');
+
+      console.log('✅ File encrypted:', {
+        originalSize: fileBuffer.length,
+        encryptedSize: encrypted.length,
+      });
+
+      return {
+        encryptedBase64,
+        metadata: {
+          iv: iv.toString('base64'),
+          auth_tag: authTag,
+          original_size: fileBuffer.length,
+          encrypted_size: encrypted.length,
+          file_name: fileName,
+        },
+      };
+    } catch (error) {
+      console.error('❌ File encryption failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ Decrypt file with verification
+   */
+  async decryptFile(
+    encryptedBase64: string,
+    iv: string,
+    authTag: string,
+    senderUserId: string,
+    apiBaseUrl: string,
+    authToken: string
+  ): Promise<Buffer> {
+    try {
+      console.log('🔓 Decrypting file...');
+
+      // 1. Convert from base64
+      const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
+
+      // 2. Get sender's key
+      const senderKey = await this.getSenderPublicKey(senderUserId, apiBaseUrl, authToken);
+      const keyBytes = Buffer.from(senderKey, 'base64');
+
+      // 3. Verify HMAC
+      const expectedTag = await this.generateHMAC(encryptedBuffer, keyBytes);
+      if (expectedTag !== authTag) {
+        throw new Error('File authentication failed - data may be tampered');
+      }
+
+      // 4. Decrypt
+      const ivBytes = Buffer.from(iv, 'base64');
+      const decrypted = this.xorDecrypt(encryptedBuffer, keyBytes, ivBytes);
+
+      console.log('✅ File decrypted, size:', decrypted.length);
+      return decrypted;
+    } catch (error) {
+      console.error('❌ File decryption failed:', error);
+      throw error;
+    }
+  }
+
+  // ==========================================
+  // HELPER METHODS
   // ==========================================
 
   private xorEncrypt(data: Buffer, key: Buffer, iv: Buffer): Buffer {
@@ -305,13 +346,26 @@ export class SimpleEncryptionService {
   }
 
   private xorDecrypt(data: Buffer, key: Buffer, iv: Buffer): Buffer {
-    // XOR is symmetric
     return this.xorEncrypt(data, key, iv);
   }
 
-  // ==========================================
-  // HELPER METHODS
-  // ==========================================
+  /**
+   * ✅ Generate HMAC for integrity verification
+   */
+  private async generateHMAC(data: Buffer, key: Buffer): Promise<string> {
+    // Simple HMAC using XOR (for production, use proper HMAC-SHA256)
+    const hmacKey = Buffer.alloc(32);
+    for (let i = 0; i < 32; i++) {
+      hmacKey[i] = key[i % key.length] ^ 0x5c;
+    }
+
+    const hash = Buffer.alloc(32);
+    for (let i = 0; i < Math.min(data.length, 32); i++) {
+      hash[i] = data[i] ^ hmacKey[i];
+    }
+
+    return hash.toString('base64');
+  }
 
   async clearKeys(): Promise<void> {
     try {

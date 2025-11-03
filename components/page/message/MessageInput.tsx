@@ -1,10 +1,12 @@
-// MessageInput.tsx - COMPLETE với typing indicator
+/* eslint-disable import/namespace */
+// components/page/message/MessageInput.tsx - COMPLETE WITH E2EE FILES
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -15,6 +17,8 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useFileEncryption } from "@/hooks/message/useFileEncryption"; // ✅ NEW
+import { useAuth } from "@clerk/clerk-expo"; // ✅ NEW
 
 interface AttachmentPreview {
   id: string;
@@ -26,28 +30,38 @@ interface AttachmentPreview {
 }
 
 interface MessageInputProps {
+  conversationId?: string; // ✅ NEW
+  recipientId?: string; // ✅ NEW - Pass from MessageScreen
   onSendMessage: (data: FormData | any) => void;
   replyTo?: any;
   onCancelReply?: () => void;
-  onTyping?: (isTyping: boolean) => void; // ✅ NEW
+  onTyping?: (isTyping: boolean) => void;
+  disabled?: boolean; // ✅ NEW
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
+  conversationId, // ✅ NEW
+  recipientId, // ✅ NEW
   onSendMessage,
   replyTo,
   onCancelReply,
-  onTyping, // ✅ NEW
+  onTyping,
+  disabled = false, // ✅ NEW
 }) => {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [uploadingFiles, setUploadingFiles] = useState(false); // ✅ NEW
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   
-  // ✅ Typing indicator refs
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
+
+  // ✅ NEW: File encryption hook
+  const { encryptFile, isReady: encryptionReady } = useFileEncryption();
+  const { getToken } = useAuth();
 
   // ✅ Handle typing indicator
   const handleTyping = (text: string) => {
@@ -55,19 +69,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
     if (!onTyping) return;
 
-    // Start typing
     if (text.length > 0 && !isTypingRef.current) {
       isTypingRef.current = true;
       onTyping(true);
       console.log('⌨️ Started typing');
     }
 
-    // Clear previous timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Stop typing after 2 seconds of no input
     typingTimeoutRef.current = setTimeout(() => {
       if (isTypingRef.current) {
         isTypingRef.current = false;
@@ -77,7 +88,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }, 2000);
   };
 
-  // ✅ Cleanup on unmount
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
@@ -90,10 +100,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
     };
   }, [onTyping]);
 
+  // ✅ UPDATED: handleSend với E2EE file support
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
 
-    // ✅ Stop typing indicator
+    // Stop typing indicator
     if (isTypingRef.current && onTyping) {
       isTypingRef.current = false;
       onTyping(false);
@@ -115,6 +126,68 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     try {
+      // ✅ NEW: Check if we should encrypt files
+      const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
+
+      if (shouldEncryptFiles) {
+        console.log('🔒 Encrypting files before sending...');
+        setUploadingFiles(true);
+
+        const encryptedFiles: any[] = [];
+
+        // Encrypt all files
+        for (const att of currentAttachments) {
+          try {
+            console.log('🔒 Encrypting file:', att.name);
+
+            const { encryptedBase64, metadata } = await encryptFile(
+              att.uri,
+              att.name,
+              recipientId
+            );
+
+            encryptedFiles.push({
+              encryptedBase64,
+              originalFileName: att.name,
+              originalFileType: att.mimeType || 'application/octet-stream',
+              encryptionMetadata: {
+                iv: metadata.iv,
+                auth_tag: metadata.auth_tag,
+                original_size: metadata.original_size,
+                encrypted_size: metadata.encrypted_size,
+              },
+            });
+
+            console.log('✅ File encrypted:', att.name);
+          } catch (error) {
+            console.error('❌ Failed to encrypt file:', att.name, error);
+            Alert.alert('Error', `Failed to encrypt ${att.name}`);
+          }
+        }
+
+        setUploadingFiles(false);
+
+        // ✅ Send message với encrypted files
+        if (messageContent || encryptedFiles.length > 0) {
+          const messageData = {
+            content: messageContent || undefined,
+            type: 'text' as const,
+            encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
+            replyTo: currentReplyTo,
+          };
+
+          console.log('📤 Sending message with encrypted files:', {
+            hasContent: !!messageData.content,
+            filesCount: encryptedFiles.length,
+          });
+
+          onSendMessage(messageData);
+        }
+
+        return; // ✅ Exit early after encrypted upload
+      }
+
+      // ✅ FALLBACK: Non-encrypted file handling (backward compatible)
       const mediaFiles = currentAttachments.filter((att) =>
         ["image", "video", "audio"].includes(att.type)
       );
@@ -128,8 +201,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
           replyTo: currentReplyTo,
         };
         onSendMessage(textData);
-      } 
-      // Media files
+      }
+      // Media files (non-encrypted fallback)
       else if (mediaFiles.length > 0) {
         const mediaFormData = new FormData();
         const firstMediaType = mediaFiles[0].type;
@@ -172,8 +245,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           onSendMessage(docFormData);
         }
-      } 
-      // Documents only
+      }
+      // Documents only (non-encrypted fallback)
       else if (documentFiles.length > 0) {
         const docFormData = new FormData();
         docFormData.append("type", "file");
@@ -198,9 +271,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     } catch (error: any) {
       console.error("Send error:", error);
+      setUploadingFiles(false);
+      Alert.alert('Error', error.message || 'Failed to send message');
     }
   };
 
+  // ✅ GIỮ NGUYÊN: All picker methods
   const handleImagePicker = async () => {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -462,6 +538,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
     </View>
   );
 
+  // ✅ NEW: Disable send when uploading or disabled
+  const isSendDisabled = uploadingFiles || disabled || (!message.trim() && attachments.length === 0);
+
   return (
     <View
       style={[
@@ -508,35 +587,61 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
+      {/* ✅ NEW: Upload progress indicator */}
+      {uploadingFiles && (
+        <View style={styles.uploadingContainer}>
+          <ActivityIndicator size="small" color="#f97316" />
+          <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
+            🔒 Encrypting and uploading files...
+          </Text>
+        </View>
+      )}
+
       <View style={styles.inputRow}>
         <TouchableOpacity 
           onPress={handleCamera} 
           style={styles.iconButton}
+          disabled={uploadingFiles || disabled}
         >
-          <Ionicons name="camera" size={24} color={isDark ? "#fff" : "#666"} />
+          <Ionicons 
+            name="camera" 
+            size={24} 
+            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          />
         </TouchableOpacity>
 
         <TouchableOpacity 
           onPress={handleImagePicker} 
           style={styles.iconButton}
+          disabled={uploadingFiles || disabled}
         >
-          <Ionicons name="image" size={24} color={isDark ? "#fff" : "#666"} />
+          <Ionicons 
+            name="image" 
+            size={24} 
+            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          />
         </TouchableOpacity>
 
         <TouchableOpacity 
           onPress={handleFilePicker} 
           style={styles.iconButton}
+          disabled={uploadingFiles || disabled}
         >
-          <Ionicons name="attach" size={24} color={isDark ? "#fff" : "#666"} />
+          <Ionicons 
+            name="attach" 
+            size={24} 
+            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          />
         </TouchableOpacity>
 
         <TextInput
           value={message}
-          onChangeText={handleTyping} // ✅ Changed from setMessage
+          onChangeText={handleTyping}
           placeholder="Type a message..."
           placeholderTextColor={isDark ? "#999" : "#666"}
           multiline
           maxLength={5000}
+          editable={!uploadingFiles && !disabled}
           style={[
             styles.textInput,
             isDark ? styles.inputDark : styles.inputLight,
@@ -550,6 +655,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               styles.actionButton,
               isRecording ? styles.bgRed : styles.bgOrange,
             ]}
+            disabled={uploadingFiles || disabled}
           >
             <Ionicons
               name={isRecording ? "stop" : "mic"}
@@ -560,9 +666,18 @@ const MessageInput: React.FC<MessageInputProps> = ({
         ) : (
           <TouchableOpacity
             onPress={handleSend}
-            style={[styles.actionButton, styles.bgOrange]}
+            style={[
+              styles.actionButton,
+              styles.bgOrange,
+              isSendDisabled && styles.disabledButton,
+            ]}
+            disabled={isSendDisabled}
           >
-            <Ionicons name="send" size={20} color="white" />
+            {uploadingFiles ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Ionicons name="send" size={20} color="white" />
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -685,6 +800,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // ✅ NEW: Upload progress styles
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  uploadingText: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  textWhite: {
+    color: '#ffffff',
+  },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -724,6 +854,10 @@ const styles = StyleSheet.create({
   },
   bgRed: {
     backgroundColor: "#ef4444",
+  },
+  // ✅ NEW: Disabled button style
+  disabledButton: {
+    opacity: 0.5,
   },
   recordingIndicator: {
     marginTop: 8,

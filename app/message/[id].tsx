@@ -54,6 +54,23 @@ export default function MessageScreen() {
   const lastLoadTimeRef = useRef(0);
   const socketMessageCountRef = useRef(0);
   const hasMarkedAsReadRef = useRef(false);
+  const [recipientId, setRecipientId] = useState<string | null>(null);
+  
+  useEffect(() => {
+  if (conversation && conversation.type !== 'group') {
+    const recipient = conversation.participants?.find(
+      (p: any) => p.clerkId !== userId
+    );
+    if (recipient) {
+      setRecipientId(recipient.clerkId);
+      console.log('✅ Recipient ID set for E2EE files:', recipient.clerkId);
+    }
+  } else if (conversation && conversation.type === 'group') {
+    // For group chats, we can't encrypt files (would need multi-recipient encryption)
+    setRecipientId(null);
+    console.log('⚠️ Group chat - file encryption not supported yet');
+  }
+}, [conversation, userId]);
   
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 10,
@@ -960,12 +977,14 @@ export default function MessageScreen() {
 
         {/* ✨ UPDATED: Disable input nếu E2EE chưa ready */}
         <MessageInput
-          onSendMessage={handleSendMessage}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
-          onTyping={sendTypingIndicator}
-          disabled={!encryptionReady} // ✨ NEW: Disable khi chưa ready
-        />
+  conversationId={id} // ✅ NEW
+  recipientId={recipientId} // ✅ NEW
+  onSendMessage={handleSendMessage}
+  replyTo={replyTo}
+  onCancelReply={() => setReplyTo(null)}
+  onTyping={sendTypingIndicator}
+  disabled={!encryptionReady}
+/>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
