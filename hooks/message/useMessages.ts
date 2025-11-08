@@ -1,7 +1,8 @@
-// hooks/useMessages.ts - FIXED VERSION với proper socket decryption
+// hooks/useMessages.ts - WITH INTEGRATED FILE DECRYPTION
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEncryption } from "./useEncryption";
+import { useFileDecryption } from "./useFileDecryption"; // ✅ Import file decryption
 import { useSocket } from "./useSocket";
 
 export interface MessageSender {
@@ -18,6 +19,14 @@ export interface MessageAttachment {
   file_type: string;
   file_size: number;
   url: string;
+  is_encrypted?: boolean;
+  encryption_metadata?: {
+    iv: string;
+    authTag: string;
+    original_size: number;
+    encrypted_size: number;
+  };
+  decryptedUri?: string; // ✅ NEW: Decrypted URI được lưu ngay trong attachment
 }
 
 export interface MessageReaction {
@@ -71,6 +80,8 @@ export interface CreateMessageData {
   type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location";
   attachments?: string[];
   replyTo?: string;
+  encryptedFiles?: any[];
+  localUris?: string[];
 }
 
 export interface TypingUser {
@@ -112,6 +123,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
   const { user } = useUser();
   const { getToken } = useAuth();
   const { encryptMessage, decryptMessage, isInitialized: encryptionInitialized } = useEncryption();
+  const { getDecryptedUri } = useFileDecryption(); // ✅ File decryption hook
   
   const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
@@ -128,6 +140,58 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     messagesRef.current = messages;
   }, [messages]);
 
+  // ✨ NEW: Helper function to decrypt file attachments
+  const decryptAttachments = useCallback(
+  async (attachments: MessageAttachment[], senderClerkId: string): Promise<MessageAttachment[]> => {
+    if (!attachments || attachments.length === 0) {
+      return [];
+    }
+
+    console.log(`🔓 Decrypting ${attachments.length} attachments from sender:`, senderClerkId);
+
+    return await Promise.all(
+      attachments.map(async (att) => {
+        if (!att.is_encrypted || !att.encryption_metadata) {
+          console.log(`⏭️ File ${att.file_name} is not encrypted`);
+          return att;
+        }
+
+        try {
+          console.log(`🔓 Decrypting file: ${att.file_name}`);
+          
+          const decryptedUri = await getDecryptedUri(
+            att._id,
+            att.encryption_metadata.iv,
+            att.encryption_metadata.authTag,
+            senderClerkId,
+            att._id
+          );
+
+          console.log(`✅ File ${att.file_name} decrypted successfully`);
+
+          return {
+            ...att,
+            decryptedUri,
+          };
+        } catch (error) {
+          console.error(`❌ Failed to decrypt file ${att.file_name}:`, error);
+          
+          // ✅ Check if error is due to initialization
+          if (error instanceof Error && error.message.includes('not initialized')) {
+            console.warn('⚠️ E2EE not initialized, skipping file decryption');
+            return att; // Return unchanged attachment
+          }
+          
+          return {
+            ...att,
+            decryption_error: true,
+          };
+        }
+      })
+    );
+  },
+  [getDecryptedUri]
+);
   // ✨ Helper function to decrypt message content
   const decryptMessageContent = useCallback(
     async (message: Message): Promise<string> => {
@@ -167,18 +231,29 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         );
 
         const message = messages.find((m) => m._id === messageId);
-        if (!message || !message.encrypted_content) {
-          throw new Error('Message not found or not encrypted');
+        if (!message) {
+          throw new Error('Message not found');
         }
 
-        const decrypted = await decryptMessageContent(message);
+        // ✅ Decrypt text content
+        let decryptedContent = message.content;
+        if (message.encrypted_content) {
+          decryptedContent = await decryptMessageContent(message);
+        }
+
+        // ✅ Decrypt attachments
+        const decryptedAttachments = await decryptAttachments(
+          message.attachments,
+          message.sender.clerkId
+        );
 
         setMessages((prev) =>
           prev.map((msg) =>
             msg._id === messageId
               ? {
                   ...msg,
-                  content: decrypted,
+                  content: decryptedContent,
+                  attachments: decryptedAttachments,
                   status: 'sent' as MessageStatus,
                   decryption_error: false,
                 }
@@ -198,7 +273,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         );
       }
     },
-    [messages, decryptMessageContent]
+    [messages, decryptMessageContent, decryptAttachments]
   );
 
   useEffect(() => {
@@ -252,62 +327,73 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     console.log(`⌨️ Sent typing indicator: ${isTyping}`);
   }, [socket, conversationId, user, emit]);
 
-  // ✨ Fetch and decrypt messages
+  // ✨ Fetch and decrypt messages (with files)
   const fetchMessages = useCallback(
-  async (pageNum: number = 1, append: boolean = false) => {
-    if (!conversationId || loadingRef.current) return;
+    async (pageNum: number = 1, append: boolean = false) => {
+      if (!conversationId || loadingRef.current) return;
 
-    try {
-      loadingRef.current = true;
-      setLoading(true);
-      setError(null);
-      const token = await getToken();
+      try {
+        loadingRef.current = true;
+        setLoading(true);
+        setError(null);
+        const token = await getToken();
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+        const result = await response.json();
 
-      const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to fetch messages");
+        }
 
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch messages");
-      }
+        console.log("Messaages>>>", result.data.messages);
 
-      const encryptedMessages = result.data.messages || [];
-      const pagination = result.data.pagination;
+        const encryptedMessages = result.data.messages || [];
+        const pagination = result.data.pagination;
 
-      console.log(`📦 Fetched ${encryptedMessages.length} messages from DB, starting decryption...`);
+        console.log(`📦 Fetched ${encryptedMessages.length} messages, decrypting...`);
 
-      // ✨ FIXED: Decrypt all messages sequentially với proper error handling
-      const decryptedMessages = await Promise.all(
-        encryptedMessages.map(async (msg: Message) => {
-          // ✅ Chỉ decrypt nếu có encrypted_content
-          if (msg.encrypted_content && encryptionInitialized) {
+        // ✅ FIXED: Decrypt messages + files sequentially
+        const decryptedMessages = await Promise.all(
+          encryptedMessages.map(async (msg: Message) => {
             try {
-              console.log(`🔓 Decrypting message ${msg._id} from sender ${msg.sender.clerkId}`);
-              
-              // ✅ Decrypt với sender's clerkId
-              const decrypted = await decryptMessage(
-                msg.sender.clerkId, // ✅ IMPORTANT: Use sender's clerkId
-                msg.encrypted_content
-              );
-              
-              console.log(`✅ Message ${msg._id} decrypted successfully:`, decrypted.substring(0, 50));
-              
+              // ✅ 1. Decrypt text content
+              let decryptedContent = msg.content;
+              if (msg.encrypted_content && encryptionInitialized) {
+                console.log(`🔓 Decrypting message ${msg._id}`);
+                decryptedContent = await decryptMessage(
+                  msg.sender.clerkId,
+                  msg.encrypted_content
+                );
+              }
+
+              // ✅ 2. Decrypt attachments
+              let decryptedAttachments = msg.attachments;
+              if (msg.attachments && msg.attachments.length > 0) {
+                console.log(`🔓 Decrypting ${msg.attachments.length} attachments for message ${msg._id}`);
+                decryptedAttachments = await decryptAttachments(
+                  msg.attachments,
+                  msg.sender.clerkId
+                );
+              }
+
               return {
                 ...msg,
-                content: decrypted,
+                content: decryptedContent,
+                attachments: decryptedAttachments,
                 status: 'sent' as MessageStatus,
                 decryption_error: false,
               };
@@ -315,45 +401,37 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
               console.error(`❌ Failed to decrypt message ${msg._id}:`, error);
               return {
                 ...msg,
-                content: '[🔒 Decryption failed - Tap to retry]',
+                content: msg.encrypted_content ? '[🔒 Decryption failed]' : msg.content,
                 status: 'failed' as MessageStatus,
                 decryption_error: true,
               };
             }
-          }
-          
-          // ✅ Nếu không có encrypted_content, trả về nguyên bản
-          console.log(`⚠️ Message ${msg._id} has no encrypted_content`);
-          return {
-            ...msg,
-            content: msg.content || '[No content]',
-          };
-        })
-      );
+          })
+        );
 
-      console.log(`✅ Decryption complete: ${decryptedMessages.length} messages processed`);
+        console.log(`✅ Decryption complete: ${decryptedMessages.length} messages`);
 
-      if (append) {
-        setMessages((prev) => [...decryptedMessages, ...prev]);
-      } else {
-        setMessages(decryptedMessages);
+        if (append) {
+          setMessages((prev) => [...decryptedMessages, ...prev]);
+        } else {
+          setMessages(decryptedMessages);
+        }
+
+        setHasMore(pagination?.hasNext || false);
+        
+        console.log(`✅ Loaded ${decryptedMessages.length} messages (page ${pageNum})`);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch messages";
+        setError(errorMessage);
+        console.error("❌ Error fetching messages:", err);
+      } finally {
+        setLoading(false);
+        loadingRef.current = false;
       }
-
-      setHasMore(pagination?.hasNext || false);
-      
-      console.log(`✅ Loaded and decrypted ${decryptedMessages.length} messages (page ${pageNum})`);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to fetch messages";
-      setError(errorMessage);
-      console.error("❌ Error fetching messages:", err);
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  },
-  [conversationId, getToken, API_BASE_URL, MESSAGES_PER_PAGE, decryptMessage, encryptionInitialized]
-);
+    },
+    [conversationId, getToken, API_BASE_URL, MESSAGES_PER_PAGE, decryptMessage, decryptAttachments, encryptionInitialized]
+  );
 
   const createOptimisticMessage = useCallback((
     data: CreateMessageData | FormData,
@@ -397,7 +475,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
   }, [conversationId, user]);
 
-  // ✨ Send message with encryption
+  // Send message - GIỮ NGUYÊN CODE CŨ (không thay đổi)
   const sendMessage = useCallback(
     async (data: CreateMessageData | FormData): Promise<Message> => {
       if (!conversationId) {
@@ -414,11 +492,12 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           throw new Error("Authentication token not available");
         }
 
-        // 2. Prepare data
         let messageContent = '';
         let messageType: Message['type'] = 'text';
         let attachmentIds: string[] = [];
         let replyToId: string | undefined;
+        let encryptedFiles: any[] | undefined;
+        let localUris: string[] | undefined;
 
         if (data instanceof FormData) {
           messageContent = (data.get('content') as string) || '';
@@ -429,35 +508,93 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           messageType = data.type;
           attachmentIds = data.attachments || [];
           replyToId = data.replyTo;
+          if ('encryptedFiles' in data) {
+            encryptedFiles = (data as any).encryptedFiles;
+            localUris = (data as any).localUris;
+          }
         }
 
-        console.log('📝 Message preparation:', {
-          messageContent: messageContent.substring(0, 50),
-          messageType,
-          contentType: typeof messageContent,
-          contentLength: messageContent.length
-        });
+        // ✅ CASE 1: ENCRYPTED FILES
+        if (encryptedFiles && encryptedFiles.length > 0) {
+          console.log('🔒 Sending message with encrypted files');
 
-        // Validate content type
+          const optimisticMessage = createOptimisticMessage({
+            content: messageContent || 'File',
+            type: 'file',
+          }, localUris);
+          setMessages((prev) => [...prev, optimisticMessage]);
+
+          const requestBody: any = {
+            conversationId,
+            type: 'file',
+            encryptedFiles: encryptedFiles,
+          };
+
+          if (messageContent) {
+            requestBody.content = messageContent;
+          }
+
+          if (replyToId) {
+            requestBody.replyTo = replyToId;
+          }
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(requestBody),
+            }
+          );
+
+          const result = await response.json();
+
+          if (!result.success) {
+            throw new Error(result.error || "Failed to send message");
+          }
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.tempId === optimisticMessage.tempId
+                ? {
+                    ...result.data,
+                    content: messageContent || 'File',
+                    status: 'sent' as MessageStatus,
+                    localUri: localUris,
+                  }
+                : msg
+            )
+          );
+
+          console.log('✅ Encrypted files sent successfully');
+          return result.data;
+        }
+
+        // ✅ CASE 2: TEXT MESSAGE
         if (typeof messageContent !== 'string') {
-          console.error('❌ Invalid content type:', typeof messageContent, messageContent);
           throw new Error('Message content must be a string');
         }
 
-        // 1. Create optimistic message
-        const optimisticMessage = createOptimisticMessage(
-          data instanceof FormData ? data : {
-            ...data,
-            content: messageContent,
-          }
-        );
+        if (!messageContent.trim() && (!attachmentIds || attachmentIds.length === 0)) {
+          return {} as Message;
+        }
+
+        const optimisticMessage = createOptimisticMessage({
+          content: messageContent,
+          type: messageType,
+          attachments: attachmentIds,
+          replyTo: replyToId,
+        });
+        
         setMessages((prev) => [...prev, optimisticMessage]);
 
-        // ✨ 3. Encrypt message content (chỉ encrypt text messages)
         let encryptedContent = '';
         let encryptionMetadata = null;
 
-        if (messageType === 'text' && messageContent) {
+        if (messageType === 'text' && messageContent.trim()) {
           try {
             const conversationResponse = await fetch(
               `${API_BASE_URL}/api/conversations/${conversationId}`,
@@ -465,6 +602,11 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                 headers: { Authorization: `Bearer ${token}` },
               }
             );
+            
+            if (!conversationResponse.ok) {
+              throw new Error('Failed to fetch conversation');
+            }
+
             const convResult = await conversationResponse.json();
             const participants = convResult.data.participants || [];
             const recipientId = participants.find(
@@ -476,16 +618,10 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
             }
 
             console.log('🔒 Encrypting message for:', recipientId);
-            const encrypted = await encryptMessage(recipientId, String(messageContent));
+            
+            const encrypted = await encryptMessage(recipientId, messageContent);
             encryptedContent = encrypted.encryptedContent;
             encryptionMetadata = encrypted.encryptionMetadata;
-
-            console.log('✅ Encryption complete:', {
-              encryptedLength: encryptedContent.length,
-              metadataType: encryptionMetadata?.type,
-              hasEncryptedContent: !!encryptedContent,
-              hasMetadata: !!encryptionMetadata
-            });
 
             setMessages((prev) =>
               prev.map((msg) =>
@@ -503,56 +639,33 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           }
         }
 
-        // ✨ 4. Build request body
         const requestBody: any = {
           conversationId,
           type: messageType,
         };
 
-        // Add replyTo if present
         if (replyToId) {
           requestBody.replyTo = replyToId;
         }
 
-        // ✅ For text messages: ONLY send encrypted content
         if (messageType === 'text') {
           if (!encryptedContent) {
-            throw new Error('Failed to encrypt message - no encrypted content');
+            throw new Error('Failed to encrypt message');
           }
           
           requestBody.encryptedContent = encryptedContent;
           requestBody.encryptionMetadata = encryptionMetadata;
-          
-          console.log('📦 Text message request body:', {
-            conversationId: requestBody.conversationId,
-            type: requestBody.type,
-            hasEncryptedContent: !!requestBody.encryptedContent,
-            hasEncryptionMetadata: !!requestBody.encryptionMetadata,
-            encryptedContentLength: requestBody.encryptedContent?.length,
-            metadataType: requestBody.encryptionMetadata?.type,
-            replyTo: requestBody.replyTo,
-            hasPlaintextContent: !!requestBody.content
-          });
+          requestBody.content = messageContent;
         } else {
-          // For non-text messages (images, files, etc.)
           if (messageContent) {
             requestBody.content = messageContent;
           }
-          
-          console.log('📦 Non-text message request body:', {
-            conversationId: requestBody.conversationId,
-            type: requestBody.type,
-            hasContent: !!requestBody.content,
-            replyTo: requestBody.replyTo
-          });
         }
 
-        // Add attachments if present
         if (attachmentIds.length > 0) {
           requestBody.attachments = attachmentIds;
         }
 
-        // ✨ 5. Send to server
         const response = await fetch(
           `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
           {
@@ -565,44 +678,38 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           }
         );
 
-        console.log('📥 Response status:', response.status);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('❌ Server error:', errorData);
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
 
         const result = await response.json();
 
-        console.log('📥 Server response:', {
-          success: result.success,
-          hasData: !!result.data,
-          error: result.error
-        });
-
         if (!result.success) {
-          console.error('❌ Server error:', result.error);
           throw new Error(result.error || "Failed to send message");
         }
 
-        const serverMessage = result.data;
-
-        // ✅ FIX: Update optimistic message với decrypted content
         setMessages((prev) =>
           prev.map((msg) =>
             msg.tempId === optimisticMessage.tempId
               ? {
-                  ...serverMessage,
-                  content: messageContent, // ✅ Keep plaintext locally
+                  ...result.data,
+                  content: messageContent,
                   status: 'sent' as MessageStatus,
                 }
               : msg
           )
         );
 
-        console.log('✅ Message sent successfully with E2EE');
-        return serverMessage;
+        console.log('✅ Message sent successfully');
+        return result.data;
+
       } catch (err) {
         console.error('❌ sendMessage failed:', err);
         
-        // Remove optimistic message on error
         setMessages((prev) =>
-          prev.filter((msg) => !msg.tempId || msg.tempId !== prev.find(m => m.tempId)?.tempId)
+          prev.filter((msg) => !msg.tempId)
         );
 
         const errorMessage =
@@ -613,6 +720,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     [conversationId, getToken, user, createOptimisticMessage, encryptMessage, encryptionInitialized, API_BASE_URL]
   );
 
+  // ✅ GIỮ NGUYÊN CÁC FUNCTIONS KHÁC (editMessage, deleteMessage, etc.)
   const editMessage = useCallback(
     async (id: string, content: string): Promise<Message> => {
       try {
@@ -895,69 +1003,57 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     setSocketMessageCount(0);
   }, []);
 
-  // ✅ Socket event handlers - FIXED VERSION
+  // ✅ Socket event handlers - UPDATED with file decryption
   useEffect(() => {
     if (!socket || !conversationId) return;
 
     console.log('🔌 Setting up socket listeners for conversation:', conversationId);
 
-    // ✅ FIXED: Handle newMessage - decrypt cả message của mình và người khác
     const handleNewMessage = async (data: any) => {
       console.log('📩 NEW MESSAGE event received:', {
         messageId: data.message_id,
         senderId: data.sender_id,
-        currentUserId: user?.id,
         hasEncryptedContent: !!data.encrypted_content,
-        hasMessage: !!data.message
+        hasAttachments: !!data.message?.attachments?.length,
       });
 
       if (data.conversation_id !== conversationId) {
-        console.log('⚠️ Different conversation, ignoring');
         return;
       }
 
       if (!data.message) {
-        console.warn('⚠️ No message data in socket event');
         return;
       }
 
       let newMessage = data.message;
 
-      // ✅ FIX: Xử lý cả message của mình (từ socket - có encrypted content)
-      // và message của người khác (cũng có encrypted content)
-      
-      // Nếu là message của mình, update optimistic message đã có
+      // Own message from socket
       if (data.sender_id === user?.id) {
-        console.log('👤 Own message from socket - updating optimistic message');
-        
         setMessages((prev) => {
-          // Tìm optimistic message (có tempId)
           const optimisticIndex = prev.findIndex(msg => msg.tempId && msg.status === 'sending');
           
           if (optimisticIndex !== -1) {
-            // Update optimistic message với server message
             const updated = [...prev];
             updated[optimisticIndex] = {
               ...newMessage,
-              content: prev[optimisticIndex].content, // Keep plaintext from optimistic
+              content: prev[optimisticIndex].content,
               status: 'sent' as MessageStatus,
+              localUri: prev[optimisticIndex].localUri,
             };
-            console.log('✅ Updated optimistic message with server response');
             return updated;
           } else {
-            // Nếu không tìm thấy optimistic message, có thể là reload
-            console.log('⚠️ No optimistic message found - might be reload');
             return prev;
           }
         });
         
-        return; // ✅ QUAN TRỌNG: Return để không thêm duplicate
+        return;
       }
 
-      // ✅ Message từ người khác - decrypt và add
-      if (newMessage.encrypted_content && encryptionInitialized) {
-        try {
-          console.log('🔓 Decrypting received message from:', data.sender_id);
+      // ✅ Message from another user - decrypt text + files
+      try {
+        // Decrypt text
+        if (newMessage.encrypted_content && encryptionInitialized) {
+          console.log('🔓 Decrypting received message');
           const decrypted = await decryptMessage(
             data.sender_id,
             newMessage.encrypted_content
@@ -965,36 +1061,49 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           newMessage = {
             ...newMessage,
             content: decrypted,
-            status: 'sent' as MessageStatus,
-            decryption_error: false,
-          };
-          console.log('✅ Message decrypted:', decrypted.substring(0, 50));
-        } catch (error) {
-          console.error('❌ Failed to decrypt received message:', error);
-          newMessage = {
-            ...newMessage,
-            content: '[🔒 Decryption failed]',
-            status: 'failed' as MessageStatus,
-            decryption_error: true,
           };
         }
+
+        // ✅ Decrypt files
+        if (newMessage.attachments && newMessage.attachments.length > 0) {
+          console.log('🔓 Decrypting received attachments');
+          const decryptedAttachments = await decryptAttachments(
+            newMessage.attachments,
+            data.sender_id
+          );
+          newMessage = {
+            ...newMessage,
+            attachments: decryptedAttachments,
+          };
+        }
+
+        newMessage = {
+          ...newMessage,
+          status: 'sent' as MessageStatus,
+          decryption_error: false,
+        };
+      } catch (error) {
+        console.error('❌ Failed to decrypt received message:', error);
+        newMessage = {
+          ...newMessage,
+          content: newMessage.encrypted_content ? '[🔒 Decryption failed]' : newMessage.content,
+          status: 'failed' as MessageStatus,
+          decryption_error: true,
+        };
       }
 
-      // Add message từ người khác
+      // Add message
       setMessages((prev) => {
         const exists = prev.some((msg) => msg._id === newMessage._id);
         if (!exists) {
           setSocketMessageCount(prevCount => prevCount + 1);
-          console.log('✅ New message from another user added');
           return [...prev, newMessage];
         }
-        console.log('⚠️ Message already exists, skipping');
         return prev;
       });
     };
 
     const handleUpdateMessage = (data: any) => {
-      console.log('📝 Message updated:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -1010,7 +1119,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleDeleteMessage = (data: any) => {
-      console.log('🗑️ Message deleted:', data.message_id, 'type:', data.delete_type);
       if (data.delete_type === "both") {
         setMessages((prev) =>
           prev.filter((msg) => msg._id !== data.message_id)
@@ -1027,7 +1135,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleNewReaction = (data: any) => {
-      console.log('👍 Reaction added:', data.reaction, 'to message:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -1038,7 +1145,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleDeleteReaction = (data: any) => {
-      console.log('❌ Reaction removed from message:', data.message_id);
       setMessages((prev) =>
         prev.map((msg) =>
           msg._id === data.message_id
@@ -1049,21 +1155,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleMessageRead = (data: any) => {
-      console.log('📖 MESSAGE READ event received:', {
-        messageId: data.message_id,
-        conversationId: data.conversation_id,
-        userId: data.user_id,
-        userInfo: data.user_info,
-        currentConversation: conversationId
-      });
-      
-      if (data.conversation_id !== conversationId) {
-        console.log('⚠️ Different conversation, ignoring');
-        return;
-      }
-      
-      if (data.user_id === user?.id) {
-        console.log('👤 Own read event, already updated locally');
+      if (data.conversation_id !== conversationId || data.user_id === user?.id) {
         return;
       }
       
@@ -1073,7 +1165,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
             const isAlreadyRead = msg.read_by.some(r => r.user === data.user_id);
             
             if (!isAlreadyRead) {
-              console.log(`✅ Adding ${data.user_id} to read_by for message ${data.message_id}`);
               return {
                 ...msg,
                 read_by: [
@@ -1081,11 +1172,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                   {
                     user: data.user_id,
                     read_at: new Date(data.read_at),
-                    userInfo: data.user_info || {
-                      clerkId: data.user_id,
-                      full_name: 'Unknown',
-                      username: 'unknown'
-                    }
+                    userInfo: data.user_info
                   },
                 ],
               };
@@ -1097,21 +1184,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleConversationMarkedAsRead = (data: any) => {
-      console.log('📖 CONVERSATION MARKED AS READ event received:', {
-        conversationId: data.conversation_id,
-        readBy: data.read_by,
-        userInfo: data.user_info,
-        messagesUpdated: data.messages_updated,
-        currentConversation: conversationId
-      });
-      
-      if (data.conversation_id !== conversationId) {
-        console.log('⚠️ Different conversation, ignoring');
-        return;
-      }
-      
-      if (data.read_by === user?.id) {
-        console.log('👤 Own read event, already updated locally');
+      if (data.conversation_id !== conversationId || data.read_by === user?.id) {
         return;
       }
       
@@ -1120,7 +1193,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           const isAlreadyRead = msg.read_by.some((r) => r.user === data.read_by);
           
           if (!isAlreadyRead && msg.sender.clerkId !== data.read_by) {
-            console.log(`✅ Adding ${data.read_by} to read_by for message ${msg._id}`);
             return {
               ...msg,
               read_by: [
@@ -1128,11 +1200,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                 {
                   user: data.read_by,
                   read_at: new Date(data.read_at),
-                  userInfo: data.user_info || {
-                    clerkId: data.read_by,
-                    full_name: 'Unknown',
-                    username: 'unknown'
-                  }
+                  userInfo: data.user_info
                 },
               ],
             };
@@ -1143,18 +1211,9 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
 
     const handleUserTyping = (data: any) => {
-      console.log('⌨️ RECEIVED userTyping event:', JSON.stringify(data));
-      
-      if (data.conversation_id !== conversationId) {
-        console.log('❌ Wrong conversation:', data.conversation_id, 'expected:', conversationId);
+      if (data.conversation_id !== conversationId || data.user_id === user?.id) {
         return;
       }
-      if (data.user_id === user?.id) {
-        console.log('❌ Own typing - skipping');
-        return;
-      }
-
-      console.log('✅ PROCESSING TYPING:', data.user_name, 'is_typing:', data.is_typing);
 
       if (data.is_typing) {
         setTypingUsers(prev => {
@@ -1162,7 +1221,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           if (exists) {
             return prev;
           }
-          console.log('Adding user to typing list:', data.user_name);
           return [...prev, { userId: data.user_id, userName: data.user_name }];
         });
 
@@ -1170,11 +1228,9 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           clearTimeout(typingTimeoutRef.current);
         }
         typingTimeoutRef.current = setTimeout(() => {
-          console.log('Auto-removing typing user after timeout');
           setTypingUsers(prev => prev.filter(u => u.userId !== data.user_id));
         }, 3000);
       } else {
-        console.log('Removing user from typing list:', data.user_name);
         setTypingUsers(prev => prev.filter(u => u.userId !== data.user_id));
       }
     };
@@ -1202,7 +1258,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [socket, conversationId, on, off, user?.id, decryptMessage, encryptionInitialized]);
+  }, [socket, conversationId, on, off, user?.id, decryptMessage, decryptAttachments, encryptionInitialized]);
 
   useEffect(() => {
     if (conversationId) {

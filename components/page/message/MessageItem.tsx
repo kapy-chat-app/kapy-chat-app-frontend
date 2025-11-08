@@ -1,4 +1,4 @@
-// components/page/message/MessageItem.tsx - FIXED
+// components/page/message/MessageItem.tsx - INTEGRATED WITH MessageMediaGallery
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
@@ -15,27 +15,35 @@ import {
   View,
 } from "react-native";
 import { MessageActionsMenu } from "./MessageActionsMenu";
-import { MessageMediaGallery } from "./MessageMediaGallery";
 import { ReadReceiptsModal } from "./ReadReceiptsModal";
+import { MessageMediaGallery } from "./MessageMediaGallery";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface MessageItemProps {
   message: any;
+  isOwnMessage: boolean;
   onReply?: (message: any) => void;
   onEdit?: (messageId: string, content: string) => void;
   onDelete?: (messageId: string, type: "only_me" | "both") => void;
   onReaction?: (messageId: string, reaction: string) => void;
-  onRetry?: (message: any) => void;
+  onRemoveReaction?: (messageId: string) => void;
+  isHighlighted?: boolean;
+  onRetryDecryption?: (messageId: string) => void;
+  encryptionReady?: boolean;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({
   message,
+  isOwnMessage,
   onReply,
   onEdit,
   onDelete,
   onReaction,
-  onRetry,
+  onRemoveReaction,
+  isHighlighted,
+  onRetryDecryption,
+  encryptionReady,
 }) => {
   const { user } = useUser();
   const colorScheme = useColorScheme();
@@ -44,26 +52,17 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const bubbleRef = useRef<View>(null);
 
-  const isOwnMessage = message.sender?.clerkId === user?.id;
   const isDark = colorScheme === "dark";
   const messageStatus = message.status || "sent";
   const isSending = messageStatus === "sending";
   const isFailed = messageStatus === "failed";
-  
-  // ✅ FIXED: Filter out current user AND populate userInfo
+  const hasDecryptionError = message.decryption_error;
+
   const readBy = message.read_by?.filter((r: any) => r.user !== user?.id) || [];
   const hasBeenRead = readBy.length > 0;
 
-  console.log('📖 MessageItem read_by data:', {
-    messageId: message._id,
-    totalReadBy: message.read_by?.length,
-    filteredReadBy: readBy.length,
-    readByData: readBy.map((r: any) => ({
-      user: r.user,
-      hasUserInfo: !!r.userInfo,
-      userName: r.userInfo?.full_name
-    }))
-  });
+  // ✅ Check for attachment decryption errors
+  const hasAttachmentDecryptionError = message.attachments?.some((att: any) => att.decryption_error) || false;
 
   const handleLongPress = () => {
     if (!isSending && !showReadReceipts) {
@@ -159,11 +158,18 @@ const MessageItem: React.FC<MessageItemProps> = ({
     ]);
   };
 
-  const handleRetry = () => {
-    Alert.alert("Gửi lại tin nhắn", "Bạn có muốn gửi lại tin nhắn này không?", [
-      { text: "Hủy", style: "cancel" },
-      { text: "Gửi lại", onPress: () => onRetry?.(message) },
-    ]);
+  const handleRetryDecryption = () => {
+    Alert.alert(
+      "Thử giải mã lại",
+      "Bạn có muốn thử giải mã tin nhắn này lại không?",
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Thử lại",
+          onPress: () => onRetryDecryption?.(message._id),
+        },
+      ]
+    );
   };
 
   const handleViewReads = async () => {
@@ -203,7 +209,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
       return (
         <TouchableOpacity
           className="flex-row items-center ml-2"
-          onPress={handleRetry}
+          onPress={handleRetryDecryption}
         >
           <Ionicons name="alert-circle" size={16} color="#ef4444" />
         </TouchableOpacity>
@@ -285,7 +291,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                 : isDark
                   ? "bg-gray-700"
                   : "bg-gray-100"
-            } ${isSending && "opacity-70"}`}
+            } ${isSending && "opacity-70"} ${isHighlighted && "ring-2 ring-yellow-500"}`}
           >
             {message.reply_to && (
               <View
@@ -307,25 +313,65 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
-            <MessageMediaGallery
-              message={message}
-              isOwnMessage={isOwnMessage}
-              isSending={isSending}
-              isDark={isDark}
-            />
-
-            {message.content && (
-              <Text
-                className={`text-base px-3 py-2 ${
-                  isOwnMessage
-                    ? "text-white"
-                    : isDark
-                      ? "text-white"
-                      : "text-gray-900"
+            {/* ✅ Render attachment decryption error if present */}
+            {hasAttachmentDecryptionError && (
+              <View
+                className={`px-3 py-2 ${
+                  isOwnMessage ? "bg-red-900/20" : "bg-red-50"
                 }`}
               >
-                {message.content}
-              </Text>
+                <Text
+                  className={`text-xs ${
+                    isOwnMessage ? "text-red-300" : isDark ? "text-red-400" : "text-red-600"
+                  }`}
+                >
+                  🔒 Không thể giải mã một số tệp đính kèm
+                </Text>
+                <TouchableOpacity
+                  onPress={handleRetryDecryption}
+                  className="mt-2 bg-red-500 px-3 py-1 rounded"
+                >
+                  <Text className="text-white text-xs">Thử lại</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* ✅ Render media gallery (replaces individual file rendering) */}
+            {!hasAttachmentDecryptionError && message.attachments && message.attachments.length > 0 && (
+              <MessageMediaGallery
+                message={message}
+                isOwnMessage={isOwnMessage}
+                isSending={isSending}
+                isDark={isDark}
+              />
+            )}
+
+            {/* ✅ Render text content */}
+            {message.content && (
+              <View>
+                <Text
+                  className={`text-base px-3 py-2 ${
+                    isOwnMessage
+                      ? "text-white"
+                      : isDark
+                        ? "text-white"
+                        : "text-gray-900"
+                  }`}
+                >
+                  {message.content}
+                </Text>
+
+                {hasDecryptionError && message.content.includes("🔒") && (
+                  <TouchableOpacity
+                    onPress={handleRetryDecryption}
+                    className="mx-3 mb-2 mt-1 bg-yellow-500 px-3 py-1 rounded"
+                  >
+                    <Text className="text-white text-xs text-center">
+                      Thử giải mã lại
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
 
             {message.is_edited && !isSending && (
