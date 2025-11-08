@@ -12,12 +12,32 @@ interface AudioPlayerProps {
   isDark: boolean;
 }
 
-export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, isSending, isDark }) => {
+export const AudioPlayer: React.FC<AudioPlayerProps> = ({ 
+  audios, 
+  isOwnMessage, 
+  isSending, 
+  isDark 
+}) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [currentAudioId, setCurrentAudioId] = useState<string | null>(null);
+
+  // ✅ Debug logging
+  useEffect(() => {
+    console.log('🔊 [AudioPlayer] Rendering with:', {
+      audioCount: audios.length,
+      isSending,
+      audios: audios.map((a, idx) => ({
+        index: idx,
+        fileName: a.file_name,
+        hasDecryptedUri: !!a.decryptedUri,
+        hasUrl: !!a.url,
+        decryptionError: a.decryption_error,
+      })),
+    });
+  }, [audios, isSending]);
 
   useEffect(() => {
     return () => {
@@ -26,6 +46,24 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
       }
     };
   }, [sound]);
+
+  // ✅ FIXED: Get audio URI with priority
+  const getAudioUri = (attachment: any): string | null => {
+    // 1st priority: decryptedUri
+    if (attachment.decryptedUri) {
+      console.log(`✅ [AudioPlayer] Using decryptedUri for ${attachment.file_name}`);
+      return attachment.decryptedUri;
+    }
+
+    // 2nd priority: server URL
+    if (attachment.url) {
+      console.warn(`⚠️ [AudioPlayer] Using server URL for ${attachment.file_name}`);
+      return attachment.url;
+    }
+
+    console.error(`❌ [AudioPlayer] No valid URI for ${attachment.file_name}`);
+    return null;
+  };
 
   const formatTime = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
@@ -46,8 +84,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
     }
   };
 
-  const playAudio = async (audioId: string, url: string) => {
-    if (isSending) return;
+  const playAudio = async (audioId: string, uri: string) => {
+    if (isSending || !uri) return;
 
     try {
       if (sound && currentAudioId !== audioId) {
@@ -79,7 +117,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
       });
 
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: url },
+        { uri },
         { shouldPlay: true, progressUpdateIntervalMillis: 100 },
         onPlaybackStatusUpdate
       );
@@ -87,9 +125,10 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
       setSound(newSound);
       setCurrentAudioId(audioId);
       setIsPlaying(true);
+      console.log(`✅ [AudioPlayer] Playing audio: ${audioId}`);
     } catch (error) {
-      console.error('Error playing audio:', error);
-      Alert.alert('Lỗi', 'Không thể phát audio');
+      console.error('❌ [AudioPlayer] Error playing audio:', error);
+      Alert.alert('Error', 'Cannot play audio');
     }
   };
 
@@ -102,19 +141,30 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
   return (
     <View className="py-2">
       {audios.map((att: any, index: number) => {
+        const audioUri = getAudioUri(att);
         const isThisPlaying = currentAudioId === att._id && isPlaying;
         const progress = currentAudioId === att._id ? position : 0;
         const audioDuration = currentAudioId === att._id ? duration : 0;
+        const hasError = att.decryption_error;
 
         return (
-          <View key={att._id || index} className={`flex-row items-center px-3 py-2.5 min-h-[56px] w-[280px] ${isSending && 'opacity-60'}`}>
+          <View 
+            key={att._id || index} 
+            className={`flex-row items-center px-3 py-2.5 min-h-[56px] w-[280px] ${
+              (isSending || !audioUri) && 'opacity-60'
+            }`}
+          >
             <TouchableOpacity
-              onPress={() => !isSending && playAudio(att._id, att.url)}
-              disabled={isSending}
-              className={`w-9 h-9 rounded-full items-center justify-center mr-3 ${isOwnMessage ? 'bg-white/30' : 'bg-orange-500'}`}
+              onPress={() => audioUri && !isSending && playAudio(att._id, audioUri)}
+              disabled={isSending || !audioUri || hasError}
+              className={`w-9 h-9 rounded-full items-center justify-center mr-3 ${
+                isOwnMessage ? 'bg-white/30' : hasError ? 'bg-red-500' : 'bg-orange-500'
+              }`}
             >
-              {isSending ? (
+              {isSending || !audioUri ? (
                 <ActivityIndicator size="small" color="white" />
+              ) : hasError ? (
+                <Ionicons name="alert-circle" size={20} color="white" />
               ) : (
                 <Ionicons name={isThisPlaying ? 'pause' : 'play'} size={20} color="white" />
               )}
@@ -134,15 +184,17 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
                       className="w-[3px] rounded-full"
                       style={{
                         height,
-                        backgroundColor: isActive ? (isOwnMessage ? 'white' : '#f97316') : (isOwnMessage ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)'),
-                        opacity: isSending ? 0.5 : (isActive ? 1 : 0.5),
+                        backgroundColor: isActive 
+                          ? (isOwnMessage ? 'white' : '#f97316') 
+                          : (isOwnMessage ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)'),
+                        opacity: (isSending || !audioUri) ? 0.5 : (isActive ? 1 : 0.5),
                       }}
                     />
                   );
                 })}
               </View>
 
-              {!isSending && (
+              {!isSending && audioUri && !hasError && (
                 <Slider
                   style={{ position: 'absolute', width: '100%', height: 40, top: -4 }}
                   minimumValue={0}
@@ -156,11 +208,22 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audios, isOwnMessage, 
               )}
 
               <View className="flex-row justify-between mt-1">
-                <Text className={`text-[11px] font-medium ${isOwnMessage ? 'text-white/80' : 'text-gray-600'}`}>
-                  {isSending ? 'Đang tải...' : formatTime(progress || 0)}
+                <Text className={`text-[11px] font-medium ${
+                  isOwnMessage ? 'text-white/80' : 'text-gray-600'
+                }`}>
+                  {isSending 
+                    ? 'Uploading...' 
+                    : !audioUri 
+                    ? 'Decrypting...'
+                    : hasError
+                    ? 'Failed'
+                    : formatTime(progress || 0)
+                  }
                 </Text>
-                {!isSending && audioDuration > 0 && (
-                  <Text className={`text-[11px] font-medium ${isOwnMessage ? 'text-white/80' : 'text-gray-600'}`}>
+                {!isSending && audioUri && !hasError && audioDuration > 0 && (
+                  <Text className={`text-[11px] font-medium ${
+                    isOwnMessage ? 'text-white/80' : 'text-gray-600'
+                  }`}>
                     {formatTime(audioDuration)}
                   </Text>
                 )}

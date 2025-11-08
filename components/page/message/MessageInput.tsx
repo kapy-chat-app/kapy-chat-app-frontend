@@ -115,77 +115,82 @@ const MessageInput: React.FC<MessageInputProps> = ({
       clearTimeout(typingTimeoutRef.current);
     }
 
-    const messageContent = message.trim();
-    const currentAttachments = [...attachments];
-    const currentReplyTo = replyTo?._id;
+     const messageContent = message.trim();
+  const currentAttachments = [...attachments];
+  const currentReplyTo = replyTo?._id;
 
-    setMessage("");
-    setAttachments([]);
-    if (onCancelReply) {
-      onCancelReply();
-    }
+  setMessage("");
+  setAttachments([]);
+  if (onCancelReply) {
+    onCancelReply();
+  }
 
-    try {
-      // ✅ NEW: Check if we should encrypt files
-      const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
+  try {
+    const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
 
-      if (shouldEncryptFiles) {
-        console.log('🔒 Encrypting files before sending...');
-        setUploadingFiles(true);
+    if (shouldEncryptFiles) {
+      console.log('🔒 Encrypting files before sending...');
+      setUploadingFiles(true);
 
-        const encryptedFiles: any[] = [];
+      const encryptedFiles: any[] = [];
+      const localUris: string[] = []; // ✅ NEW: Keep track of local URIs
 
-        // Encrypt all files
-        for (const att of currentAttachments) {
-          try {
-            console.log('🔒 Encrypting file:', att.name);
+      // Encrypt all files
+      for (const att of currentAttachments) {
+        try {
+          console.log('🔒 Encrypting file:', att.name);
 
-            const { encryptedBase64, metadata } = await encryptFile(
-              att.uri,
-              att.name,
-              recipientId
-            );
+          const { encryptedBase64, metadata } = await encryptFile(
+            att.uri,
+            att.name,
+            recipientId
+          );
 
-            encryptedFiles.push({
-              encryptedBase64,
-              originalFileName: att.name,
-              originalFileType: att.mimeType || 'application/octet-stream',
-              encryptionMetadata: {
-                iv: metadata.iv,
-                auth_tag: metadata.auth_tag,
-                original_size: metadata.original_size,
-                encrypted_size: metadata.encrypted_size,
-              },
-            });
-
-            console.log('✅ File encrypted:', att.name);
-          } catch (error) {
-            console.error('❌ Failed to encrypt file:', att.name, error);
-            Alert.alert('Error', `Failed to encrypt ${att.name}`);
-          }
-        }
-
-        setUploadingFiles(false);
-
-        // ✅ Send message với encrypted files
-        if (messageContent || encryptedFiles.length > 0) {
-          const messageData = {
-            content: messageContent || undefined,
-            type: 'text' as const,
-            encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
-            replyTo: currentReplyTo,
-          };
-
-          console.log('📤 Sending message with encrypted files:', {
-            hasContent: !!messageData.content,
-            filesCount: encryptedFiles.length,
+          encryptedFiles.push({
+            encryptedBase64,
+            originalFileName: att.name,
+            originalFileType: att.mimeType || 'application/octet-stream',
+            encryptionMetadata: {
+              iv: metadata.iv,
+              authTag: metadata.authTag,
+              original_size: metadata.original_size,
+              encrypted_size: metadata.encrypted_size,
+            },
           });
 
-          onSendMessage(messageData);
-        }
+          // ✅ NEW: Keep local URI for preview
+          localUris.push(att.uri);
 
-        return; // ✅ Exit early after encrypted upload
+          console.log('✅ File encrypted:', att.name);
+        } catch (error) {
+          console.error('❌ Failed to encrypt file:', att.name, error);
+          Alert.alert('Error', `Failed to encrypt ${att.name}`);
+        }
       }
+
+      setUploadingFiles(false);
+
+      // ✅ Send message with encrypted files AND local URIs
+      if (messageContent || encryptedFiles.length > 0) {
+        const messageData = {
+          content: messageContent || undefined,
+          type: 'file' as const, // ✅ Changed to 'file' type
+          encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
+          localUris: localUris, // ✅ NEW: Pass local URIs for preview
+          replyTo: currentReplyTo,
+        };
+
+        console.log('📤 Sending message with encrypted files:', {
+          hasContent: !!messageData.content,
+          filesCount: encryptedFiles.length,
+          localUrisCount: localUris.length,
+        });
+
+        onSendMessage(messageData);
+      }
+
+      return;
+    }
 
       // ✅ FALLBACK: Non-encrypted file handling (backward compatible)
       const mediaFiles = currentAttachments.filter((att) =>
