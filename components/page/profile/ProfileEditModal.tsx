@@ -6,7 +6,6 @@ import {
   Platform,
   ScrollView,
   Text,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -19,6 +18,8 @@ import DatePicker from "@/components/ui/DatePicker";
 import SingleSelector, { SelectOption } from "@/components/ui/SingleSelector";
 
 // Hooks and Types
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   ProfileUpdateData,
   UserProfile,
@@ -87,8 +88,9 @@ export default function ProfileEditModal({
   profile,
   onUpdateSuccess,
 }: ProfileEditModalProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
   const { updateUserProfile, isLoading } = useUserApi();
 
   const [formData, setFormData] = useState<ProfileFormData>({
@@ -158,7 +160,7 @@ export default function ProfileEditModal({
     const validation = validateProfile(formData);
     if (!validation.isValid) {
       setErrors(validation.errors);
-      Alert.alert("Validation Error", "Please fix the errors before saving");
+      Alert.alert(t('profile.edit.validation.title'), t('profile.edit.validation.message'));
       return;
     }
 
@@ -171,9 +173,9 @@ export default function ProfileEditModal({
       const result = await updateUserProfile(updateData);
 
       if (result.success) {
-        Alert.alert("Success", "Profile updated successfully", [
+        Alert.alert(t('success'), t('profile.edit.updateSuccess'), [
           {
-            text: "OK",
+            text: t('ok'),
             onPress: () => {
               onUpdateSuccess();
               onClose();
@@ -181,13 +183,13 @@ export default function ProfileEditModal({
           },
         ]);
       } else {
-        Alert.alert("Error", result.error || "Failed to update profile");
+        Alert.alert(t('error'), result.error || t('profile.edit.updateFailed'));
       }
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert("Error", "An unexpected error occurred");
+      Alert.alert(t('error'), t('profile.edit.unexpectedError'));
     }
-  }, [formData, selectedDate, updateUserProfile, onUpdateSuccess, onClose]);
+  }, [formData, selectedDate, updateUserProfile, onUpdateSuccess, onClose, t]);
 
   return (
     <Modal
@@ -204,7 +206,7 @@ export default function ProfileEditModal({
           <View className={`px-6 py-4 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
             <View className="flex-row items-center justify-between">
               <Button
-                title="Cancel"
+                title={t('cancel')}
                 variant="text"
                 size="medium"
                 onPress={onClose}
@@ -212,11 +214,11 @@ export default function ProfileEditModal({
               />
 
               <Text className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                Edit Profile
+                {t('profile.edit.title')}
               </Text>
 
               <Button
-                title={isLoading ? "Saving..." : "Save"}
+                title={isLoading ? t('saving') : t('save')}
                 variant="primary"
                 size="medium"
                 onPress={handleSave}
@@ -236,13 +238,13 @@ export default function ProfileEditModal({
             {/* Basic Information Section */}
             <View className="mb-6">
               <Text className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Basic Information
+                {t('profile.edit.sections.basic')}
               </Text>
 
               <Input
-                label="Full Name"
+                label={t('profile.labels.fullName')}
                 required
-                placeholder="Enter your full name"
+                placeholder={t('profile.edit.placeholders.fullName')}
                 value={formData.full_name}
                 onChangeText={(value) => handleInputChange("full_name", value)}
                 error={!!errors.full_name}
@@ -251,9 +253,9 @@ export default function ProfileEditModal({
               />
 
               <Input
-                label="Username"
+                label={t('profile.labels.username')}
                 required
-                placeholder="Enter your username"
+                placeholder={t('profile.edit.placeholders.username')}
                 value={formData.username}
                 onChangeText={(value) => handleInputChange("username", value)}
                 error={!!errors.username}
@@ -263,8 +265,8 @@ export default function ProfileEditModal({
               />
 
               <TextArea
-                label="Bio"
-                placeholder="Tell us about yourself..."
+                label={t('profile.labels.bio')}
+                placeholder={t('profile.edit.placeholders.bio')}
                 value={formData.bio}
                 onChangeText={(value) => handleInputChange("bio", value)}
                 error={!!errors.bio}
@@ -278,12 +280,12 @@ export default function ProfileEditModal({
             {/* Contact Information Section */}
             <View className="mb-6">
               <Text className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Contact Information
+                {t('profile.edit.sections.contact')}
               </Text>
 
               <Input
-                label="Phone"
-                placeholder="Enter your phone number"
+                label={t('profile.labels.phone')}
+                placeholder={t('profile.edit.placeholders.phone')}
                 value={formData.phone}
                 onChangeText={(value) => handleInputChange("phone", value)}
                 error={!!errors.phone}
@@ -293,8 +295,8 @@ export default function ProfileEditModal({
               />
 
               <Input
-                label="Location"
-                placeholder="Enter your location"
+                label={t('profile.labels.location')}
+                placeholder={t('profile.edit.placeholders.location')}
                 value={formData.location}
                 onChangeText={(value) => handleInputChange("location", value)}
                 error={!!errors.location}
@@ -303,8 +305,8 @@ export default function ProfileEditModal({
               />
 
               <Input
-                label="Website"
-                placeholder="Enter your website URL"
+                label={t('profile.labels.website')}
+                placeholder={t('profile.edit.placeholders.website')}
                 value={formData.website}
                 onChangeText={(value) => handleInputChange("website", value)}
                 error={!!errors.website}
@@ -318,12 +320,12 @@ export default function ProfileEditModal({
             {/* Personal Information Section */}
             <View className="mb-6">
               <Text className={`text-lg font-semibold mb-4 ${isDark ? "text-white" : "text-gray-900"}`}>
-                Personal Information
+                {t('profile.edit.sections.personal')}
               </Text>
 
               <SingleSelector
-                label="Gender"
-                placeholder="Select your gender"
+                label={t('profile.labels.gender')}
+                placeholder={t('profile.edit.placeholders.gender')}
                 options={genderOptions}
                 value={formData.gender}
                 onChange={handleGenderChange}
@@ -333,8 +335,8 @@ export default function ProfileEditModal({
               />
 
               <DatePicker
-                label="Date of Birth"
-                placeholder="Select your date of birth"
+                label={t('profile.labels.birthday')}
+                placeholder={t('profile.edit.placeholders.birthday')}
                 value={selectedDate}
                 onChange={handleDateChange}
                 mode="date"
@@ -344,8 +346,8 @@ export default function ProfileEditModal({
               />
 
               <SingleSelector
-                label="Status"
-                placeholder="Select your current status"
+                label={t('profile.labels.status')}
+                placeholder={t('profile.edit.placeholders.status')}
                 options={statusOptions}
                 value={formData.status}
                 onChange={handleStatusChange}
@@ -357,7 +359,7 @@ export default function ProfileEditModal({
 
             {/* Save Button */}
             <Button
-              title={isLoading ? "Saving Profile..." : "Save Changes"}
+              title={isLoading ? t('profile.edit.saving') : t('profile.edit.saveChanges')}
               variant="primary"
               size="large"
               onPress={handleSave}
