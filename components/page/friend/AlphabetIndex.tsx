@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface AlphabetIndexProps {
   alphabet: string[];
@@ -12,6 +13,9 @@ export const AlphabetIndex: React.FC<AlphabetIndexProps> = ({
   onLetterPress,
   currentLetter,
 }) => {
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
+
   return (
     <View className="absolute right-2 top-1/2 transform -translate-y-1/2">
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -27,7 +31,9 @@ export const AlphabetIndex: React.FC<AlphabetIndexProps> = ({
               className={`text-xs font-medium ${
                 currentLetter === letter
                   ? 'text-white'
-                  : 'text-gray-600 dark:text-gray-400'
+                  : isDark
+                  ? 'text-gray-400'
+                  : 'text-gray-600'
               }`}
             >
               {letter}

@@ -1,6 +1,8 @@
 import React from "react";
 import { Image, Text, TouchableOpacity, View, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { BlockedUser } from "@/hooks/friend/useFriends";
 
 interface BlockedUserItemProps {
@@ -16,6 +18,10 @@ export const BlockedUserItem: React.FC<BlockedUserItemProps> = ({
   onUnblock,
   isUnblocking = false,
 }) => {
+  const { t } = useLanguage();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
+
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString("vi-VN", {
       day: "2-digit",
@@ -26,15 +32,15 @@ export const BlockedUserItem: React.FC<BlockedUserItemProps> = ({
 
   const handleUnblock = () => {
     Alert.alert(
-      "Unblock User",
-      `Are you sure you want to unblock ${blockedUser.full_name}?`,
+      t('friends.blocked.title'),
+      t('friends.blocked.confirm', { name: blockedUser.full_name }),
       [
         {
-          text: "Cancel",
+          text: t('cancel'),
           style: "cancel",
         },
         {
-          text: "Unblock",
+          text: t('friends.blocked.unblock'),
           style: "default",
           onPress: () => onUnblock?.(blockedUser.id),
         },
@@ -53,7 +59,7 @@ export const BlockedUserItem: React.FC<BlockedUserItemProps> = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-2 mx-4 shadow-sm"
+      className={`rounded-lg p-4 mb-2 mx-4 shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}
       disabled={isUnblocking}
     >
       <View className="flex-row items-center">
@@ -69,18 +75,18 @@ export const BlockedUserItem: React.FC<BlockedUserItemProps> = ({
         </View>
 
         <View className="flex-1 ml-3">
-          <Text className="text-gray-900 dark:text-white font-semibold">
+          <Text className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {blockedUser.full_name}
           </Text>
           <Text className="text-gray-500 text-sm">
             @{blockedUser.username}
           </Text>
           <Text className="text-red-500 text-xs">
-            Blocked on {formatDate(new Date(blockedUser.blocked_at))}
+            {t('friends.blocked.on', { date: formatDate(new Date(blockedUser.blocked_at)) })}
           </Text>
           {blockedUser.reason && (
-            <Text className="text-gray-400 text-xs mt-1" numberOfLines={1}>
-              Reason: {blockedUser.reason}
+            <Text className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`} numberOfLines={1}>
+              {t('friends.blocked.reason', { reason: blockedUser.reason })}
             </Text>
           )}
         </View>

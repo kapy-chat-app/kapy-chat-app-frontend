@@ -1,4 +1,6 @@
 import Button from "@/components/ui/Button";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { FriendRequest } from "@/hooks/friend/useFriends";
 import React from "react";
 import { Image, Text, View } from "react-native";
@@ -14,6 +16,10 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
   onAccept,
   onDecline,
 }) => {
+  const { t } = useLanguage();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
+
   // Function to get avatar source
   const getAvatarSource = () => {
     if (request.requester.avatar && request.requester.avatar.trim() !== "") {
@@ -23,7 +29,7 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
   };
 
   return (
-    <View className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-3 mx-4 shadow-sm">
+    <View className={`rounded-lg p-4 mb-3 mx-4 shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
       <View className="flex-row items-center">
         {/* Avatar */}
         <Image
@@ -33,11 +39,11 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
 
         {/* User Info */}
         <View className="flex-1 ml-4">
-          <Text className="text-gray-900 dark:text-white font-semibold text-base mb-1">
+          <Text className={`font-semibold text-base mb-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {request.requester.full_name}
           </Text>
-          <Text className="text-gray-500 dark:text-gray-400 text-sm">
-            Wants to be your friend
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('friends.request.message')}
           </Text>
         </View>
       </View>
@@ -46,7 +52,7 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
       <View className="flex-row mt-4 gap-3">
         <View className="flex-1">
           <Button
-            title="Accept"
+            title={t('friends.request.accept')}
             onPress={() => onAccept(request.id)}
             variant="primary"
             size="small"
@@ -54,7 +60,7 @@ export const FriendRequestCard: React.FC<FriendRequestCardProps> = ({
         </View>
         <View className="flex-1">
           <Button
-            title="Decline"
+            title={t('friends.request.decline')}
             onPress={() => onDecline(request.id)}
             variant="secondary"
             size="small"

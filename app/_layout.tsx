@@ -1,6 +1,8 @@
 // app/_layout.tsx
 import IncomingCallModal from "@/components/page/call/IncomingCallModal";
 import { EncryptionInitProvider } from "@/components/page/message/EncryptionInitProvider";
+import { LanguageProvider } from "@/contexts/LanguageContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useIncomingCalls } from "@/hooks/call/useIncomingCalls";
 import { useProfileCheck } from "@/hooks/user/useProfileCheck";
 import { ClerkProvider } from "@clerk/clerk-expo";
@@ -34,24 +36,26 @@ function ProtectedLayout() {
   }
 
   return (
-    <>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="complete-profile"
-          options={{ headerShown: false }}
+    <LanguageProvider>
+      <ThemeProvider>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="complete-profile"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="message" options={{ headerShown: false }} />
+          <Stack.Screen name="call/[id]" options={{ headerShown: false }} />
+        </Stack>
+        <IncomingCallModal
+          visible={showIncomingCall}
+          callData={incomingCall}
+          onAnswer={answerCall}
+          onReject={rejectCall}
         />
-        <Stack.Screen name="message" options={{ headerShown: false }} />
-        <Stack.Screen name="call/[id]" options={{ headerShown: false }} />
-      </Stack>
-      <IncomingCallModal
-        visible={showIncomingCall}
-        callData={incomingCall}
-        onAnswer={answerCall}
-        onReject={rejectCall}
-      />
-    </>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }
 

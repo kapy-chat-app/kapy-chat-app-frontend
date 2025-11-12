@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   View,
-  useColorScheme,
   TouchableOpacity,
   Text,
   Platform,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface DatePickerProps {
   value?: Date;
@@ -47,8 +47,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
   leftIcon = 'calendar-outline',
   disabled = false,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
   const [showPicker, setShowPicker] = useState(false);
   const [tempDate, setTempDate] = useState(value || new Date());
 

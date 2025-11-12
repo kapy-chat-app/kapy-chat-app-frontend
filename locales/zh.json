@@ -1,0 +1,598 @@
+{
+  "home": "首页",
+  "settings": "设置",
+  "welcome": "欢迎",
+  "greeting": "你好, {{name}}!",
+  "language": "语言",
+  "selectLanguage": "选择语言",
+  "save": "保存",
+  "cancel": "取消",
+  "changeLanguage": "更改语言",
+  "currentLanguage": "当前语言",
+  "next": "下一步",
+  "skip": "跳过",
+  "getStarted": "开始使用",
+  "onboarding": {
+    "selectLanguage": "选择语言",
+    "languageDescription": "选择您喜欢的语言继续",
+    "slide1Title": "欢迎使用我们的应用",
+    "slide1Description": "发现令人惊叹的功能和无缝体验",
+    "slide2Title": "保持联系",
+    "slide2Description": "与朋友联系并分享时刻",
+    "slide3Title": "立即开始",
+    "slide3Description": "加入我们，探索我们提供的一切"
+  },
+  "settingsScreen": {
+    "account": {
+      "title": "账户",
+      "security": {
+        "title": "安全",
+        "subtitle": "密码，双因素认证"
+      },
+      "privacy": {
+        "title": "隐私",
+        "subtitle": "屏蔽账户，可见性"
+      }
+    },
+    "preferences": {
+      "title": "偏好设置",
+      "appearance": {
+        "title": "外观",
+        "subtitle": "主题，深色模式"
+      },
+      "language": {
+        "title": "语言",
+        "subtitle": "应用语言"
+      }
+    },
+    "data": {
+      "title": "数据",
+      "storage": {
+        "title": "存储",
+        "subtitle": "管理应用数据"
+      },
+      "devices": {
+        "title": "设备",
+        "subtitle": "活动会话"
+      }
+    },
+    "profile": {
+      "loading": "加载中...",
+      "viewAndEdit": "查看和编辑个人资料"
+    },
+    "signOut": {
+      "title": "退出登录",
+      "message": "您确定要退出登录吗？",
+      "confirm": "退出登录"
+    }
+  },
+  "appearance": {
+    "light": {
+      "title": "浅色",
+      "description": "使用浅色主题"
+    },
+    "dark": {
+      "title": "深色",
+      "description": "使用深色主题"
+    },
+    "system": {
+      "title": "系统",
+      "description": "跟随设备设置"
+    },
+    "currentTheme": {
+      "title": "当前主题",
+      "followingDevice": "跟随您的设备设置",
+      "usingMode": "使用{{mode}}模式"
+    },
+    "chooseTheme": "选择主题",
+    "info": "系统模式将根据您的设备设置自动在浅色和深色之间切换。"
+  },
+  "languageScreen": {
+    "currentLanguage": {
+      "title": "当前语言",
+      "description": "应用界面将以此语言显示"
+    },
+    "availableLanguages": "可用语言",
+    "info": "更改语言将立即更新应用中的所有文本。您的选择将被保存。"
+  },
+  "sidebar": {
+    "menu": "菜单",
+    "user": "用户",
+    "conversations": "对话",
+    "contacts": "联系人",
+    "discover": "发现",
+    "blockedUsers": "已屏蔽用户",
+    "helpSupport": "帮助与支持",
+    "about": "关于"
+  },
+  "loading": "加载中...",
+  "success": "成功",
+  "error": "错误",
+  "ok": "确定",
+  "camera": "相机",
+  "gallery": "相册",
+  "saving": "保存中...",
+  "profile": {
+    "screen": {
+      "title": "个人资料"
+    },
+    "sections": {
+      "general": "通用",
+      "contact": "联系方式",
+      "personal": "个人",
+      "preferences": "偏好",
+      "account": "账户信息"
+    },
+    "labels": {
+      "fullName": "全名",
+      "username": "用户名",
+      "bio": "简介",
+      "bioEmpty": "暂无简介",
+      "gender": "性别",
+      "birthday": "生日",
+      "phone": "电话",
+      "email": "电子邮件",
+      "location": "位置",
+      "website": "网站",
+      "status": "状态",
+      "active": "活跃",
+      "theme": "主题",
+      "joined": "加入时间",
+      "verified": "已验证",
+      "verifiedStatus": {
+        "yes": "已验证",
+        "no": "未验证"
+      },
+      "notSet": "未设置"
+    },
+    "edit": {
+      "imagePicker": {
+        "title": "个人照片",
+        "message": "选择选项"
+      },
+      "removePhoto": "移除照片",
+      "permission": {
+        "title": "需要权限",
+        "message": "请授予访问您的{{source}}的权限"
+      },
+      "imageUpdated": "个人照片更新成功",
+      "imageUpdateFailed": "更新个人照片失败",
+      "imagePickFailed": "选择图像失败",
+      "imageRemoved": "个人照片移除成功",
+      "imageRemoveFailed": "移除个人照片失败",
+      "title": "编辑个人资料",
+      "sections": {
+        "basic": "基本信息",
+        "contact": "联系信息",
+        "personal": "个人信息"
+      },
+      "placeholders": {
+        "fullName": "输入您的全名",
+        "username": "输入您的用户名",
+        "bio": "介绍一下自己...",
+        "phone": "输入您的电话号码",
+        "location": "输入您的位置",
+        "website": "输入您的网站URL",
+        "gender": "选择您的性别",
+        "birthday": "选择您的生日",
+        "status": "选择您的当前状态"
+      },
+      "validation": {
+        "title": "验证错误",
+        "message": "请在保存前修复错误"
+      },
+      "updateSuccess": "个人资料更新成功",
+      "updateFailed": "更新个人资料失败",
+      "unexpectedError": "发生意外错误",
+      "saveChanges": "保存更改",
+      "saving": "正在保存个人资料..."
+    }
+  },
+  "tabs": {
+    "home": "首页",
+    "conversations": "对话",
+    "contacts": "联系人",
+    "emotion": "情绪",
+    "ai": "AI",
+    "setting": "设置"
+  },
+  "friends": {
+    "title": "朋友",
+    "searchPlaceholder": "搜索朋友...",
+    "searching": "正在搜索...",
+    "noUsersFound": "未找到用户",
+    "requests": {
+      "title": "好友请求",
+      "all": "所有请求",
+      "accepted": "已接受好友请求！",
+      "acceptFailed": "无法接受请求",
+      "declineTitle": "拒绝请求",
+      "declineMessage": "您确定要拒绝此好友请求吗？",
+      "decline": "拒绝",
+      "declineFailed": "无法拒绝请求"
+    },
+    "myFriends": "我的朋友 ({{count}})",
+    "seeAll": "查看全部",
+    "addFriend": "添加好友",
+    "sent": "已发送",
+    "friends": "朋友",
+    "unknownError": "未知错误",
+    "menu": {
+      "title": "选择操作",
+      "viewProfile": "查看资料",
+      "message": "发送消息",
+      "unfriend": "取消好友",
+      "block": "屏蔽用户"
+    },
+    "blocked": {
+      "title": "取消屏蔽用户",
+      "confirm": "您确定要取消屏蔽 {{name}} 吗？",
+      "cancel": "取消",
+      "unblock": "取消屏蔽",
+      "on": "屏蔽于 {{date}}",
+      "reason": "原因： {{reason}}"
+    },
+    "request": {
+      "message": "想要成为你的朋友",
+      "accept": "接受",
+      "decline": "拒绝"
+    },
+    "labels": {
+      "mutual": "{{count}} 共同好友"
+    }
+  },
+  "blockedUsers": {
+    "title": "已屏蔽用户",
+    "empty": "没有被屏蔽的用户",
+    "emptyDescription": "您还没有屏蔽任何人",
+    "unblockSuccess": "成功取消屏蔽用户",
+    "unblockFailed": "无法取消屏蔽用户"
+  },
+  "publicProfile": {
+    "title": "个人资料",
+    "loading": "正在加载个人资料...",
+    "notFound": "未找到个人资料",
+    "notFoundDescription": "无法加载用户个人资料",
+    "tryAgain": "重试",
+    "information": "信息",
+    "location": "位置",
+    "website": "网站",
+    "status": "状态",
+    "friends": "朋友",
+    "mutual": "共同",
+    "online": "在线",
+    "offline": "离线",
+    "recentlyOnline": "最近在线",
+    "hoursAgo": "{{hours}}小时前",
+    "daysAgo": "{{days}}天前",
+    "blocked": {
+      "title": "此用户已被屏蔽",
+      "message": "您已屏蔽此用户，无法查看其个人资料"
+    },
+    "private": {
+      "title": "此个人资料为私密",
+      "message": "发送好友请求以查看更多详情"
+    },
+    "actions": {
+      "addFriend": "添加好友",
+      "message": "消息",
+      "requestSent": "已发送请求",
+      "shareProfile": "分享个人资料",
+      "reportUser": "举报用户",
+      "blockUser": "屏蔽用户",
+      "acceptRequest": "接受请求",
+      "declineRequest": "拒绝请求"
+    },
+    "block": {
+      "confirmTitle": "屏蔽用户",
+      "confirmMessage": "您确定要屏蔽 {{name}} 吗？他们将无法与您联系或查看您的个人资料。",
+      "reasonTitle": "屏蔽原因（可选）",
+      "reasonDescription": "您为什么屏蔽此用户？这将帮助我们改进平台。",
+      "reasonPlaceholder": "输入原因（可选）...",
+      "blocking": "正在屏蔽...",
+      "skip": "跳过",
+      "block": "屏蔽",
+      "success": "成功屏蔽用户",
+      "failed": "无法屏蔽用户",
+      "unexpectedError": "屏蔽用户时发生意外错误"
+    },
+    "friendRequest": {
+      "success": "成功发送好友请求",
+      "failed": "无法发送好友请求",
+      "accepted": "已接受好友请求",
+      "acceptFailed": "无法接受请求",
+      "declineInfo": "拒绝功能尚未实现"
+    },
+    "share": {
+      "info": "分享功能尚未实现"
+    },
+    "report": {
+      "success": "成功举报用户"
+    }
+  },
+  "emotion": {
+    "title": "我的情绪",
+    "tabs": {
+      "history": "历史",
+      "stats": "统计"
+    },
+    "empty": "没有情绪数据",
+    "delete": {
+      "confirmTitle": "确认删除",
+      "confirmMessage": "您确定要删除此情绪分析吗？",
+      "success": "情绪分析已删除",
+      "failed": "无法删除"
+    },
+    "tryAgain": "重试",
+    "filter": {
+      "title": "筛选",
+      "context": "情境",
+      "timeRange": "时间范围",
+      "clear": "清除筛选",
+      "apply": "应用",
+      "days": "{{count}}天"
+    },
+    "contexts": {
+      "message": "消息",
+      "voice_note": "语音笔记",
+      "call": "通话",
+      "general": "一般"
+    },
+    "emotions": {
+      "joy": "喜悦",
+      "sadness": "悲伤",
+      "anger": "愤怒",
+      "fear": "恐惧",
+      "surprise": "惊讶",
+      "love": "爱",
+      "neutral": "中立"
+    },
+    "stats": {
+      "overview": "概览",
+      "analyses": "分析",
+      "dominantEmotion": "主导情绪",
+      "distribution": "情绪分布",
+      "averageScores": "平均分数",
+      "byContext": "按情境",
+      "confidence": "{{percent}}%置信度"
+    }
+  },
+
+  "aiChat": {
+    "title": "AI助手",
+    "placeholder": "分享您的想法...",
+    "typing": "AI正在输入",
+    "suggestions": {
+      "title": "AI为您推荐",
+      "showSuggestions": "显示建议",
+      "startWith": "从以下话题开始：",
+      "count": "{{count}}条建议"
+    },
+    "empty": {
+      "title": "AI健康助手",
+      "subtitle": "我在这里支持您的心理健康。\n分享您的感受！",
+      "emotionStatus": "您现在感到{{emotion}}",
+      "confidence": "{{percent}}%置信度"
+    },
+    "emotions": {
+      "joy": "快乐",
+      "sadness": "悲伤",
+      "anger": "愤怒",
+      "fear": "恐惧",
+      "surprise": "惊讶",
+      "neutral": "平静"
+    },
+    "welcome": {
+      "intro": "根据您的情绪，我有一些建议：",
+      "question": "您想讨论什么？"
+    },
+    "refresh": "刷新",
+    "send": "发送"
+  },
+  "conversations": {
+    "title": "对话",
+    "searchPlaceholder": "搜索对话...",
+    "empty": {
+      "title": "还没有对话",
+      "subtitle": "与朋友开始对话",
+      "startChatting": "开始聊天"
+    },
+    "error": {
+      "tryAgain": "重试"
+    },
+    "newConversation": "新对话",
+    "ai": {
+      "badge": "{{count}}条建议",
+      "recommendations": "AI推荐"
+    },
+    "floating": {
+      "sadness": "您看起来{{intensity}}难过，我有一些建议给您。",
+      "anger": "您看起来{{intensity}}烦躁，让我帮助您。",
+      "fear": "您{{intensity}}担心吗？我可以支持您。",
+      "joy": "很高兴看到您{{intensity}}快乐！分享更多吧！",
+      "surprise": "有什么惊喜吗？我有一些建议给您。",
+      "neutral": "我有{{count}}条AI建议给您。",
+      "intensity": {
+        "very": "非常",
+        "somewhat": "有点",
+        "": ""
+      },
+      "suggestions": "{{count}}条建议",
+      "tapToView": "点击查看详情"
+    },
+    "messageTypes": {
+      "noMessages": "还没有消息",
+      "image": "📷 图片",
+      "file": "📎 文件",
+      "audio": "🎵 音频",
+      "video": "🎥 视频",
+      "voiceNote": "🎤 语音消息",
+      "location": "📍 位置",
+      "message": "消息"
+    },
+    "createModal": {
+      "title": "新对话",
+      "cancel": "取消",
+      "create": "创建",
+      "creating": "创建中...",
+      "selected": "已选择",
+      "groupName": "群组名称（必填）",
+      "groupDescription": "群组描述（可选）",
+      "searchPlaceholder": "搜索朋友...",
+      "loading": "加载朋友中...",
+      "noFriends": "还没有朋友",
+      "noFriendsSubtitle": "添加朋友以开始聊天",
+      "noResults": "未找到朋友",
+      "noResultsSubtitle": "尝试不同的搜索",
+      "retry": "重试",
+      "errors": {
+        "selectFriend": "请至少选择一位朋友",
+        "groupName": "请输入群组名称",
+        "createFailed": "创建对话失败。请重试。"
+      }
+    }
+  },
+  "message": {
+    "title": "消息",
+    "loading": "正在加载消息...",
+    "sending": "发送中...",
+    "failed": "发送失败",
+    "typing": "正在输入...",
+    "online": "在线",
+    "offline": "离线",
+    "justNow": "刚刚",
+    "minutesAgo": "{{minutes}}分钟前",
+    "hoursAgo": "{{hours}}小时前",
+    "daysAgo": "{{days}}天前",
+    "members": "{{count}}名成员",
+    "encryption": {
+      "initializing": "🔐 正在初始化加密...",
+      "enabled": "✅ 已启用端到端加密",
+      "notReady": "加密未就绪",
+      "waitMessage": "请等待加密初始化后再发送消息。",
+      "retryDecryption": "重试解密",
+      "retryTitle": "重试解密",
+      "retryMessage": "您想重试解密此消息吗？",
+      "retrySuccess": "消息解密成功！",
+      "retryFailed": "仍无法解密此消息。发送者可能需要重新发送。",
+      "fileDecryptionError": "🔒 无法解密某些附件",
+      "encryptingFiles": "🔒 正在加密并上传文件..."
+    },
+    "empty": {
+      "title": "还没有消息",
+      "subtitle": "发送您的第一条加密消息以开始对话"
+    },
+    "input": {
+      "placeholder": "输入消息...",
+      "recording": "正在录音...",
+      "uploading": "正在上传文件..."
+    },
+    "reply": {
+      "replyingTo": "回复 {{name}}",
+      "cancel": "取消"
+    },
+    "actions": {
+      "reply": "回复",
+      "react": "反应",
+      "delete": "删除",
+      "edit": "编辑",
+      "viewReads": "查看已读",
+      "deleteTitle": "删除消息",
+      "deleteMessage": "选择删除选项：",
+      "deleteForMe": "为我删除",
+      "deleteForEveryone": "为所有人删除",
+      "deleteTitle": "删除对话",
+      "deleteMessage": "您确定要删除此对话吗？消息仅会在您的侧被删除。",
+      "leaveGroup": "离开群组",
+      "leaveGroupConfirm": "您确定要离开此群组吗？",
+      "leaveGroupSuccess": "已成功离开群组",
+      "removeMember": "移除成员",
+      "removeMemberConfirm": "您确定要将 {{name}} 从群组中移除吗？",
+      "remove": "移除",
+      "removeSuccess": "成员已成功移除",
+      "transferAdmin": "转移管理员权限",
+      "transferAdminConfirm": "您确定要将管理员权限转移给 {{name}} 吗？",
+      "transfer": "转移",
+      "transferSuccess": "管理员权限已成功转移",
+      "deleteConversation": "删除对话",
+      "removeFromGroup": "从群组中移除"
+    },
+    "edited": "已编辑",
+    "readBy": "已读 {{count}}",
+    "call": {
+      "video": {
+        "title": "开始视频通话",
+        "groupMessage": "您想在{{name}}中开始视频通话吗？",
+        "privateMessage": "您想与{{name}}开始视频通话吗？",
+        "failed": "无法开始视频通话"
+      },
+      "audio": {
+        "title": "开始语音通话",
+        "groupMessage": "您想在{{name}}中开始语音通话吗？",
+        "privateMessage": "您想与{{name}}开始语音通话吗？",
+        "failed": "无法开始语音通话"
+      },
+      "start": "开始",
+      "cancel": "取消"
+    },
+    "attachment": {
+      "camera": "相机",
+      "takePhoto": "拍照",
+      "recordVideo": "录制视频",
+      "permissionRequired": "需要权限",
+      "cameraPermission": "需要相机权限！",
+      "micPermission": "需要麦克风权限！",
+      "mediaPermission": "需要访问媒体库的权限！",
+      "pickFailed": "无法选择文件",
+      "recordingError": "录音错误",
+      "recordingFailed": "无法开始录音。请在设备设置中检查麦克风权限。"
+    },
+    "info": {
+      "title": "信息",
+      "unnamed": "未命名",
+      "viewProfile": "查看个人资料",
+      "search": "搜索",
+      "muteNotifications": "静音通知",
+      "addMembers": "添加成员",
+      "tabInfo": "信息",
+      "tabMembers": "成员",
+      "tabMedia": "媒体",
+      "tabSearch": "搜索",
+      "changeGroupAvatar": "更改群组头像",
+      "changeGroupName": "更改群组名称",
+      "notifications": "通知",
+      "pin": "固定",
+      "shareContact": "分享联系信息",
+      "loadingMembers": "正在加载成员列表...",
+      "admin": "管理员",
+      "you": "您",
+      "messages": "消息",
+      "media": {
+        "image": "照片",
+        "video": "视频",
+        "file": "文件",
+        "audio": "音频"
+      },
+      "noMedia": "没有找到 {{type}}",
+      "searchPlaceholder": "输入关键词搜索消息",
+      "noResults": "未找到结果",
+      "searchMessages": "搜索消息..."
+    },
+    "addMembers": {
+      "title": "添加成员",
+      "add": "添加",
+      "selected": "已选择 {{count}} 人",
+      "searchPlaceholder": "搜索朋友",
+      "loading": "正在加载列表...",
+      "alreadyInGroup": "已在群组中",
+      "noFriendsFound": "未找到朋友",
+      "allInGroup": "所有朋友已在群组中",
+      "success": "成员已添加到群组",
+      "error": "添加成员时发生错误"
+    }
+  },
+  "homeScreen": {
+    "title": "首页",
+    "welcome": "欢迎来到您的主页"
+  }
+}
