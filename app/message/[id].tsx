@@ -291,18 +291,18 @@ export default function MessageScreen() {
         : getConversationTitle();
 
       Alert.alert(
-        t("message.call.video.title"),
+        t('message.call.video.title'),
         isGroup
-          ? t("message.call.video.groupMessage", { name: displayName })
-          : t("message.call.video.privateMessage", { name: displayName }),
+          ? t('message.call.video.groupMessage', { name: displayName })
+          : t('message.call.video.privateMessage', { name: displayName }),
         [
           {
-            text: t("message.call.cancel"),
+            text: t('message.call.cancel'),
             style: "cancel",
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: t("message.call.start"),
+            text: t('message.call.start'),
             onPress: async () => {
               try {
                 const token = await getToken();
@@ -332,7 +332,7 @@ export default function MessageScreen() {
                 }
               } catch (error) {
                 console.error("Failed to start video call:", error);
-                Alert.alert(t("error"), t("message.call.video.failed"));
+                Alert.alert(t('error'), t('message.call.video.failed'));
               } finally {
                 setIsInitiatingCall(false);
               }
@@ -358,18 +358,18 @@ export default function MessageScreen() {
         : getConversationTitle();
 
       Alert.alert(
-        t("message.call.audio.title"),
+        t('message.call.audio.title'),
         isGroup
-          ? t("message.call.audio.groupMessage", { name: displayName })
-          : t("message.call.audio.privateMessage", { name: displayName }),
+          ? t('message.call.audio.groupMessage', { name: displayName })
+          : t('message.call.audio.privateMessage', { name: displayName }),
         [
           {
-            text: t("message.call.cancel"),
+            text: t('message.call.cancel'),
             style: "cancel",
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: t("message.call.start"),
+            text: t('message.call.start'),
             onPress: async () => {
               try {
                 const token = await getToken();
@@ -399,7 +399,7 @@ export default function MessageScreen() {
                 }
               } catch (error) {
                 console.error("Failed to start audio call:", error);
-                Alert.alert(t("error"), t("message.call.audio.failed"));
+                Alert.alert(t('error'), t('message.call.audio.failed'));
               } finally {
                 setIsInitiatingCall(false);
               }
@@ -432,50 +432,52 @@ export default function MessageScreen() {
     replyToId?: string
   ) => {
     // ✅ Handle encrypted files case
-    if (typeof contentOrData === "object" && contentOrData.encryptedFiles) {
-      console.log("📤 Sending message with encrypted files:", {
-        filesCount: contentOrData.encryptedFiles.length,
-        hasContent: !!contentOrData.content,
-        type: contentOrData.type,
-        hasLocalUris: !!contentOrData.localUris, // ✅ NEW
+    if (typeof contentOrData === 'object' && contentOrData.encryptedFiles) {
+    console.log('📤 Sending message with encrypted files:', {
+      filesCount: contentOrData.encryptedFiles.length,
+      hasContent: !!contentOrData.content,
+      type: contentOrData.type,
+      hasLocalUris: !!contentOrData.localUris, // ✅ NEW
+    });
+
+    if (!encryptionReady) {
+      Alert.alert(
+        t('message.encryption.notReady'),
+        t('message.encryption.waitMessage'),
+        [{ text: t('ok') }]
+      );
+      return;
+    }
+
+    try {
+      console.log('📤 Sending encrypted files...');
+      
+      await sendMessage({
+        content: contentOrData.content?.trim() || '',
+        type: contentOrData.type as any,
+        encryptedFiles: contentOrData.encryptedFiles,
+        localUris: contentOrData.localUris, // ✅ NEW
+        replyTo: contentOrData.replyTo,
       });
 
-      if (!encryptionReady) {
-        Alert.alert(
-          t("message.encryption.notReady"),
-          t("message.encryption.waitMessage"),
-          [{ text: t("ok") }]
-        );
-        return;
-      }
+      setReplyTo(null);
 
-      try {
-        console.log("📤 Sending encrypted files...");
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
 
-        await sendMessage({
-          content: contentOrData.content?.trim() || "",
-          type: contentOrData.type as any,
-          encryptedFiles: contentOrData.encryptedFiles,
-          localUris: contentOrData.localUris, // ✅ NEW
-          replyTo: contentOrData.replyTo,
-        });
-
-        setReplyTo(null);
-
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-
-        console.log("✅ Message with encrypted files sent successfully");
-        return;
-      } catch (error: any) {
-        console.error("❌ Failed to send encrypted files:", error);
-        Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-          { text: t("ok") },
-        ]);
-        return;
-      }
+      console.log('✅ Message with encrypted files sent successfully');
+      return;
+    } catch (error: any) {
+      console.error('❌ Failed to send encrypted files:', error);
+      Alert.alert(
+        t('message.failed'),
+        error.message || t('message.failed'),
+        [{ text: t('ok') }]
+      );
+      return;
     }
+  }
 
     // ✅ Handle normal message (text only)
     let messageContent: string;
@@ -505,7 +507,7 @@ export default function MessageScreen() {
 
     if (typeof messageContent !== "string") {
       console.error("❌ Content is not a string:", typeof messageContent);
-      Alert.alert(t("error"), "Invalid message content");
+      Alert.alert(t('error'), "Invalid message content");
       return;
     }
 
@@ -519,9 +521,9 @@ export default function MessageScreen() {
     // ✨ Check E2EE ready
     if (!encryptionReady) {
       Alert.alert(
-        t("message.encryption.notReady"),
-        t("message.encryption.waitMessage"),
-        [{ text: t("ok") }]
+        t('message.encryption.notReady'),
+        t('message.encryption.waitMessage'),
+        [{ text: t('ok') }]
       );
       return;
     }
@@ -545,9 +547,11 @@ export default function MessageScreen() {
       console.log("✅ Message sent successfully");
     } catch (error: any) {
       console.error("❌ Failed to send message:", error);
-      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-        { text: t("ok") },
-      ]);
+      Alert.alert(
+        t('message.failed'),
+        error.message || t('message.failed'),
+        [{ text: t('ok') }]
+      );
     }
   };
 
@@ -556,7 +560,7 @@ export default function MessageScreen() {
     try {
       await editMessage(messageId, newContent);
     } catch (error: any) {
-      Alert.alert(t("error"), error.message || t("message.failed"));
+      Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
 
@@ -568,7 +572,7 @@ export default function MessageScreen() {
     try {
       await deleteMessage(messageId, deleteType);
     } catch (error: any) {
-      Alert.alert(t("error"), error.message || t("message.failed"));
+      Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
 
@@ -577,7 +581,7 @@ export default function MessageScreen() {
     try {
       await addReaction(messageId, reaction);
     } catch (error: any) {
-      Alert.alert(t("error"), error.message || t("message.failed"));
+      Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
 
@@ -586,7 +590,7 @@ export default function MessageScreen() {
     try {
       await removeReaction(messageId);
     } catch (error: any) {
-      Alert.alert(t("error"), error.message || t("message.failed"));
+      Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
 
@@ -595,13 +599,13 @@ export default function MessageScreen() {
     try {
       console.log("🔄 Retrying decryption for message:", messageId);
       await retryDecryption(messageId);
-      Alert.alert(t("success"), t("message.encryption.retrySuccess"));
+      Alert.alert(t('success'), t('message.encryption.retrySuccess'));
     } catch (error: any) {
       console.error("❌ Retry decryption failed:", error);
       Alert.alert(
-        t("message.encryption.retryTitle"),
-        t("message.encryption.retryFailed"),
-        [{ text: t("ok") }]
+        t('message.encryption.retryTitle'),
+        t('message.encryption.retryFailed'),
+        [{ text: t('ok') }]
       );
     }
   };
@@ -693,22 +697,17 @@ export default function MessageScreen() {
 
   // GIỮ NGUYÊN
   const getConversationTitle = () => {
-    if (!conversation) return t("loading");
+    if (!conversation) return t('loading');
 
     if (conversation.type === "group") {
-      return (
-        conversation.name ||
-        t("message.members", { count: conversation?.participants?.length || 0 })
-      );
+      return conversation.name || t('message.members', { count: conversation?.participants?.length || 0 });
     }
 
     const otherParticipant = conversation.participants?.find(
       (p: any) => p.clerkId !== userId
     );
     return (
-      otherParticipant?.full_name ||
-      otherParticipant?.username ||
-      t("message.unknownUser")
+      otherParticipant?.full_name || otherParticipant?.username || t('message.unknownUser')
     );
   };
 
@@ -735,7 +734,7 @@ export default function MessageScreen() {
     );
 
     if (otherParticipant?.is_online) {
-      return t("message.online");
+      return t('message.online');
     }
 
     if (otherParticipant?.last_seen) {
@@ -744,12 +743,12 @@ export default function MessageScreen() {
       const diffMs = now.getTime() - lastSeen.getTime();
       const diffMins = Math.floor(diffMs / 60000);
 
-      if (diffMins < 1) return t("message.justNow");
-      if (diffMins < 60) return t("message.minutesAgo", { minutes: diffMins });
+      if (diffMins < 1) return t('message.justNow');
+      if (diffMins < 60) return t('message.minutesAgo', { minutes: diffMins });
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return t("message.hoursAgo", { hours: diffHours });
+      if (diffHours < 24) return t('message.hoursAgo', { hours: diffHours });
       const diffDays = Math.floor(diffHours / 24);
-      return t("message.daysAgo", { days: diffDays });
+      return t('message.daysAgo', { days: diffDays });
     }
 
     return null;
@@ -820,9 +819,7 @@ export default function MessageScreen() {
     const isGroup = conversation?.type === "group";
 
     return (
-      <View
-        className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-800" : "border-gray-200"}`}
-      >
+      <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
         <TouchableOpacity onPress={() => router.back()} className="p-2">
           <Ionicons
             name="arrow-back"
@@ -838,9 +835,7 @@ export default function MessageScreen() {
               className="w-10 h-10 rounded-full mr-3"
             />
           ) : (
-            <View
-              className={`w-10 h-10 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-300"} items-center justify-center mr-3`}
-            >
+            <View className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-300'} items-center justify-center mr-3`}>
               <Ionicons
                 name={isGroup ? "people" : "person"}
                 size={20}
@@ -852,9 +847,7 @@ export default function MessageScreen() {
           <View className="flex-1">
             {/* ✨ UPDATED: Thêm E2EE badge */}
             <View className="flex-row items-center">
-              <Text
-                className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-800"}`}
-              >
+              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
                 {getConversationTitle()}
               </Text>
 
@@ -868,21 +861,13 @@ export default function MessageScreen() {
 
             {/* GIỮ NGUYÊN phần status */}
             {typingUsers.length > 0 ? (
-              <Text className="text-sm text-orange-500 italic">
-                {t("message.typing")}
-              </Text>
+              <Text className="text-sm text-orange-500 italic">{t('message.typing')}</Text>
             ) : isGroup ? (
-              <Text
-                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-              >
-                {t("message.members", {
-                  count: conversation?.participants?.length || 0,
-                })}
+              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {t('message.members', { count: conversation?.participants?.length || 0 })}
               </Text>
             ) : getOnlineStatus() ? (
-              <Text
-                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-              >
+              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {getOnlineStatus()}
               </Text>
             ) : null}
@@ -898,7 +883,13 @@ export default function MessageScreen() {
           <Ionicons
             name="call"
             size={24}
-            color={isInitiatingCall ? "#ccc" : isDark ? "#fff" : "#000"}
+            color={
+              isInitiatingCall
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#000"
+            }
           />
         </TouchableOpacity>
 
@@ -911,7 +902,13 @@ export default function MessageScreen() {
           <Ionicons
             name="videocam"
             size={24}
-            color={isInitiatingCall ? "#ccc" : isDark ? "#fff" : "#000"}
+            color={
+              isInitiatingCall
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#000"
+            }
           />
         </TouchableOpacity>
 
@@ -946,15 +943,11 @@ export default function MessageScreen() {
     if (encryptionReady) return null;
 
     return (
-      <View
-        className={`px-4 py-2 border-b ${isDark ? "bg-yellow-900/20 border-yellow-800" : "bg-yellow-50 border-yellow-200"}`}
-      >
+      <View className={`px-4 py-2 border-b ${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'}`}>
         <View className="flex-row items-center">
           <ActivityIndicator size="small" color="#f59e0b" />
-          <Text
-            className={`ml-2 text-xs font-medium ${isDark ? "text-yellow-300" : "text-yellow-700"}`}
-          >
-            {t("message.encryption.initializing")}
+          <Text className={`ml-2 text-xs font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+            {t('message.encryption.initializing')}
           </Text>
         </View>
       </View>
@@ -966,26 +959,18 @@ export default function MessageScreen() {
     <View className="flex-1 justify-center items-center px-8">
       {/* ✨ UPDATED: Đổi icon thành lock */}
       <Text className="text-6xl mb-4">🔒</Text>
-      <Text
-        className={`text-center text-lg font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}
-      >
-        {t("message.empty.title")}
+      <Text className={`text-center text-lg font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('message.empty.title')}
       </Text>
-      <Text
-        className={`text-center mt-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-      >
-        {t("message.empty.subtitle")}
+      <Text className={`text-center mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {t('message.empty.subtitle')}
       </Text>
 
       {/* ✨ NEW: E2EE status indicator */}
       {encryptionReady && (
-        <View
-          className={`mt-4 rounded-lg px-4 py-2 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}
-        >
-          <Text
-            className={`text-sm font-medium text-center ${isDark ? "text-green-300" : "text-green-700"}`}
-          >
-            {t("message.encryption.enabled")}
+        <View className={`mt-4 rounded-lg px-4 py-2 ${isDark ? 'bg-green-900/20' : 'bg-green-50'}`}>
+          <Text className={`text-sm font-medium text-center ${isDark ? 'text-green-300' : 'text-green-700'}`}>
+            {t('message.encryption.enabled')}
           </Text>
         </View>
       )}
@@ -1035,7 +1020,7 @@ export default function MessageScreen() {
 
   if (error) {
     return (
-      <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
         <StatusBar
           barStyle={isDark ? "light-content" : "dark-content"}
           backgroundColor={isDark ? "#000000" : "#FFFFFF"}
@@ -1043,16 +1028,12 @@ export default function MessageScreen() {
         {renderHeader()}
         <View className="flex-1 justify-center items-center px-8">
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-          <Text
-            className={`text-center mt-4 text-lg ${isDark ? "text-red-400" : "text-red-500"}`}
-          >
-            {error}
-          </Text>
+          <Text className={`text-center mt-4 text-lg ${isDark ? 'text-red-400' : 'text-red-500'}`}>{error}</Text>
           <TouchableOpacity
             onPress={() => router.back()}
             className="bg-orange-500 rounded-full px-6 py-3 mt-6"
           >
-            <Text className="text-white font-semibold">{t("cancel")}</Text>
+            <Text className="text-white font-semibold">{t('cancel')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -1060,7 +1041,7 @@ export default function MessageScreen() {
   }
 
   return (
-    <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
