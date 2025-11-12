@@ -1,5 +1,5 @@
 /* eslint-disable import/namespace */
-// components/page/message/MessageInput.tsx - COMPLETE WITH E2EE FILES
+// components/page/message/MessageInput.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
@@ -14,11 +14,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
-import { useFileEncryption } from "@/hooks/message/useFileEncryption"; // ✅ NEW
-import { useAuth } from "@clerk/clerk-expo"; // ✅ NEW
+import { useFileEncryption } from "@/hooks/message/useFileEncryption";
+import { useAuth } from "@clerk/clerk-expo";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface AttachmentPreview {
   id: string;
@@ -30,40 +31,40 @@ interface AttachmentPreview {
 }
 
 interface MessageInputProps {
-  conversationId?: string; // ✅ NEW
-  recipientId?: string; // ✅ NEW - Pass from MessageScreen
+  conversationId?: string;
+  recipientId?: string;
   onSendMessage: (data: FormData | any) => void;
   replyTo?: any;
   onCancelReply?: () => void;
   onTyping?: (isTyping: boolean) => void;
-  disabled?: boolean; // ✅ NEW
+  disabled?: boolean;
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
-  conversationId, // ✅ NEW
-  recipientId, // ✅ NEW
+  conversationId,
+  recipientId,
   onSendMessage,
   replyTo,
   onCancelReply,
   onTyping,
-  disabled = false, // ✅ NEW
+  disabled = false,
 }) => {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [uploadingFiles, setUploadingFiles] = useState(false); // ✅ NEW
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
   
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
 
-  // ✅ NEW: File encryption hook
   const { encryptFile, isReady: encryptionReady } = useFileEncryption();
   const { getToken } = useAuth();
 
-  // ✅ Handle typing indicator
   const handleTyping = (text: string) => {
     setMessage(text);
 
@@ -72,7 +73,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (text.length > 0 && !isTypingRef.current) {
       isTypingRef.current = true;
       onTyping(true);
-      console.log('⌨️ Started typing');
     }
 
     if (typingTimeoutRef.current) {
@@ -83,7 +83,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       if (isTypingRef.current) {
         isTypingRef.current = false;
         onTyping(false);
-        console.log('⌨️ Stopped typing (timeout)');
       }
     }, 2000);
   };
@@ -95,110 +94,95 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
       if (isTypingRef.current && onTyping) {
         onTyping(false);
-        console.log('⌨️ Stopped typing (unmount)');
       }
     };
   }, [onTyping]);
 
-  // ✅ UPDATED: handleSend với E2EE file support
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
 
-    // Stop typing indicator
     if (isTypingRef.current && onTyping) {
       isTypingRef.current = false;
       onTyping(false);
-      console.log('⌨️ Stopped typing (send)');
     }
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-     const messageContent = message.trim();
-  const currentAttachments = [...attachments];
-  const currentReplyTo = replyTo?._id;
+    const messageContent = message.trim();
+    const currentAttachments = [...attachments];
+    const currentReplyTo = replyTo?._id;
 
-  setMessage("");
-  setAttachments([]);
-  if (onCancelReply) {
-    onCancelReply();
-  }
-
-  try {
-    const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
-
-    if (shouldEncryptFiles) {
-      console.log('🔒 Encrypting files before sending...');
-      setUploadingFiles(true);
-
-      const encryptedFiles: any[] = [];
-      const localUris: string[] = []; // ✅ NEW: Keep track of local URIs
-
-      // Encrypt all files
-      for (const att of currentAttachments) {
-        try {
-          console.log('🔒 Encrypting file:', att.name);
-
-          const { encryptedBase64, metadata } = await encryptFile(
-            att.uri,
-            att.name,
-            recipientId
-          );
-
-          encryptedFiles.push({
-            encryptedBase64,
-            originalFileName: att.name,
-            originalFileType: att.mimeType || 'application/octet-stream',
-            encryptionMetadata: {
-              iv: metadata.iv,
-              authTag: metadata.authTag,
-              original_size: metadata.original_size,
-              encrypted_size: metadata.encrypted_size,
-            },
-          });
-
-          // ✅ NEW: Keep local URI for preview
-          localUris.push(att.uri);
-
-          console.log('✅ File encrypted:', att.name);
-        } catch (error) {
-          console.error('❌ Failed to encrypt file:', att.name, error);
-          Alert.alert('Error', `Failed to encrypt ${att.name}`);
-        }
-      }
-
-      setUploadingFiles(false);
-
-      // ✅ Send message with encrypted files AND local URIs
-      if (messageContent || encryptedFiles.length > 0) {
-        const messageData = {
-          content: messageContent || undefined,
-          type: 'file' as const, // ✅ Changed to 'file' type
-          encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
-          localUris: localUris, // ✅ NEW: Pass local URIs for preview
-          replyTo: currentReplyTo,
-        };
-
-        console.log('📤 Sending message with encrypted files:', {
-          hasContent: !!messageData.content,
-          filesCount: encryptedFiles.length,
-          localUrisCount: localUris.length,
-        });
-
-        onSendMessage(messageData);
-      }
-
-      return;
+    setMessage("");
+    setAttachments([]);
+    if (onCancelReply) {
+      onCancelReply();
     }
 
-      // ✅ FALLBACK: Non-encrypted file handling (backward compatible)
+    try {
+      const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
+
+      if (shouldEncryptFiles) {
+        console.log('🔒 Encrypting files before sending...');
+        setUploadingFiles(true);
+
+        const encryptedFiles: any[] = [];
+        const localUris: string[] = [];
+
+        for (const att of currentAttachments) {
+          try {
+            console.log('🔒 Encrypting file:', att.name);
+
+            const { encryptedBase64, metadata } = await encryptFile(
+              att.uri,
+              att.name,
+              recipientId
+            );
+
+            encryptedFiles.push({
+              encryptedBase64,
+              originalFileName: att.name,
+              originalFileType: att.mimeType || 'application/octet-stream',
+              encryptionMetadata: {
+                iv: metadata.iv,
+                authTag: metadata.authTag,
+                original_size: metadata.original_size,
+                encrypted_size: metadata.encrypted_size,
+              },
+            });
+
+            localUris.push(att.uri);
+            console.log('✅ File encrypted:', att.name);
+          } catch (error) {
+            console.error('❌ Failed to encrypt file:', att.name, error);
+            Alert.alert(t('error'), `Failed to encrypt ${att.name}`);
+          }
+        }
+
+        setUploadingFiles(false);
+
+        if (messageContent || encryptedFiles.length > 0) {
+          const messageData = {
+            content: messageContent || undefined,
+            type: 'file' as const,
+            encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
+            localUris: localUris,
+            replyTo: currentReplyTo,
+          };
+
+          onSendMessage(messageData);
+        }
+
+        return;
+      }
+
+      // Fallback: Non-encrypted file handling
       const mediaFiles = currentAttachments.filter((att) =>
         ["image", "video", "audio"].includes(att.type)
       );
       const documentFiles = currentAttachments.filter((att) => att.type === "file");
 
-      // Text only
       if (currentAttachments.length === 0 && messageContent) {
         const textData = {
           content: messageContent,
@@ -206,9 +190,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           replyTo: currentReplyTo,
         };
         onSendMessage(textData);
-      }
-      // Media files (non-encrypted fallback)
-      else if (mediaFiles.length > 0) {
+      } else if (mediaFiles.length > 0) {
         const mediaFormData = new FormData();
         const firstMediaType = mediaFiles[0].type;
         mediaFormData.append("type", firstMediaType);
@@ -231,7 +213,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
         onSendMessage(mediaFormData);
 
-        // Send documents separately if exist
         if (documentFiles.length > 0) {
           const docFormData = new FormData();
           docFormData.append("type", "file");
@@ -250,9 +231,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           onSendMessage(docFormData);
         }
-      }
-      // Documents only (non-encrypted fallback)
-      else if (documentFiles.length > 0) {
+      } else if (documentFiles.length > 0) {
         const docFormData = new FormData();
         docFormData.append("type", "file");
 
@@ -277,19 +256,17 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } catch (error: any) {
       console.error("Send error:", error);
       setUploadingFiles(false);
-      Alert.alert('Error', error.message || 'Failed to send message');
+      Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
 
-  // ✅ GIỮ NGUYÊN: All picker methods
   const handleImagePicker = async () => {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
       Alert.alert(
-        "Permission required",
-        "Permission to access media library is required!"
+        t('message.attachment.permissionRequired'),
+        t('message.attachment.mediaPermission')
       );
       return;
     }
@@ -339,7 +316,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         setAttachments([...attachments, ...newAttachments]);
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to pick file");
+      Alert.alert(t('error'), t('message.attachment.pickFailed'));
     }
   };
 
@@ -347,13 +324,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert("Permission required", "Camera permission is required!");
+      Alert.alert(
+        t('message.attachment.permissionRequired'),
+        t('message.attachment.cameraPermission')
+      );
       return;
     }
 
-    Alert.alert("Camera", "Choose an option", [
+    Alert.alert(t('message.attachment.camera'), t('message.attachment.camera'), [
       {
-        text: "Take Photo",
+        text: t('message.attachment.takePhoto'),
         onPress: async () => {
           const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -374,7 +354,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         },
       },
       {
-        text: "Record Video",
+        text: t('message.attachment.recordVideo'),
         onPress: async () => {
           const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Videos,
@@ -395,7 +375,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         },
       },
       {
-        text: "Cancel",
+        text: t('cancel'),
         style: "cancel",
       },
     ]);
@@ -406,8 +386,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          "Permission required",
-          "Microphone permission is required!"
+          t('message.attachment.permissionRequired'),
+          t('message.attachment.micPermission')
         );
         return;
       }
@@ -429,9 +409,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } catch (error: any) {
       console.error("Recording error:", error);
       Alert.alert(
-        "Recording Error",
-        error?.message ||
-          "Failed to start recording. Please check microphone permissions in device settings."
+        t('message.attachment.recordingError'),
+        error?.message || t('message.attachment.recordingFailed')
       );
     }
   };
@@ -467,7 +446,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       setRecording(null);
     } catch (error: any) {
       console.error("Stop recording error:", error);
-      Alert.alert("Error", "Failed to stop recording");
+      Alert.alert(t('error'), t('message.attachment.recordingFailed'));
       setRecording(null);
     }
   };
@@ -543,7 +522,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     </View>
   );
 
-  // ✅ NEW: Disable send when uploading or disabled
   const isSendDisabled = uploadingFiles || disabled || (!message.trim() && attachments.length === 0);
 
   return (
@@ -562,7 +540,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         >
           <View style={styles.replyContent}>
             <Text style={styles.replyLabel}>
-              Replying to {replyTo.sender?.full_name}
+              {t('message.reply.replyingTo', { name: replyTo.sender?.full_name })}
             </Text>
             <Text
               style={[
@@ -592,12 +570,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
-      {/* ✅ NEW: Upload progress indicator */}
       {uploadingFiles && (
         <View style={styles.uploadingContainer}>
           <ActivityIndicator size="small" color="#f97316" />
           <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
-            🔒 Encrypting and uploading files...
+            {t('message.encryption.encryptingFiles')}
           </Text>
         </View>
       )}
@@ -642,7 +619,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         <TextInput
           value={message}
           onChangeText={handleTyping}
-          placeholder="Type a message..."
+          placeholder={t('message.input.placeholder')}
           placeholderTextColor={isDark ? "#999" : "#666"}
           multiline
           maxLength={5000}
@@ -701,7 +678,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               isDark ? styles.textRed400 : styles.textRed600,
             ]}
           >
-            Recording...
+            {t('message.input.recording')}
           </Text>
         </View>
       )}
@@ -709,6 +686,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   );
 };
 
+// Styles remain the same...
 const styles = StyleSheet.create({
   container: {
     padding: 16,
@@ -805,7 +783,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  // ✅ NEW: Upload progress styles
   uploadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -860,7 +837,6 @@ const styles = StyleSheet.create({
   bgRed: {
     backgroundColor: "#ef4444",
   },
-  // ✅ NEW: Disabled button style
   disabledButton: {
     opacity: 0.5,
   },
