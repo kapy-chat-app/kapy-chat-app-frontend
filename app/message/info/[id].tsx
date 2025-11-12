@@ -11,7 +11,6 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
   ActivityIndicator,
   Modal,
@@ -20,6 +19,8 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { useUser } from "@clerk/clerk-expo";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type TabType = "info" | "media" | "search" | "members";
 type MediaType = "image" | "video" | "file" | "audio";
@@ -33,8 +34,9 @@ export default function MessageInfoScreen() {
   const participantCount = parseInt(params.participantCount as string) || 2;
 
   const { user } = useUser();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
 
   const [activeTab, setActiveTab] = useState<TabType>("info");
   const [mediaType, setMediaType] = useState<MediaType>("image");
@@ -70,22 +72,22 @@ export default function MessageInfoScreen() {
 
   const handleDeleteConversation = () => {
     Alert.alert(
-      "Xóa đoạn hội thoại",
-      "Bạn có chắc chắn muốn xóa đoạn hội thoại này? Tin nhắn sẽ chỉ bị xóa ở phía bạn.",
+      t('message.actions.deleteTitle'),
+      t('message.actions.deleteMessage'),
       [
-        { text: "Hủy", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Xóa",
+          text: t('message.actions.deleteForMe'),
           style: "destructive",
           onPress: async () => {
             const result = await deleteConversation(conversationId);
             if (result.success) {
-              Alert.alert("Thành công", "Đã xóa đoạn hội thoại");
+              Alert.alert(t('success'), t('message.actions.deleteSuccess'));
               router.replace("/(tabs)/conversations");
             } else {
               Alert.alert(
-                "Lỗi",
-                result.error || "Không thể xóa đoạn hội thoại"
+                t('error'),
+                result.error || t('message.failed')
               );
             }
           },
@@ -95,18 +97,18 @@ export default function MessageInfoScreen() {
   };
 
   const handleLeaveGroup = () => {
-    Alert.alert("Rời khỏi nhóm", "Bạn có chắc chắn muốn rời khỏi nhóm này?", [
-      { text: "Hủy", style: "cancel" },
+    Alert.alert(t('message.actions.leaveGroup'), t('message.actions.leaveGroupConfirm'), [
+      { text: t('cancel'), style: "cancel" },
       {
-        text: "Rời nhóm",
+        text: t('message.actions.leaveGroup'),
         style: "destructive",
         onPress: async () => {
           const result = await leaveGroup(conversationId);
           if (result.success) {
-            Alert.alert("Thành công", "Đã rời khỏi nhóm");
+            Alert.alert(t('success'), t('message.actions.leaveGroupSuccess'));
             router.replace("/(tabs)/conversations");
           } else {
-            Alert.alert("Lỗi", result.error || "Không thể rời nhóm");
+            Alert.alert(t('error'), result.error || t('message.failed'));
           }
         },
       },
@@ -118,7 +120,7 @@ export default function MessageInfoScreen() {
       // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Lỗi', 'Cần cấp quyền truy cập thư viện ảnh');
+        Alert.alert(t('error'), t('message.attachment.mediaPermission'));
         return;
       }
 
@@ -134,20 +136,20 @@ export default function MessageInfoScreen() {
         const imageUri = result.assets[0].uri;
         
         Alert.alert(
-          "Xác nhận",
-          "Bạn có muốn thay đổi ảnh đại diện nhóm?",
+          t('message.attachment.confirm'),
+          t('message.attachment.changeAvatarConfirm'),
           [
-            { text: "Hủy", style: "cancel" },
+            { text: t('cancel'), style: "cancel" },
             {
-              text: "Đồng ý",
+              text: t('ok'),
               onPress: async () => {
                 const updateResult = await updateGroupAvatar(conversationId, imageUri);
                 if (updateResult.success) {
-                  Alert.alert("Thành công", "Đã cập nhật ảnh đại diện nhóm");
+                  Alert.alert(t('success'), t('message.attachment.avatarUpdated'));
                   setCurrentAvatar(updateResult.data?.avatar?.url || imageUri);
                   refreshMembers();
                 } else {
-                  Alert.alert("Lỗi", updateResult.error || "Không thể cập nhật ảnh");
+                  Alert.alert(t('error'), updateResult.error || t('message.failed'));
                 }
               },
             },
@@ -156,26 +158,26 @@ export default function MessageInfoScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert("Lỗi", "Không thể chọn ảnh");
+      Alert.alert(t('error'), t('message.attachment.pickFailed'));
     }
   };
 
   const handleRemoveMember = (member: any) => {
     Alert.alert(
-      "Xóa thành viên",
-      `Bạn có chắc chắn muốn xóa ${member.full_name} khỏi nhóm?`,
+      t('message.actions.removeMember'),
+      t('message.actions.removeMemberConfirm', { name: member.full_name }),
       [
-        { text: "Hủy", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Xóa",
+          text: t('message.actions.remove'),
           style: "destructive",
           onPress: async () => {
             const result = await removeParticipant(conversationId, member.clerkId);
             if (result.success) {
-              Alert.alert("Thành công", "Đã xóa thành viên");
+              Alert.alert(t('success'), t('message.actions.removeSuccess'));
               refreshMembers();
             } else {
-              Alert.alert("Lỗi", result.error || "Không thể xóa thành viên");
+              Alert.alert(t('error'), result.error || t('message.failed'));
             }
           },
         },
@@ -185,19 +187,19 @@ export default function MessageInfoScreen() {
 
   const handleTransferAdmin = (member: any) => {
     Alert.alert(
-      "Chuyển quyền quản trị viên",
-      `Bạn có chắc chắn muốn chuyển quyền quản trị viên cho ${member.full_name}?`,
+      t('message.actions.transferAdmin'),
+      t('message.actions.transferAdminConfirm', { name: member.full_name }),
       [
-        { text: "Hủy", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Chuyển",
+          text: t('message.actions.transfer'),
           onPress: async () => {
             const result = await transferAdmin(conversationId, member.clerkId);
             if (result.success) {
-              Alert.alert("Thành công", "Đã chuyển quyền quản trị viên");
+              Alert.alert(t('success'), t('message.actions.transferSuccess'));
               refreshMembers();
             } else {
-              Alert.alert("Lỗi", result.error || "Không thể chuyển quyền");
+              Alert.alert(t('error'), result.error || t('message.failed'));
             }
           },
         },
@@ -219,7 +221,7 @@ export default function MessageInfoScreen() {
   };
 
   const renderHeader = () => (
-    <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+    <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-800 bg-black' : 'border-gray-200 bg-white'}`}>
       <TouchableOpacity className="p-1" onPress={() => router.back()}>
         <Ionicons
           name="arrow-back"
@@ -227,15 +229,15 @@ export default function MessageInfoScreen() {
           color={isDark ? "#F97316" : "#1F2937"}
         />
       </TouchableOpacity>
-      <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-        Thông tin
+      <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+        {t('message.info.title')}
       </Text>
       <View className="w-6" />
     </View>
   );
 
   const renderProfileSection = () => (
-    <View className="items-center py-6 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800">
+    <View className={`items-center py-6 ${isDark ? 'bg-black border-b border-gray-800' : 'bg-white border-b border-gray-200'}`}>
       <TouchableOpacity 
         onPress={isGroupChat && isAdmin ? handleChangeAvatar : undefined}
         disabled={loading}
@@ -244,7 +246,7 @@ export default function MessageInfoScreen() {
         {currentAvatar ? (
           <Image source={{ uri: currentAvatar }} className="w-24 h-24 rounded-full" />
         ) : (
-          <View className="w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-900 justify-center items-center">
+          <View className={`w-24 h-24 rounded-full ${isDark ? 'bg-gray-900' : 'bg-gray-100'} justify-center items-center`}>
             <Ionicons
               name={isGroupChat ? "people" : "person"}
               size={48}
@@ -264,18 +266,18 @@ export default function MessageInfoScreen() {
         )}
       </TouchableOpacity>
 
-      <Text className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-        {conversationName || "Unnamed"}
+      <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>
+        {conversationName || t('message.info.unnamed')}
       </Text>
       
       {conversationType === "private" ? (
         <TouchableOpacity className="px-6 py-2 bg-orange-500 rounded-full">
-          <Text className="text-white text-sm font-semibold">Xem trang cá nhân</Text>
+          <Text className="text-white text-sm font-semibold">{t('message.info.viewProfile')}</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity onPress={() => setActiveTab("members")}>
-          <Text className="text-sm text-gray-500 dark:text-gray-400">
-            {members.length || participantCount} thành viên
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {members.length || participantCount} {t('message.members')}
           </Text>
         </TouchableOpacity>
       )}
@@ -285,28 +287,28 @@ export default function MessageInfoScreen() {
           className="items-center"
           onPress={() => setActiveTab("search")}
         >
-          <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-900 justify-center items-center mb-2">
+          <View className={`w-14 h-14 rounded-full ${isDark ? 'bg-gray-900' : 'bg-gray-100'} justify-center items-center mb-2`}>
             <Ionicons
               name="search"
               size={24}
               color={isDark ? "#F97316" : "#3B82F6"}
             />
           </View>
-          <Text className="text-xs text-gray-700 dark:text-gray-300 text-center">
-            Tìm kiếm
+          <Text className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'} text-center`}>
+            {t('message.info.search')}
           </Text>
         </TouchableOpacity>
         
         <TouchableOpacity className="items-center">
-          <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-900 justify-center items-center mb-2">
+          <View className={`w-14 h-14 rounded-full ${isDark ? 'bg-gray-900' : 'bg-gray-100'} justify-center items-center mb-2`}>
             <Ionicons
               name="notifications-off"
               size={24}
               color={isDark ? "#F97316" : "#3B82F6"}
             />
           </View>
-          <Text className="text-xs text-gray-700 dark:text-gray-300 text-center">
-            Tắt thông báo
+          <Text className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'} text-center`}>
+            {t('message.info.muteNotifications')}
           </Text>
         </TouchableOpacity>
         
@@ -315,15 +317,15 @@ export default function MessageInfoScreen() {
             className="items-center"
             onPress={handleAddMembers}
           >
-            <View className="w-14 h-14 rounded-full bg-gray-100 dark:bg-gray-900 justify-center items-center mb-2">
+            <View className={`w-14 h-14 rounded-full ${isDark ? 'bg-gray-900' : 'bg-gray-100'} justify-center items-center mb-2`}>
               <Ionicons
                 name="person-add"
                 size={24}
                 color={isDark ? "#F97316" : "#3B82F6"}
               />
             </View>
-            <Text className="text-xs text-gray-700 dark:text-gray-300 text-center">
-              Thêm thành viên
+            <Text className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-700'} text-center`}>
+              {t('message.info.addMembers')}
             </Text>
           </TouchableOpacity>
         )}
@@ -332,7 +334,7 @@ export default function MessageInfoScreen() {
   );
 
   const renderTabs = () => (
-    <View className="flex-row bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800">
+    <View className={`flex-row ${isDark ? 'bg-black border-b border-gray-800' : 'bg-white border-b border-gray-200'}`}>
       <TouchableOpacity
         className={`flex-1 py-4 items-center border-b-2 ${
           activeTab === "info" ? "border-orange-500" : "border-transparent"
@@ -343,10 +345,10 @@ export default function MessageInfoScreen() {
           className={`text-base font-medium ${
             activeTab === "info"
               ? "text-orange-500 font-semibold"
-              : "text-gray-500 dark:text-gray-400"
+              : isDark ? "text-gray-400" : "text-gray-500"
           }`}
         >
-          Thông tin
+          {t('message.info.tabInfo')}
         </Text>
       </TouchableOpacity>
 
@@ -361,10 +363,10 @@ export default function MessageInfoScreen() {
             className={`text-base font-medium ${
               activeTab === "members"
                 ? "text-orange-500 font-semibold"
-                : "text-gray-500 dark:text-gray-400"
+                : isDark ? "text-gray-400" : "text-gray-500"
             }`}
           >
-            Thành viên
+            {t('message.info.tabMembers')}
           </Text>
         </TouchableOpacity>
       )}
@@ -379,10 +381,10 @@ export default function MessageInfoScreen() {
           className={`text-base font-medium ${
             activeTab === "media"
               ? "text-orange-500 font-semibold"
-              : "text-gray-500 dark:text-gray-400"
+              : isDark ? "text-gray-400" : "text-gray-500"
           }`}
         >
-          Media
+          {t('message.info.tabMedia')}
         </Text>
       </TouchableOpacity>
 
@@ -396,10 +398,10 @@ export default function MessageInfoScreen() {
           className={`text-base font-medium ${
             activeTab === "search"
               ? "text-orange-500 font-semibold"
-              : "text-gray-500 dark:text-gray-400"
+              : isDark ? "text-gray-400" : "text-gray-500"
           }`}
         >
-          Tìm kiếm
+          {t('message.info.tabSearch')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -409,9 +411,9 @@ export default function MessageInfoScreen() {
     <ScrollView className="flex-1">
       {/* Thêm section mới cho cài đặt nhóm nếu là admin */}
       {isGroupChat && isAdmin && (
-        <View className="bg-white dark:bg-black mt-3 py-3">
+        <View className={`mt-3 py-3 ${isDark ? 'bg-black' : 'bg-white'}`}>
           <TouchableOpacity 
-            className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900"
+            className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}
             onPress={handleChangeAvatar}
             disabled={loading}
           >
@@ -420,8 +422,8 @@ export default function MessageInfoScreen() {
               size={24}
               color={isDark ? "#F97316" : "#3B82F6"}
             />
-            <Text className="flex-1 text-base text-gray-900 dark:text-white ml-4">
-              Đổi ảnh đại diện nhóm
+            <Text className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'} ml-4`}>
+              {t('message.info.changeGroupAvatar')}
             </Text>
             {loading ? (
               <ActivityIndicator size="small" color="#F97316" />
@@ -434,14 +436,14 @@ export default function MessageInfoScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+          <TouchableOpacity className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}>
             <Ionicons
               name="create"
               size={24}
               color={isDark ? "#F97316" : "#3B82F6"}
             />
-            <Text className="flex-1 text-base text-gray-900 dark:text-white ml-4">
-              Đổi tên nhóm
+            <Text className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'} ml-4`}>
+              {t('message.info.changeGroupName')}
             </Text>
             <Ionicons
               name="chevron-forward"
@@ -452,15 +454,15 @@ export default function MessageInfoScreen() {
         </View>
       )}
 
-      <View className="bg-white dark:bg-black mt-3 py-3">
-        <TouchableOpacity className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+      <View className={`mt-3 py-3 ${isDark ? 'bg-black' : 'bg-white'}`}>
+        <TouchableOpacity className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}>
           <Ionicons
             name="notifications"
             size={24}
             color={isDark ? "#F97316" : "#3B82F6"}
           />
-          <Text className="flex-1 text-base text-gray-900 dark:text-white ml-4">
-            Thông báo
+          <Text className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'} ml-4`}>
+            {t('message.info.notifications')}
           </Text>
           <Ionicons
             name="chevron-forward"
@@ -469,14 +471,14 @@ export default function MessageInfoScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+        <TouchableOpacity className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}>
           <Ionicons
             name="pin"
             size={24}
             color={isDark ? "#F97316" : "#3B82F6"}
           />
-          <Text className="flex-1 text-base text-gray-900 dark:text-white ml-4">
-            Ghim
+          <Text className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'} ml-4`}>
+            {t('message.info.pin')}
           </Text>
           <Ionicons
             name="chevron-forward"
@@ -485,14 +487,14 @@ export default function MessageInfoScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+        <TouchableOpacity className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}>
           <Ionicons
             name="share-social"
             size={24}
             color={isDark ? "#F97316" : "#3B82F6"}
           />
-          <Text className="flex-1 text-base text-gray-900 dark:text-white ml-4">
-            Chia sẻ thông tin liên hệ
+          <Text className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'} ml-4`}>
+            {t('message.info.shareContact')}
           </Text>
           <Ionicons
             name="chevron-forward"
@@ -502,16 +504,16 @@ export default function MessageInfoScreen() {
         </TouchableOpacity>
       </View>
 
-      <View className="bg-white dark:bg-black mt-3 py-3">
+      <View className={`mt-3 py-3 ${isDark ? 'bg-black' : 'bg-white'}`}>
         {conversationType === "private" ? (
           <TouchableOpacity
-            className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900"
+            className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}
             onPress={handleDeleteConversation}
             disabled={loading}
           >
             <Ionicons name="trash" size={24} color="#EF4444" />
             <Text className="flex-1 text-base text-red-500 ml-4">
-              Xóa đoạn hội thoại
+              {t('message.actions.deleteConversation')}
             </Text>
             <Ionicons
               name="chevron-forward"
@@ -522,13 +524,13 @@ export default function MessageInfoScreen() {
         ) : (
           <>
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900"
+              className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}
               onPress={handleLeaveGroup}
               disabled={loading}
             >
               <Ionicons name="exit" size={24} color="#EF4444" />
               <Text className="flex-1 text-base text-red-500 ml-4">
-                Rời khỏi nhóm
+                {t('message.actions.leaveGroup')}
               </Text>
               <Ionicons
                 name="chevron-forward"
@@ -537,13 +539,13 @@ export default function MessageInfoScreen() {
               />
             </TouchableOpacity>
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900"
+              className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}
               onPress={handleDeleteConversation}
               disabled={loading}
             >
               <Ionicons name="trash" size={24} color="#EF4444" />
               <Text className="flex-1 text-base text-red-500 ml-4">
-                Xóa đoạn hội thoại
+                {t('message.actions.deleteConversation')}
               </Text>
               <Ionicons
                 name="chevron-forward"
@@ -554,9 +556,9 @@ export default function MessageInfoScreen() {
           </>
         )}
 
-        <TouchableOpacity className="flex-row items-center px-4 py-3.5 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+        <TouchableOpacity className={`flex-row items-center px-4 py-3.5 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}>
           <Ionicons name="ban" size={24} color="#EF4444" />
-          <Text className="flex-1 text-base text-red-500 ml-4">Chặn</Text>
+          <Text className="flex-1 text-base text-red-500 ml-4">{t('message.info.block')}</Text>
           <Ionicons
             name="chevron-forward"
             size={20}
@@ -572,8 +574,8 @@ export default function MessageInfoScreen() {
       return (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#F97316" />
-          <Text className="text-gray-500 dark:text-gray-400 mt-4">
-            Đang tải danh sách thành viên...
+          <Text className={`text-gray-500 ${isDark ? 'text-gray-400' : ''} mt-4`}>
+            {t('message.info.loadingMembers')}
           </Text>
         </View>
       );
@@ -586,7 +588,7 @@ export default function MessageInfoScreen() {
         contentContainerClassName="py-2"
         renderItem={({ item }) => (
           <TouchableOpacity
-            className="flex-row items-center px-4 py-3 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900"
+            className={`flex-row items-center px-4 py-3 ${isDark ? 'bg-black border-b border-gray-900' : 'bg-white border-b border-gray-100'}`}
             onPress={() => {
               if (isAdmin && !item.isCurrentUser) {
                 setSelectedMember(item);
@@ -601,7 +603,7 @@ export default function MessageInfoScreen() {
                   className="w-12 h-12 rounded-full"
                 />
               ) : (
-                <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-800 justify-center items-center">
+                <View className={`w-12 h-12 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-200'} justify-center items-center`}>
                   <Ionicons name="person" size={24} color={isDark ? "#9CA3AF" : "#6B7280"} />
                 </View>
               )}
@@ -612,26 +614,26 @@ export default function MessageInfoScreen() {
 
             <View className="flex-1 ml-3">
               <View className="flex-row items-center">
-                <Text className="text-base font-semibold text-gray-900 dark:text-white">
+                <Text className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {item.full_name}
                 </Text>
                 {item.isAdmin && (
-                  <View className="ml-2 px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 rounded">
-                    <Text className="text-xs text-orange-600 dark:text-orange-400 font-medium">
-                      Admin
+                  <View className={`ml-2 px-2 py-0.5 rounded ${isDark ? 'bg-orange-900/30' : 'bg-orange-100'}`}>
+                    <Text className={`text-xs font-medium ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
+                      {t('message.info.admin')}
                     </Text>
                   </View>
                 )}
                 {item.isCurrentUser && (
-                  <View className="ml-2 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 rounded">
-                    <Text className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                      Bạn
+                  <View className={`ml-2 px-2 py-0.5 rounded ${isDark ? 'bg-blue-900/30' : 'bg-blue-100'}`}>
+                    <Text className={`text-xs font-medium ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
+                      {t('message.info.you')}
                     </Text>
                   </View>
                 )}
               </View>
-              <Text className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                @{item.username} • {item.messageCount} tin nhắn
+              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>
+                @{item.username} • {item.messageCount} {t('message.info.messages')}
               </Text>
             </View>
 
@@ -647,14 +649,14 @@ export default function MessageInfoScreen() {
         ListHeaderComponent={
           isAdmin ? (
             <TouchableOpacity
-              className="flex-row items-center px-4 py-3 bg-orange-50 dark:bg-orange-900/20 border-b border-orange-100 dark:border-orange-900"
+              className={`flex-row items-center px-4 py-3 border-b ${isDark ? 'bg-orange-900/20 border-orange-900' : 'bg-orange-50 border-orange-100'}`}
               onPress={handleAddMembers}
             >
               <View className="w-12 h-12 rounded-full bg-orange-500 justify-center items-center">
                 <Ionicons name="person-add" size={24} color="white" />
               </View>
-              <Text className="flex-1 ml-3 text-base font-semibold text-orange-600 dark:text-orange-400">
-                Thêm thành viên
+              <Text className={`flex-1 ml-3 text-base font-semibold ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
+                {t('message.info.addMembers')}
               </Text>
             </TouchableOpacity>
           ) : null
@@ -665,12 +667,12 @@ export default function MessageInfoScreen() {
 
   const renderMediaTab = () => (
     <View className="flex-1">
-      <View className="flex-row px-4 py-3 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-800">
+      <View className={`flex-row px-4 py-3 ${isDark ? 'bg-black border-b border-gray-800' : 'bg-white border-b border-gray-200'}`}>
         {(["image", "video", "file", "audio"] as MediaType[]).map((type) => (
           <TouchableOpacity
             key={type}
             className={`px-4 py-2 mr-2 rounded-full ${
-              mediaType === type ? "bg-orange-500" : "bg-gray-100 dark:bg-gray-900"
+              mediaType === type ? "bg-orange-500" : isDark ? "bg-gray-900" : "bg-gray-100"
             }`}
             onPress={() => setMediaType(type)}
           >
@@ -678,13 +680,10 @@ export default function MessageInfoScreen() {
               className={`text-sm font-medium ${
                 mediaType === type
                   ? "text-white"
-                  : "text-gray-700 dark:text-gray-300"
+                  : isDark ? "text-gray-300" : "text-gray-700"
               }`}
             >
-              {type === "image" && "Ảnh"}
-              {type === "video" && "Video"}
-              {type === "file" && "Tệp"}
-              {type === "audio" && "Âm thanh"}
+              {t(`message.info.media.${type}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -712,9 +711,9 @@ export default function MessageInfoScreen() {
         activeOpacity={1}
         onPress={() => setShowMemberMenu(false)}
       >
-        <View className="bg-white dark:bg-gray-900 rounded-t-3xl">
-          <View className="items-center py-4 border-b border-gray-200 dark:border-gray-800">
-            <View className="w-12 h-1 bg-gray-300 dark:bg-gray-700 rounded-full mb-3" />
+        <View className={`${isDark ? 'bg-gray-900' : 'bg-white'} rounded-t-3xl`}>
+          <View className={`items-center py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+            <View className={`w-12 h-1 ${isDark ? 'bg-gray-700' : 'bg-gray-300'} rounded-full mb-3`} />
             {selectedMember && (
               <>
                 {selectedMember.avatar ? (
@@ -723,14 +722,14 @@ export default function MessageInfoScreen() {
                     className="w-16 h-16 rounded-full mb-2"
                   />
                 ) : (
-                  <View className="w-16 h-16 rounded-full bg-gray-200 dark:bg-gray-800 justify-center items-center mb-2">
+                  <View className={`w-16 h-16 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-200'} justify-center items-center mb-2`}>
                     <Ionicons name="person" size={32} color={isDark ? "#9CA3AF" : "#6B7280"} />
                   </View>
                 )}
-                <Text className="text-lg font-bold text-gray-900 dark:text-white">
+                <Text className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {selectedMember.full_name}
                 </Text>
-                <Text className="text-sm text-gray-500 dark:text-gray-400">
+                <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                   @{selectedMember.username}
                 </Text>
               </>
@@ -740,21 +739,21 @@ export default function MessageInfoScreen() {
           <View className="py-2">
             {selectedMember && !selectedMember.isAdmin && (
               <TouchableOpacity
-                className="flex-row items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800"
+                className={`flex-row items-center px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}
                 onPress={() => {
                   setShowMemberMenu(false);
                   handleTransferAdmin(selectedMember);
                 }}
               >
                 <Ionicons name="shield-checkmark" size={24} color="#3B82F6" />
-                <Text className="flex-1 ml-4 text-base text-gray-900 dark:text-white">
-                  Chuyển quyền quản trị viên
+                <Text className={`flex-1 ml-4 text-base ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {t('message.actions.transferAdmin')}
                 </Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              className="flex-row items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800"
+              className={`flex-row items-center px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}
               onPress={() => {
                 setShowMemberMenu(false);
                 if (selectedMember) {
@@ -764,17 +763,17 @@ export default function MessageInfoScreen() {
             >
               <Ionicons name="person-remove" size={24} color="#EF4444" />
               <Text className="flex-1 ml-4 text-base text-red-500">
-                Xóa khỏi nhóm
+                {t('message.actions.removeFromGroup')}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              className="flex-row items-center px-6 py-4"
+              className={`flex-row items-center px-6 py-4 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}
               onPress={() => setShowMemberMenu(false)}
             >
               <Ionicons name="close-circle" size={24} color={isDark ? "#9CA3AF" : "#6B7280"} />
-              <Text className="flex-1 ml-4 text-base text-gray-700 dark:text-gray-300">
-                Hủy
+              <Text className={`flex-1 ml-4 text-base ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                {t('cancel')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -784,7 +783,7 @@ export default function MessageInfoScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
       {renderHeader()}
       {renderProfileSection()}
       {renderTabs()}
