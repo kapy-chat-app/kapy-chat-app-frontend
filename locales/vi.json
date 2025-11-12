@@ -1,0 +1,598 @@
+{
+  "home": "Trang chủ",
+  "settings": "Cài đặt",
+  "welcome": "Chào mừng",
+  "greeting": "Xin chào, {{name}}!",
+  "language": "Ngôn ngữ",
+  "selectLanguage": "Chọn ngôn ngữ",
+  "save": "Lưu",
+  "cancel": "Hủy",
+  "changeLanguage": "Đổi ngôn ngữ",
+  "currentLanguage": "Ngôn ngữ hiện tại",
+  "next": "Tiếp theo",
+  "skip": "Bỏ qua",
+  "getStarted": "Bắt đầu",
+  "onboarding": {
+    "selectLanguage": "Chọn Ngôn Ngữ",
+    "languageDescription": "Chọn ngôn ngữ bạn muốn sử dụng",
+    "slide1Title": "Chào mừng đến với Ứng dụng",
+    "slide1Description": "Khám phá các tính năng tuyệt vời và trải nghiệm mượt mà",
+    "slide2Title": "Kết Nối Liên Tục",
+    "slide2Description": "Kết nối với bạn bè và chia sẻ khoảnh khắc",
+    "slide3Title": "Bắt Đầu Ngay",
+    "slide3Description": "Tham gia với chúng tôi và khám phá mọi thứ"
+  },
+  "settingsScreen": {
+    "account": {
+      "title": "Tài khoản",
+      "security": {
+        "title": "Bảo mật",
+        "subtitle": "Mật khẩu, 2FA"
+      },
+      "privacy": {
+        "title": "Quyền riêng tư",
+        "subtitle": "Tài khoản bị chặn, hiển thị"
+      }
+    },
+    "preferences": {
+      "title": "Tùy chọn",
+      "appearance": {
+        "title": "Giao diện",
+        "subtitle": "Chủ đề, chế độ tối"
+      },
+      "language": {
+        "title": "Ngôn ngữ",
+        "subtitle": "Ngôn ngữ ứng dụng"
+      }
+    },
+    "data": {
+      "title": "Dữ liệu",
+      "storage": {
+        "title": "Lưu trữ",
+        "subtitle": "Quản lý dữ liệu ứng dụng"
+      },
+      "devices": {
+        "title": "Thiết bị",
+        "subtitle": "Phiên hoạt động"
+      }
+    },
+    "profile": {
+      "loading": "Đang tải...",
+      "viewAndEdit": "Xem và chỉnh sửa hồ sơ"
+    },
+    "signOut": {
+      "title": "Đăng xuất",
+      "message": "Bạn có chắc chắn muốn đăng xuất không?",
+      "confirm": "Đăng xuất"
+    }
+  },
+  "appearance": {
+    "light": {
+      "title": "Sáng",
+      "description": "Sử dụng chế độ sáng"
+    },
+    "dark": {
+      "title": "Tối",
+      "description": "Sử dụng chế độ tối"
+    },
+    "system": {
+      "title": "Hệ thống",
+      "description": "Theo cài đặt thiết bị"
+    },
+    "currentTheme": {
+      "title": "Chủ đề hiện tại",
+      "followingDevice": "Đang theo cài đặt thiết bị của bạn",
+      "usingMode": "Đang dùng chế độ {{mode}}"
+    },
+    "chooseTheme": "CHỌN CHỦ ĐỀ",
+    "info": "Chế độ hệ thống sẽ tự động chuyển đổi giữa sáng và tối dựa trên cài đặt thiết bị của bạn."
+  },
+  "languageScreen": {
+    "currentLanguage": {
+      "title": "Ngôn ngữ hiện tại",
+      "description": "Giao diện ứng dụng sẽ được hiển thị bằng ngôn ngữ này"
+    },
+    "availableLanguages": "NGÔN NGỮ KHẢ DỤNG",
+    "info": "Thay đổi ngôn ngữ sẽ cập nhật tất cả văn bản trong ứng dụng ngay lập tức. Tùy chọn của bạn sẽ được lưu."
+  },
+  "sidebar": {
+    "menu": "Menu",
+    "user": "Người dùng",
+    "conversations": "Trò chuyện",
+    "contacts": "Danh bạ",
+    "discover": "Khám phá",
+    "blockedUsers": "Người dùng đã chặn",
+    "helpSupport": "Trợ giúp & Hỗ trợ",
+    "about": "Giới thiệu"
+  },
+  "loading": "Đang tải...",
+  "success": "Thành công",
+  "error": "Lỗi",
+  "ok": "OK",
+  "camera": "Máy ảnh",
+  "gallery": "Thư viện",
+  "saving": "Đang lưu...",
+  "profile": {
+    "screen": {
+      "title": "Hồ sơ"
+    },
+    "sections": {
+      "general": "Chung",
+      "contact": "Liên hệ",
+      "personal": "Cá nhân",
+      "preferences": "Tùy chọn",
+      "account": "Thông tin tài khoản"
+    },
+    "labels": {
+      "fullName": "Họ và tên",
+      "username": "Tên người dùng",
+      "bio": "Tiểu sử",
+      "bioEmpty": "Chưa có tiểu sử",
+      "gender": "Giới tính",
+      "birthday": "Ngày sinh",
+      "phone": "Điện thoại",
+      "email": "Email",
+      "location": "Vị trí",
+      "website": "Trang web",
+      "status": "Trạng thái",
+      "active": "Hoạt động",
+      "theme": "Chủ đề",
+      "joined": "Tham gia",
+      "verified": "Đã xác thực",
+      "verifiedStatus": {
+        "yes": "Đã xác thực",
+        "no": "Chưa xác thực"
+      },
+      "notSet": "Chưa đặt"
+    },
+    "edit": {
+      "imagePicker": {
+        "title": "Ảnh đại diện",
+        "message": "Chọn tùy chọn"
+      },
+      "removePhoto": "Xóa ảnh",
+      "permission": {
+        "title": "Cần quyền truy cập",
+        "message": "Vui lòng cấp quyền để truy cập {{source}} của bạn"
+      },
+      "imageUpdated": "Cập nhật ảnh đại diện thành công",
+      "imageUpdateFailed": "Cập nhật ảnh đại diện thất bại",
+      "imagePickFailed": "Chọn ảnh thất bại",
+      "imageRemoved": "Xóa ảnh đại diện thành công",
+      "imageRemoveFailed": "Xóa ảnh đại diện thất bại",
+      "title": "Chỉnh sửa hồ sơ",
+      "sections": {
+        "basic": "Thông tin cơ bản",
+        "contact": "Thông tin liên hệ",
+        "personal": "Thông tin cá nhân"
+      },
+      "placeholders": {
+        "fullName": "Nhập họ và tên",
+        "username": "Nhập tên người dùng",
+        "bio": "Kể về bản thân...",
+        "phone": "Nhập số điện thoại",
+        "location": "Nhập vị trí",
+        "website": "Nhập URL trang web",
+        "gender": "Chọn giới tính",
+        "birthday": "Chọn ngày sinh",
+        "status": "Chọn trạng thái hiện tại"
+      },
+      "validation": {
+        "title": "Lỗi xác thực",
+        "message": "Vui lòng sửa lỗi trước khi lưu"
+      },
+      "updateSuccess": "Cập nhật hồ sơ thành công",
+      "updateFailed": "Cập nhật hồ sơ thất bại",
+      "unexpectedError": "Đã xảy ra lỗi không mong muốn",
+      "saveChanges": "Lưu thay đổi",
+      "saving": "Đang lưu hồ sơ..."
+    }
+  },
+  "tabs": {
+    "home": "Trang chủ",
+    "conversations": "Trò chuyện",
+    "contacts": "Danh bạ",
+    "emotion": "Cảm xúc",
+    "ai": "AI",
+    "setting": "Cài đặt"
+  },
+  "friends": {
+    "title": "Bạn bè",
+    "searchPlaceholder": "Tìm kiếm bạn bè...",
+    "searching": "Đang tìm kiếm...",
+    "noUsersFound": "Không tìm thấy người dùng",
+    "requests": {
+      "title": "Yêu cầu kết bạn",
+      "all": "Tất cả yêu cầu",
+      "accepted": "Đã chấp nhận yêu cầu kết bạn!",
+      "acceptFailed": "Không thể chấp nhận yêu cầu",
+      "declineTitle": "Từ chối yêu cầu",
+      "declineMessage": "Bạn có chắc chắn muốn từ chối yêu cầu kết bạn này không?",
+      "decline": "Từ chối",
+      "declineFailed": "Không thể từ chối yêu cầu"
+    },
+    "myFriends": "Bạn bè của tôi ({{count}})",
+    "seeAll": "Xem tất cả",
+    "addFriend": "Thêm bạn bè",
+    "sent": "Đã gửi",
+    "friends": "Bạn bè",
+    "unknownError": "Lỗi không xác định",
+    "menu": {
+      "title": "Chọn hành động",
+      "viewProfile": "Xem hồ sơ",
+      "message": "Gửi tin nhắn",
+      "unfriend": "Hủy kết bạn",
+      "block": "Chặn người dùng"
+    },
+    "blocked": {
+      "title": "Bỏ chặn người dùng",
+      "confirm": "Bạn có chắc chắn muốn bỏ chặn {{name}} không?",
+      "cancel": "Hủy",
+      "unblock": "Bỏ chặn",
+      "on": "Đã chặn vào {{date}}",
+      "reason": "Lý do: {{reason}}"
+    },
+    "request": {
+      "message": "Muốn kết bạn với bạn",
+      "accept": "Chấp nhận",
+      "decline": "Từ chối"
+    },
+    "labels": {
+      "mutual": "{{count}} bạn chung"
+    }
+  },
+  "blockedUsers": {
+    "title": "Người dùng đã chặn",
+    "empty": "Không có người dùng bị chặn",
+    "emptyDescription": "Bạn chưa chặn ai",
+    "unblockSuccess": "Đã bỏ chặn người dùng thành công",
+    "unblockFailed": "Không thể bỏ chặn người dùng"
+  },
+  "publicProfile": {
+    "title": "Hồ sơ",
+    "loading": "Đang tải hồ sơ...",
+    "notFound": "Không tìm thấy hồ sơ",
+    "notFoundDescription": "Không thể tải hồ sơ người dùng",
+    "tryAgain": "Thử lại",
+    "information": "Thông tin",
+    "location": "Vị trí",
+    "website": "Trang web",
+    "status": "Trạng thái",
+    "friends": "Bạn bè",
+    "mutual": "Bạn chung",
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến",
+    "recentlyOnline": "Vừa trực tuyến",
+    "hoursAgo": "{{hours}} giờ trước",
+    "daysAgo": "{{days}} ngày trước",
+    "blocked": {
+      "title": "Người dùng này đã bị chặn",
+      "message": "Bạn đã chặn người dùng này và không thể xem hồ sơ của họ"
+    },
+    "private": {
+      "title": "Hồ sơ này ở chế độ riêng tư",
+      "message": "Gửi yêu cầu kết bạn để xem thêm chi tiết"
+    },
+    "actions": {
+      "addFriend": "Thêm bạn bè",
+      "message": "Nhắn tin",
+      "requestSent": "Đã gửi yêu cầu",
+      "shareProfile": "Chia sẻ hồ sơ",
+      "reportUser": "Báo cáo người dùng",
+      "blockUser": "Chặn người dùng",
+      "acceptRequest": "Chấp nhận yêu cầu",
+      "declineRequest": "Từ chối yêu cầu"
+    },
+    "block": {
+      "confirmTitle": "Chặn người dùng",
+      "confirmMessage": "Bạn có chắc chắn muốn chặn {{name}} không? Họ sẽ không thể liên hệ với bạn hoặc xem hồ sơ của bạn.",
+      "reasonTitle": "Lý do chặn (Tùy chọn)",
+      "reasonDescription": "Tại sao bạn chặn người dùng này? Điều này sẽ giúp chúng tôi cải thiện nền tảng.",
+      "reasonPlaceholder": "Nhập lý do (tùy chọn)...",
+      "blocking": "Đang chặn...",
+      "skip": "Bỏ qua",
+      "block": "Chặn",
+      "success": "Đã chặn người dùng thành công",
+      "failed": "Không thể chặn người dùng",
+      "unexpectedError": "Đã xảy ra lỗi không mong muốn khi chặn người dùng"
+    },
+    "friendRequest": {
+      "success": "Đã gửi yêu cầu kết bạn thành công",
+      "failed": "Không thể gửi yêu cầu kết bạn",
+      "accepted": "Đã chấp nhận yêu cầu kết bạn",
+      "acceptFailed": "Không thể chấp nhận yêu cầu",
+      "declineInfo": "Chức năng từ chối chưa được triển khai"
+    },
+    "share": {
+      "info": "Chức năng chia sẻ chưa được triển khai"
+    },
+    "report": {
+      "success": "Đã báo cáo người dùng thành công"
+    }
+  },
+  "emotion": {
+    "title": "Cảm xúc của tôi",
+    "tabs": {
+      "history": "Lịch sử",
+      "stats": "Thống kê"
+    },
+    "empty": "Chưa có dữ liệu cảm xúc",
+    "delete": {
+      "confirmTitle": "Xác nhận xóa",
+      "confirmMessage": "Bạn có chắc chắn muốn xóa phân tích cảm xúc này?",
+      "success": "Đã xóa phân tích cảm xúc",
+      "failed": "Không thể xóa"
+    },
+    "tryAgain": "Thử lại",
+    "filter": {
+      "title": "Bộ lọc",
+      "context": "Ngữ cảnh",
+      "timeRange": "Khoảng thời gian",
+      "clear": "Xóa bộ lọc",
+      "apply": "Áp dụng",
+      "days": "{{count}} ngày"
+    },
+    "contexts": {
+      "message": "Tin nhắn",
+      "voice_note": "Ghi âm",
+      "call": "Cuộc gọi",
+      "general": "Chung"
+    },
+    "emotions": {
+      "joy": "Vui vẻ",
+      "sadness": "Buồn bã",
+      "anger": "Giận dữ",
+      "fear": "Sợ hãi",
+      "surprise": "Ngạc nhiên",
+      "love": "Yêu thương",
+      "neutral": "Trung lập"
+    },
+    "stats": {
+      "overview": "Tổng quan",
+      "analyses": "Phân tích",
+      "dominantEmotion": "Cảm xúc chủ đạo",
+      "distribution": "Phân bố cảm xúc",
+      "averageScores": "Điểm trung bình",
+      "byContext": "Theo ngữ cảnh",
+      "confidence": "{{percent}}% độ tin cậy"
+    }
+  },
+
+  "aiChat": {
+    "title": "Trợ lý AI",
+    "placeholder": "Chia sẻ suy nghĩ của bạn...",
+    "typing": "AI đang trả lời",
+    "suggestions": {
+      "title": "Gợi ý AI cho bạn",
+      "showSuggestions": "Hiện gợi ý",
+      "startWith": "Bắt đầu với các chủ đề:",
+      "count": "{{count}} gợi ý"
+    },
+    "empty": {
+      "title": "Trợ Lý Sức Khỏe AI",
+      "subtitle": "Tôi ở đây để hỗ trợ sức khỏe tinh thần của bạn.\nHãy chia sẻ cảm xúc của bạn!",
+      "emotionStatus": "Bạn đang {{emotion}}",
+      "confidence": "{{percent}}% độ tin cậy"
+    },
+    "emotions": {
+      "joy": "vui vẻ",
+      "sadness": "buồn bã",
+      "anger": "giận dữ",
+      "fear": "sợ hãi",
+      "surprise": "ngạc nhiên",
+      "neutral": "bình thường"
+    },
+    "welcome": {
+      "intro": "Dựa trên cảm xúc của bạn, tôi có một số gợi ý:",
+      "question": "Bạn muốn trao đổi về điều gì?"
+    },
+    "refresh": "Làm mới",
+    "send": "Gửi"
+  },
+  "conversations": {
+    "title": "Trò chuyện",
+    "searchPlaceholder": "Tìm kiếm cuộc trò chuyện...",
+    "empty": {
+      "title": "Chưa có cuộc trò chuyện",
+      "subtitle": "Bắt đầu cuộc trò chuyện với bạn bè",
+      "startChatting": "Bắt đầu trò chuyện"
+    },
+    "error": {
+      "tryAgain": "Thử lại"
+    },
+    "newConversation": "Cuộc trò chuyện mới",
+    "ai": {
+      "badge": "{{count}} gợi ý",
+      "recommendations": "Gợi ý AI"
+    },
+    "floating": {
+      "sadness": "Bạn có vẻ {{intensity}} buồn, tôi có vài lời khuyên cho bạn.",
+      "anger": "Bạn có vẻ {{intensity}} bực bội, hãy để tôi giúp bạn nhé.",
+      "fear": "Bạn đang {{intensity}} lo lắng? Tôi có thể hỗ trợ bạn.",
+      "joy": "Thật vui khi thấy bạn {{intensity}} vui! Hãy chia sẻ thêm nhé.",
+      "surprise": "Có điều gì bất ngờ? Tôi có vài gợi ý cho bạn.",
+      "neutral": "Tôi có {{count}} gợi ý AI cho bạn.",
+      "intensity": {
+        "very": "rất",
+        "somewhat": "hơi",
+        "": ""
+      },
+      "suggestions": "{{count}} gợi ý",
+      "tapToView": "Nhấn để xem chi tiết"
+    },
+    "messageTypes": {
+      "noMessages": "Chưa có tin nhắn",
+      "image": "📷 Hình ảnh",
+      "file": "📎 Tệp tin",
+      "audio": "🎵 Âm thanh",
+      "video": "🎥 Video",
+      "voiceNote": "🎤 Tin nhắn thoại",
+      "location": "📍 Vị trí",
+      "message": "Tin nhắn"
+    },
+    "createModal": {
+      "title": "Cuộc trò chuyện mới",
+      "cancel": "Hủy",
+      "create": "Tạo",
+      "creating": "Đang tạo...",
+      "selected": "Đã chọn",
+      "groupName": "Tên nhóm (bắt buộc)",
+      "groupDescription": "Mô tả nhóm (tùy chọn)",
+      "searchPlaceholder": "Tìm kiếm bạn bè...",
+      "loading": "Đang tải bạn bè...",
+      "noFriends": "Chưa có bạn bè",
+      "noFriendsSubtitle": "Thêm bạn bè để bắt đầu trò chuyện",
+      "noResults": "Không tìm thấy bạn bè",
+      "noResultsSubtitle": "Thử tìm kiếm khác",
+      "retry": "Thử lại",
+      "errors": {
+        "selectFriend": "Vui lòng chọn ít nhất một bạn bè",
+        "groupName": "Vui lòng nhập tên nhóm",
+        "createFailed": "Không thể tạo cuộc trò chuyện. Vui lòng thử lại."
+      }
+    }
+  },
+  "message": {
+    "title": "Tin nhắn",
+    "loading": "Đang tải tin nhắn...",
+    "sending": "Đang gửi...",
+    "failed": "Gửi thất bại",
+    "typing": "đang nhập...",
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến",
+    "justNow": "Vừa xong",
+    "minutesAgo": "{{minutes}} phút trước",
+    "hoursAgo": "{{hours}} giờ trước",
+    "daysAgo": "{{days}} ngày trước",
+    "members": "{{count}} thành viên",
+    "encryption": {
+      "initializing": "🔐 Đang khởi tạo mã hóa...",
+      "enabled": "✅ Đã bật mã hóa đầu cuối",
+      "notReady": "Mã hóa chưa sẵn sàng",
+      "waitMessage": "Vui lòng đợi mã hóa khởi tạo trước khi gửi tin nhắn.",
+      "retryDecryption": "Thử giải mã lại",
+      "retryTitle": "Thử giải mã lại",
+      "retryMessage": "Bạn có muốn thử giải mã tin nhắn này lại không?",
+      "retrySuccess": "Đã giải mã tin nhắn thành công!",
+      "retryFailed": "Vẫn không thể giải mã tin nhắn này. Người gửi có thể cần gửi lại.",
+      "fileDecryptionError": "🔒 Không thể giải mã một số tệp đính kèm",
+      "encryptingFiles": "🔒 Đang mã hóa và tải lên tệp..."
+    },
+    "empty": {
+      "title": "Chưa có tin nhắn",
+      "subtitle": "Gửi tin nhắn mã hóa đầu tiên để bắt đầu cuộc trò chuyện"
+    },
+    "input": {
+      "placeholder": "Nhập tin nhắn...",
+      "recording": "Đang ghi âm...",
+      "uploading": "Đang tải lên tệp..."
+    },
+    "reply": {
+      "replyingTo": "Trả lời {{name}}",
+      "cancel": "Hủy"
+    },
+    "actions": {
+      "reply": "Trả lời",
+      "react": "Phản ứng",
+      "delete": "Xóa",
+      "edit": "Chỉnh sửa",
+      "viewReads": "Xem đã đọc",
+      "deleteTitle": "Xóa tin nhắn",
+      "deleteMessage": "Chọn cách xóa:",
+      "deleteForMe": "Xóa ở phía tôi",
+      "deleteForEveryone": "Xóa ở mọi người",
+      "deleteTitle": "Xóa cuộc trò chuyện",
+      "deleteMessage": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tin nhắn chỉ bị xóa ở phía bạn.",
+      "leaveGroup": "Rời nhóm",
+      "leaveGroupConfirm": "Bạn có chắc chắn muốn rời khỏi nhóm này?",
+      "leaveGroupSuccess": "Đã rời khỏi nhóm thành công",
+      "removeMember": "Xóa thành viên",
+      "removeMemberConfirm": "Bạn có chắc chắn muốn xóa {{name}} khỏi nhóm?",
+      "remove": "Xóa",
+      "removeSuccess": "Đã xóa thành viên thành công",
+      "transferAdmin": "Chuyển quyền quản trị",
+      "transferAdminConfirm": "Bạn có chắc chắn muốn chuyển quyền quản trị cho {{name}}?",
+      "transfer": "Chuyển",
+      "transferSuccess": "Đã chuyển quyền quản trị thành công",
+      "deleteConversation": "Xóa cuộc trò chuyện",
+      "removeFromGroup": "Xóa khỏi nhóm"
+    },
+    "edited": "đã chỉnh sửa",
+    "readBy": "Đã đọc bởi {{count}}",
+    "call": {
+      "video": {
+        "title": "Bắt đầu cuộc gọi video",
+        "groupMessage": "Bạn có muốn bắt đầu cuộc gọi video trong {{name}}?",
+        "privateMessage": "Bạn có muốn bắt đầu cuộc gọi video với {{name}}?",
+        "failed": "Không thể bắt đầu cuộc gọi video"
+      },
+      "audio": {
+        "title": "Bắt đầu cuộc gọi thoại",
+        "groupMessage": "Bạn có muốn bắt đầu cuộc gọi thoại trong {{name}}?",
+        "privateMessage": "Bạn có muốn bắt đầu cuộc gọi thoại với {{name}}?",
+        "failed": "Không thể bắt đầu cuộc gọi thoại"
+      },
+      "start": "Bắt đầu",
+      "cancel": "Hủy"
+    },
+    "attachment": {
+      "camera": "Máy ảnh",
+      "takePhoto": "Chụp ảnh",
+      "recordVideo": "Quay video",
+      "permissionRequired": "Cần quyền truy cập",
+      "cameraPermission": "Cần quyền truy cập máy ảnh!",
+      "micPermission": "Cần quyền truy cập microphone!",
+      "mediaPermission": "Cần quyền truy cập thư viện ảnh!",
+      "pickFailed": "Không thể chọn tệp",
+      "recordingError": "Lỗi ghi âm",
+      "recordingFailed": "Không thể bắt đầu ghi âm. Vui lòng kiểm tra quyền microphone trong cài đặt thiết bị."
+    },
+    "info": {
+      "title": "Thông tin",
+      "unnamed": "Không tên",
+      "viewProfile": "Xem trang cá nhân",
+      "search": "Tìm kiếm",
+      "muteNotifications": "Tắt thông báo",
+      "addMembers": "Thêm thành viên",
+      "tabInfo": "Thông tin",
+      "tabMembers": "Thành viên",
+      "tabMedia": "Media",
+      "tabSearch": "Tìm kiếm",
+      "changeGroupAvatar": "Đổi ảnh đại diện nhóm",
+      "changeGroupName": "Đổi tên nhóm",
+      "notifications": "Thông báo",
+      "pin": "Ghim",
+      "shareContact": "Chia sẻ thông tin liên hệ",
+      "loadingMembers": "Đang tải danh sách thành viên...",
+      "admin": "Quản trị",
+      "you": "Bạn",
+      "messages": "tin nhắn",
+      "media": {
+        "image": "Ảnh",
+        "video": "Video",
+        "file": "Tệp",
+        "audio": "Âm thanh"
+      },
+      "noMedia": "Không có {{type}} nào",
+      "searchPlaceholder": "Nhập từ khóa để tìm kiếm tin nhắn",
+      "noResults": "Không tìm thấy kết quả",
+      "searchMessages": "Tìm kiếm tin nhắn..."
+    },
+    "addMembers": {
+      "title": "Thêm thành viên",
+      "add": "Thêm",
+      "selected": "Đã chọn {{count}} người",
+      "searchPlaceholder": "Tìm kiếm bạn bè",
+      "loading": "Đang tải danh sách...",
+      "alreadyInGroup": "Đã trong nhóm",
+      "noFriendsFound": "Không tìm thấy bạn bè nào",
+      "allInGroup": "Tất cả bạn bè đã có trong nhóm",
+      "success": "Đã thêm thành viên vào nhóm",
+      "error": "Đã xảy ra lỗi khi thêm thành viên"
+    }
+  },
+  "homeScreen": {
+    "title": "Màn hình chính",
+    "welcome": "Chào mừng đến trang chủ của bạn"
+  }
+}
