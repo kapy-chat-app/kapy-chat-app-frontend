@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Text, TouchableOpacity, useColorScheme, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface HeaderProps {
   title: string;
@@ -17,10 +18,15 @@ const Header: React.FC<HeaderProps> = ({
   rightComponent,
   onMenuPress,
 }) => {
-  const colorScheme = useColorScheme();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
 
   return (
-    <View className="flex-row items-center px-4 py-3 min-h-[60px] bg-white dark:bg-black">
+    <View 
+      className={`flex-row items-center px-4 py-3 min-h-[60px] ${
+        isDark ? 'bg-black' : 'bg-white'
+      }`}
+    >
       <View className="w-10">
         {showBackButton ? (
           <TouchableOpacity onPress={onBackPress} className="p-2">
@@ -34,7 +40,11 @@ const Header: React.FC<HeaderProps> = ({
       </View>
 
       <View className="flex-1 items-center">
-        <Text className="text-lg font-semibold text-black dark:text-white">
+        <Text 
+          className={`text-lg font-semibold ${
+            isDark ? 'text-white' : 'text-black'
+          }`}
+        >
           {title}
         </Text>
       </View>

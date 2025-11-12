@@ -1,10 +1,8 @@
-// components/Sidebar.tsx
 import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
-  useColorScheme,
   Animated,
   Dimensions,
   TouchableWithoutFeedback,
@@ -16,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import { SignOutButton } from '@/components/ui/SignOutButton';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface SidebarProps {
   isVisible: boolean;
@@ -26,12 +26,15 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const sidebarWidth = 280;
 
 const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
-  const colorScheme = useColorScheme();
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
   const router = useRouter();
   const { user } = useUser();
   const slideAnim = useRef(new Animated.Value(-sidebarWidth)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [modalVisible, setModalVisible] = React.useState(false);
+
+  const isDark = actualTheme === 'dark';
 
   // Handle modal visibility và animation
   useEffect(() => {
@@ -76,34 +79,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
 
   const menuItems = [
     {
-      title: 'Home',
+      titleKey: 'home',
       icon: 'home-outline',
       route: '/(tabs)/home',
     },
     {
-      title: 'Conversations',
+      titleKey: 'sidebar.conversations',
       icon: 'chatbubbles-outline',
       route: '/(tabs)/conversations',
     },
     {
-      title: 'Contacts',
+      titleKey: 'sidebar.contacts',
       icon: 'people-outline',
       route: '/(tabs)/contacts',
     },
     {
-      title: 'Discover',
+      titleKey: 'sidebar.discover',
       icon: 'globe-outline',
       route: '/(tabs)/discover',
     },
     {
-      title: 'Settings',
+      titleKey: 'settings',
       icon: 'settings-outline',
-      route: '/(tabs)/settings',
+      route: '/(tabs)/setting',
     },
     {
-      title:'Blocked Users',
-      icon:'ban-outline',
-      route:'/(tabs)/contacts/blocks'
+      titleKey: 'sidebar.blockedUsers',
+      icon: 'ban-outline',
+      route: '/(tabs)/contacts/blocks'
     }
   ];
 
@@ -135,15 +138,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
         <Animated.View
           style={[
             styles.sidebar,
-            colorScheme === 'dark' ? styles.sidebarDark : styles.sidebarLight,
+            isDark ? styles.sidebarDark : styles.sidebarLight,
             { transform: [{ translateX: slideAnim }] }
           ]}
         >
           <SafeAreaView style={styles.sidebarContent} edges={['top', 'bottom']}>
             {/* Header Section */}
-            <View style={[styles.header, colorScheme === 'dark' ? styles.headerDark : styles.headerLight]}>
+            <View style={[styles.header, isDark ? styles.headerDark : styles.headerLight]}>
               <View style={styles.headerTop}>
-                <Text style={styles.headerTitle}>Menu</Text>
+                <Text style={styles.headerTitle}>{t('sidebar.menu')}</Text>
                 <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                   <Ionicons name="close" size={24} color="white" />
                 </TouchableOpacity>
@@ -154,7 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
                 </View>
                 <View style={styles.userDetails}>
                   <Text style={styles.userName}>
-                    {user?.firstName || 'User'}
+                    {user?.firstName || t('sidebar.user')}
                   </Text>
                   <Text style={styles.userEmail}>
                     {user?.emailAddresses[0]?.emailAddress || 'user@example.com'}
@@ -170,7 +173,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
                   key={index}
                   style={[
                     styles.menuItem,
-                    colorScheme === 'dark' ? styles.menuItemDark : styles.menuItemLight
+                    isDark ? styles.menuItemDark : styles.menuItemLight
                   ]}
                   onPress={() => handleNavigation(item.route)}
                   activeOpacity={0.7}
@@ -182,9 +185,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
                   />
                   <Text style={[
                     styles.menuText,
-                    colorScheme === 'dark' ? styles.menuTextDark : styles.menuTextLight
+                    isDark ? styles.menuTextDark : styles.menuTextLight
                   ]}>
-                    {item.title}
+                    {t(item.titleKey as any)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -199,47 +202,47 @@ const Sidebar: React.FC<SidebarProps> = ({ isVisible, onClose }) => {
               <TouchableOpacity 
                 style={[
                   styles.menuItem,
-                  colorScheme === 'dark' ? styles.menuItemDark : styles.menuItemLight
+                  isDark ? styles.menuItemDark : styles.menuItemLight
                 ]}
                 activeOpacity={0.7}
               >
                 <Ionicons 
                   name="help-circle-outline" 
                   size={24} 
-                  color={colorScheme === 'dark' ? '#8E8E93' : '#6B7280'} 
+                  color={isDark ? '#8E8E93' : '#6B7280'} 
                 />
                 <Text style={[
                   styles.menuText,
-                  colorScheme === 'dark' ? styles.subMenuTextDark : styles.subMenuTextLight
+                  isDark ? styles.subMenuTextDark : styles.subMenuTextLight
                 ]}>
-                  Help & Support
+                  {t('sidebar.helpSupport')}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
                 style={[
                   styles.menuItem,
-                  colorScheme === 'dark' ? styles.menuItemDark : styles.menuItemLight
+                  isDark ? styles.menuItemDark : styles.menuItemLight
                 ]}
                 activeOpacity={0.7}
               >
                 <Ionicons 
                   name="information-circle-outline" 
                   size={24} 
-                  color={colorScheme === 'dark' ? '#8E8E93' : '#6B7280'} 
+                  color={isDark ? '#8E8E93' : '#6B7280'} 
                 />
                 <Text style={[
                   styles.menuText,
-                  colorScheme === 'dark' ? styles.subMenuTextDark : styles.subMenuTextLight
+                  isDark ? styles.subMenuTextDark : styles.subMenuTextLight
                 ]}>
-                  About
+                  {t('sidebar.about')}
                 </Text>
               </TouchableOpacity>
 
               {/* Divider */}
               <View style={[
                 styles.divider,
-                colorScheme === 'dark' ? styles.dividerDark : styles.dividerLight
+                isDark ? styles.dividerDark : styles.dividerLight
               ]} />
 
               {/* Sign Out Section */}
