@@ -76,7 +76,7 @@ export default function ConversationsScreen() {
     socket.on("sendRecommendations", (data: any) => {
       console.log("📨 Received AI recommendations:", data);
       handleNewRecommendations(
-        data.recommendations,
+        data.recommendations, 
         data.based_on?.emotion || data.emotion,
         data.based_on?.confidence
       );
@@ -88,9 +88,7 @@ export default function ConversationsScreen() {
       const confidence = data.emotion_data.confidence_score;
 
       if (confidence > 0.6) {
-        console.log(
-          `🎯 Strong ${emotion} detected, fetching recommendations...`
-        );
+        console.log(`🎯 Strong ${emotion} detected, fetching recommendations...`);
         checkAndShowRecommendations();
       }
     });
@@ -130,9 +128,7 @@ export default function ConversationsScreen() {
       const dismissedTime = dismissed ? parseInt(dismissed) : 0;
 
       if (now - dismissedTime < DISMISS_COOLDOWN) {
-        console.log(
-          `⏳ Cooldown active, ${Math.round((DISMISS_COOLDOWN - (now - dismissedTime)) / 60000)}m remaining`
-        );
+        console.log(`⏳ Cooldown active, ${Math.round((DISMISS_COOLDOWN - (now - dismissedTime)) / 60000)}m remaining`);
         return;
       }
 
@@ -149,9 +145,7 @@ export default function ConversationsScreen() {
         const emotion = data.based_on?.dominant_pattern || "neutral";
         const confidence = data.based_on?.confidence || 0.5;
 
-        console.log(
-          `✅ Got ${data.recommendations.length} recommendations for ${emotion}`
-        );
+        console.log(`✅ Got ${data.recommendations.length} recommendations for ${emotion}`);
 
         if (confidence > 0.5) {
           handleNewRecommendations(data.recommendations, emotion, confidence);
@@ -172,10 +166,8 @@ export default function ConversationsScreen() {
     emotion: string = "neutral",
     confidence: number = 0.5
   ) => {
-    console.log(
-      `🎯 Handling new recommendations: ${emotion} (${(confidence * 100).toFixed(0)}%)`
-    );
-
+    console.log(`🎯 Handling new recommendations: ${emotion} (${(confidence * 100).toFixed(0)}%)`);
+    
     setRecommendations(recs);
     setDominantEmotion(emotion);
     setEmotionConfidence(confidence);
@@ -248,7 +240,7 @@ export default function ConversationsScreen() {
       await refreshConversations();
       await checkAndShowRecommendations();
     } catch (error) {
-      Alert.alert(t("error"), t("conversations.error.tryAgain"));
+      Alert.alert(t('error'), t('conversations.error.tryAgain'));
     } finally {
       setRefreshing(false);
     }
@@ -262,10 +254,7 @@ export default function ConversationsScreen() {
         params: { id: newConversation._id },
       });
     } catch (error) {
-      Alert.alert(
-        t("error"),
-        t("conversations.createModal.errors.createFailed")
-      );
+      Alert.alert(t('error'), t('conversations.createModal.errors.createFailed'));
       throw error;
     }
   };
@@ -288,26 +277,25 @@ export default function ConversationsScreen() {
   };
 
   const getLastMessageText = (conversation: any) => {
-    if (!conversation.last_message)
-      return t("conversations.messageTypes.noMessages");
+    if (!conversation.last_message) return t('conversations.messageTypes.noMessages');
     const message = conversation.last_message;
     switch (message.type) {
       case "text":
         return message.content || "";
       case "image":
-        return t("conversations.messageTypes.image");
+        return t('conversations.messageTypes.image');
       case "file":
-        return t("conversations.messageTypes.file");
+        return t('conversations.messageTypes.file');
       case "audio":
-        return t("conversations.messageTypes.audio");
+        return t('conversations.messageTypes.audio');
       case "video":
-        return t("conversations.messageTypes.video");
+        return t('conversations.messageTypes.video');
       case "voice_note":
-        return t("conversations.messageTypes.voiceNote");
+        return t('conversations.messageTypes.voiceNote');
       case "location":
-        return t("conversations.messageTypes.location");
+        return t('conversations.messageTypes.location');
       default:
-        return t("conversations.messageTypes.message");
+        return t('conversations.messageTypes.message');
     }
   };
 
@@ -354,7 +342,7 @@ export default function ConversationsScreen() {
   };
 
   const renderSeparator = () => (
-    <View className={`h-px ml-16 ${isDark ? "bg-gray-800" : "bg-gray-200"}`} />
+    <View className={`h-px ml-16 ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`} />
   );
 
   const renderEmptyState = () => (
@@ -364,32 +352,26 @@ export default function ConversationsScreen() {
         size={64}
         color={isDark ? "#4B5563" : "#D1D5DB"}
       />
-      <Text
-        className={`text-center mt-4 text-lg ${isDark ? "text-gray-400" : "text-gray-500"}`}
-      >
-        {t("conversations.empty.title")}
+      <Text className={`text-center mt-4 text-lg ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('conversations.empty.title')}
       </Text>
-      <Text
-        className={`text-center mt-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-      >
-        {t("conversations.empty.subtitle")}
+      <Text className={`text-center mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {t('conversations.empty.subtitle')}
       </Text>
       <TouchableOpacity
         onPress={() => setIsCreateModalVisible(true)}
         className="bg-orange-500 rounded-full px-6 py-3 mt-6"
       >
-        <Text className="text-white font-semibold">
-          {t("conversations.empty.startChatting")}
-        </Text>
+        <Text className="text-white font-semibold">{t('conversations.empty.startChatting')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   if (error) {
     return (
-      <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
         <Header
-          title={t("conversations.title")}
+          title={t('conversations.title')}
           onMenuPress={() => setIsSidebarVisible(true)}
         />
         <View className="flex-1 justify-center items-center px-8">
@@ -399,9 +381,7 @@ export default function ConversationsScreen() {
             onPress={handleRefresh}
             className="bg-orange-500 rounded-full px-6 py-3 mt-6"
           >
-            <Text className="text-white font-semibold">
-              {t("conversations.error.tryAgain")}
-            </Text>
+            <Text className="text-white font-semibold">{t('conversations.error.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -409,14 +389,14 @@ export default function ConversationsScreen() {
   }
 
   return (
-    <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
       />
 
       <Header
-        title={t("conversations.title")}
+        title={t('conversations.title')}
         onMenuPress={() => setIsSidebarVisible(true)}
         rightComponent={
           <View className="flex-row items-center gap-2">
@@ -436,16 +416,12 @@ export default function ConversationsScreen() {
               className="p-1 relative"
               onPress={() => handleAIChatPress(false)}
             >
-              <View
-                className={`w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center ${isDark ? "bg-orange-900/20" : "bg-orange-50"}`}
-              >
+              <View className={`w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center ${isDark ? 'bg-orange-900/20' : 'bg-orange-50'}`}>
                 <Ionicons name="happy" size={20} color="#F97316" />
               </View>
 
               {hasNewRecommendations && (
-                <View
-                  className={`absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 ${isDark ? "border-black" : "border-white"}`}
-                >
+                <View className={`absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 ${isDark ? 'border-black' : 'border-white'}`}>
                   <Text className="text-white text-[9px] font-bold">
                     {recommendations.length}
                   </Text>
@@ -458,7 +434,7 @@ export default function ConversationsScreen() {
 
       <View className="px-4 py-2">
         <SearchInput
-          placeholder={t("conversations.searchPlaceholder")}
+          placeholder={t('conversations.searchPlaceholder')}
           value={searchText}
           onSearch={handleSearch}
           onClear={handleClear}

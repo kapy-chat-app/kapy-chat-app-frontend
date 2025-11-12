@@ -22,8 +22,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function EmotionScreen() {
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
-  const isDark = actualTheme === "dark";
-
+  const isDark = actualTheme === 'dark';
+  
   const {
     emotions,
     stats,
@@ -45,31 +45,26 @@ export default function EmotionScreen() {
   } = useEmotion({ days: 30 });
 
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<"history" | "stats">(
-    "history"
-  );
+  const [selectedTab, setSelectedTab] = useState<"history" | "stats">("history");
 
   // ============================================
   // HANDLE DELETE
   // ============================================
   const handleDelete = async (emotionId: string) => {
     Alert.alert(
-      t("emotion.delete.confirmTitle"),
-      t("emotion.delete.confirmMessage"),
+      t('emotion.delete.confirmTitle'),
+      t('emotion.delete.confirmMessage'),
       [
-        { text: t("cancel"), style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: t("emotion.delete.confirmTitle"),
+          text: t('emotion.delete.confirmTitle'),
           style: "destructive",
           onPress: async () => {
             const result = await deleteEmotion(emotionId);
             if (result.success) {
-              Alert.alert(t("success"), t("emotion.delete.success"));
+              Alert.alert(t('success'), t('emotion.delete.success'));
             } else {
-              Alert.alert(
-                t("error"),
-                result.error || t("emotion.delete.failed")
-              );
+              Alert.alert(t('error'), result.error || t('emotion.delete.failed'));
             }
           },
         },
@@ -96,10 +91,8 @@ export default function EmotionScreen() {
           size={64}
           color={isDark ? "#666" : "#ccc"}
         />
-        <Text
-          className={`text-base mt-3 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-        >
-          {t("emotion.empty")}
+        <Text className={`text-base mt-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+          {t('emotion.empty')}
         </Text>
       </View>
     );
@@ -110,7 +103,7 @@ export default function EmotionScreen() {
   // ============================================
   if (error) {
     return (
-      <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-gray-50"}`}>
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
         <View className="flex-1 justify-center items-center p-5">
           <Ionicons name="alert-circle" size={64} color="#DC143C" />
           <Text className="text-base text-red-600 mt-4 text-center">
@@ -120,9 +113,7 @@ export default function EmotionScreen() {
             className="mt-5 px-6 py-3 bg-[#F57206] rounded-lg"
             onPress={refresh}
           >
-            <Text className="text-white text-base font-semibold">
-              {t("emotion.tryAgain")}
-            </Text>
+            <Text className="text-white text-base font-semibold">{t('emotion.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -133,15 +124,11 @@ export default function EmotionScreen() {
   // MAIN RENDER
   // ============================================
   return (
-    <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-gray-50"}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
       {/* Header */}
-      <View
-        className={`flex-row justify-between items-center px-4 py-3 border-b ${isDark ? "bg-black border-gray-800" : "bg-white border-gray-200"}`}
-      >
-        <Text
-          className={`text-2xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}
-        >
-          {t("emotion.title")}
+      <View className={`flex-row justify-between items-center px-4 py-3 border-b ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'}`}>
+        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {t('emotion.title')}
         </Text>
 
         <View className="flex-row gap-3">
@@ -159,9 +146,7 @@ export default function EmotionScreen() {
       </View>
 
       {/* Tabs */}
-      <View
-        className={`flex-row border-b ${isDark ? "bg-black border-gray-800" : "bg-white border-gray-200"}`}
-      >
+      <View className={`flex-row border-b ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'}`}>
         <TouchableOpacity
           className={`flex-1 py-3 items-center border-b-2 ${
             selectedTab === "history"
@@ -174,12 +159,10 @@ export default function EmotionScreen() {
             className={`text-base font-medium ${
               selectedTab === "history"
                 ? "text-[#F57206] font-semibold"
-                : isDark
-                  ? "text-gray-400"
-                  : "text-gray-600"
+                : isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            {t("emotion.tabs.history")} ({total})
+            {t('emotion.tabs.history')} ({total})
           </Text>
         </TouchableOpacity>
 
@@ -193,12 +176,10 @@ export default function EmotionScreen() {
             className={`text-base font-medium ${
               selectedTab === "stats"
                 ? "text-[#F57206] font-semibold"
-                : isDark
-                  ? "text-gray-400"
-                  : "text-gray-600"
+                : isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            {t("emotion.tabs.stats")}
+            {t('emotion.tabs.stats')}
           </Text>
         </TouchableOpacity>
       </View>
