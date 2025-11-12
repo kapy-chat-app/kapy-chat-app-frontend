@@ -4,10 +4,11 @@ import {
   Text,
   TouchableOpacity,
   Animated,
-  useColorScheme,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface FloatingRecommendationProps {
   visible: boolean;
@@ -26,14 +27,14 @@ export default function FloatingRecommendation({
   onClose,
   onOpenAIChat,
 }: FloatingRecommendationProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
   const [scaleAnim] = useState(new Animated.Value(0));
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
     if (visible) {
-      // Pop in animation
       Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 1,
@@ -48,14 +49,12 @@ export default function FloatingRecommendation({
         }),
       ]).start();
 
-      // Auto dismiss after 10 seconds
       const timer = setTimeout(() => {
         handleDismiss();
       }, 10000);
 
       return () => clearTimeout(timer);
     } else {
-      // Pop out animation
       Animated.parallel([
         Animated.spring(scaleAnim, {
           toValue: 0,
@@ -97,18 +96,21 @@ export default function FloatingRecommendation({
     }, 200);
   };
 
+  const getIntensityKey = (conf: number) => {
+    if (conf > 0.7) return 'very';
+    if (conf > 0.5) return 'somewhat';
+    return '';
+  };
+
   const getEmotionMessage = (emotion: string, conf: number) => {
-    const intensity = conf > 0.7 ? 'rất' : conf > 0.5 ? 'hơi' : '';
+    const intensityKey = getIntensityKey(conf);
+    const intensity = t(`conversations.floating.intensity.${intensityKey}` as any);
     
-    const messages: Record<string, string> = {
-      sadness: `Bạn có vẻ ${intensity} buồn, tôi có vài lời khuyên cho bạn.`,
-      anger: `Bạn có vẻ ${intensity} bực bội, hãy để tôi giúp bạn nhé.`,
-      fear: `Bạn đang ${intensity} lo lắng? Tôi có thể hỗ trợ bạn.`,
-      joy: `Thật vui khi thấy bạn ${intensity} vui! Hãy chia sẻ thêm nhé.`,
-      surprise: `Có điều gì bất ngờ? Tôi có vài gợi ý cho bạn.`,
-      neutral: `Tôi có ${recommendations.length} gợi ý AI cho bạn.`,
-    };
-    return messages[emotion] || `Tôi có vài lời khuyên cho bạn.`;
+    if (emotion === 'neutral') {
+      return t('conversations.floating.neutral', { count: recommendations.length });
+    }
+    
+    return t(`conversations.floating.${emotion}` as any, { intensity });
   };
 
   const getEmotionEmoji = (emotion: string) => {
@@ -169,7 +171,7 @@ export default function FloatingRecommendation({
         />
       </TouchableWithoutFeedback>
 
-      {/* Compact Speech Bubble */}
+      {/* Speech Bubble */}
       <Animated.View
         style={{
           position: 'absolute',
@@ -266,12 +268,12 @@ export default function FloatingRecommendation({
                     color: getEmotionAccentColor(),
                   }}
                 >
-                  {recommendations.length} gợi ý
+                  {t('conversations.floating.suggestions', { count: recommendations.length })}
                 </Text>
               </View>
             )}
 
-            {/* Call-to-action - Subtle */}
+            {/* Call-to-action */}
             <View
               style={{
                 flexDirection: 'row',
@@ -290,7 +292,7 @@ export default function FloatingRecommendation({
                   fontWeight: '600',
                 }}
               >
-                Nhấn để xem chi tiết
+                {t('conversations.floating.tapToView')}
               </Text>
               <Ionicons
                 name="chevron-forward"
