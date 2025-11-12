@@ -1,7 +1,9 @@
 // components/emotion/FilterModal.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, useColorScheme } from 'react-native';
+import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface FilterModalProps {
   visible: boolean;
@@ -21,16 +23,11 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   updateFilters,
   clearFilters,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
 
-  // Map contexts to Vietnamese
-  const contextMap: Record<string, string> = {
-    message: "Tin nhắn",
-    voice_note: "Ghi âm",
-    call: "Cuộc gọi",
-    general: "Chung",
-  };
+  const contexts = ['message', 'voice_note', 'call', 'general'];
 
   return (
     <Modal
@@ -44,7 +41,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           {/* Header */}
           <View className="flex-row justify-between items-center mb-5">
             <Text className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Bộ lọc
+              {t('emotion.filter.title')}
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={isDark ? '#fff' : '#333'} />
@@ -54,10 +51,10 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           {/* Context Filter */}
           <View className="mb-6">
             <Text className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Ngữ cảnh
+              {t('emotion.filter.context')}
             </Text>
             <View className="flex-row flex-wrap gap-2">
-              {['message', 'voice_note', 'call', 'general'].map((ctx) => (
+              {contexts.map((ctx) => (
                 <TouchableOpacity
                   key={ctx}
                   className={`px-4 py-2 rounded-full border ${
@@ -78,7 +75,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                         : 'text-gray-600'
                     }`}
                   >
-                    {contextMap[ctx]}
+                    {t(`emotion.contexts.${ctx}` as any)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -88,7 +85,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           {/* Time Range Filter */}
           <View className="mb-6">
             <Text className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Khoảng thời gian
+              {t('emotion.filter.timeRange')}
             </Text>
             <View className="flex-row flex-wrap gap-2">
               {[7, 14, 30, 90].map((days) => (
@@ -112,7 +109,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
                         : 'text-gray-600'
                     }`}
                   >
-                    {days} ngày
+                    {t('emotion.filter.days', { count: days })}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -129,7 +126,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
               }}
             >
               <Text className={`text-base font-semibold text-center ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                Xóa bộ lọc
+                {t('emotion.filter.clear')}
               </Text>
             </TouchableOpacity>
             
@@ -138,7 +135,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
               onPress={onClose}
             >
               <Text className="text-base font-semibold text-center text-white">
-                Áp dụng
+                {t('emotion.filter.apply')}
               </Text>
             </TouchableOpacity>
           </View>

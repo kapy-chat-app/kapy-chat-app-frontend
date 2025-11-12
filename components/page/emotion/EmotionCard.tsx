@@ -1,8 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
 // components/emotion/EmotionCard.tsx
 import React from "react";
-import { Text, TouchableOpacity, View, useColorScheme } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface EmotionCardProps {
   item: {
@@ -17,8 +19,9 @@ interface EmotionCardProps {
 }
 
 export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
 
   // Map emotions to colors
   const emotionColors: Record<string, string> = {
@@ -31,32 +34,13 @@ export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
     neutral: "#808080",
   };
 
-  // Map contexts to Vietnamese
-  const contextMap: Record<string, string> = {
-    message: "Tin nhắn",
-    voice_note: "Ghi âm",
-    call: "Cuộc gọi",
-    general: "Chung",
-  };
-
-  // Map emotions to Vietnamese
-  const emotionMap: Record<string, string> = {
-    joy: "Vui vẻ",
-    sadness: "Buồn bã",
-    anger: "Giận dữ",
-    fear: "Sợ hãi",
-    surprise: "Ngạc nhiên",
-    love: "Yêu thương",
-    neutral: "Trung lập",
-  };
-
   const emotionColor = emotionColors[item.dominant_emotion] || "#808080";
-  const emotionText = emotionMap[item.dominant_emotion] || item.dominant_emotion;
-  const contextText = contextMap[item.context] || item.context;
+  const emotionText = t(`emotion.emotions.${item.dominant_emotion}` as any) || item.dominant_emotion;
+  const contextText = t(`emotion.contexts.${item.context}` as any) || item.context;
 
   return (
     <View
-      className={`rounded-xl p-4 mb-3 ${isDark ? "bg-[#1a1a1a]" : "bg-white"} shadow-sm`}
+      className={`rounded-xl p-4 mb-3 shadow-sm ${isDark ? "bg-[#1a1a1a]" : "bg-white"}`}
     >
       {/* Header */}
       <View className="flex-row justify-between items-center mb-3">
@@ -78,9 +62,9 @@ export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
               {emotionText}
             </Text>
             <Text
-              className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} mt-0.5`}
+              className={`text-sm mt-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`}
             >
-              {(item.confidence_score * 100).toFixed(0)}% độ tin cậy
+              {t('emotion.stats.confidence', { percent: (item.confidence_score * 100).toFixed(0) })}
             </Text>
           </View>
         </View>

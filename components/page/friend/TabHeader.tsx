@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface TabHeaderProps {
   leftText: string;
@@ -12,9 +14,13 @@ export const TabHeader: React.FC<TabHeaderProps> = ({
   rightText,
   rightAction,
 }) => {
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
+
   return (
-    <View className="flex-row items-center justify-between px-4 py-3">
-      <Text className="text-gray-900 dark:text-white font-medium">
+    <View className={`flex-row items-center justify-between px-4 py-3 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+      <Text className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
         {leftText}
       </Text>
       <TouchableOpacity
