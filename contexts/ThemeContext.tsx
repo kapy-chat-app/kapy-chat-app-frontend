@@ -52,7 +52,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       setThemeModeState(mode);
       await AsyncStorage.setItem(THEME_KEY, mode);
     } catch (error) {
-      console.error('Error saving theme:', error);
+      console.error("Error saving theme:", error);
     }
   };
 
