@@ -1,15 +1,14 @@
 import React, { useState, useRef } from 'react';
 import {
   View,
-  TextInput,
-  StyleSheet,
-  useColorScheme,
   TouchableOpacity,
   Animated,
   TextInputProps,
+  StyleSheet,
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
+import { useTheme } from '@/contexts/ThemeContext';
 interface SearchInputProps extends Omit<TextInputProps, 'style'> {
   onSearch?: (text: string) => void;
   onClear?: () => void;
@@ -45,8 +44,8 @@ const SearchInput: React.FC<SearchInputProps> = ({
   autoFocus = false,
   ...props
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
   const [isFocused, setIsFocused] = useState(false);
   const [searchText, setSearchText] = useState(value || '');
   const inputRef = useRef<TextInput>(null);

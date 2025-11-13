@@ -1,4 +1,4 @@
-// app/(root)/(tabs)/conversations.tsx - IMPROVED WITH FREQUENT RECOMMENDATIONS
+// app/(root)/(tabs)/conversations.tsx
 import FloatingRecommendation from "@/components/page/ai/FloatingRecommendation";
 import ConversationItem from "@/components/page/message/ConversationItem";
 import CreateConversationModal from "@/components/page/message/CreateConversationModel";
@@ -9,6 +9,8 @@ import { useEmotion } from "@/hooks/ai/useEmotion";
 import { useConversations } from "@/hooks/message/useConversations";
 import { useSocket } from "@/hooks/message/useSocket";
 import { useAuth } from "@clerk/clerk-expo";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
@@ -20,18 +22,18 @@ import {
   StatusBar,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const RECOMMENDATION_STORAGE_KEY = "emotion_recommendation_dismissed";
-const CHECK_INTERVAL = 2 * 60 * 1000; // 🔥 2 phút (thay vì 5 phút)
-const DISMISS_COOLDOWN = 15 * 60 * 1000; // 🔥 15 phút (thay vì 30 phút)
+const CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
+const DISMISS_COOLDOWN = 15 * 60 * 1000; // 15 minutes
 
 export default function ConversationsScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
   const router = useRouter();
   const { userId } = useAuth();
   const { socket } = useSocket();
@@ -52,7 +54,7 @@ export default function ConversationsScreen() {
 
   const { getRecommendations } = useEmotion();
 
-  // 🔥 Enhanced recommendation state
+  // Recommendation state
   const [showFloatingRec, setShowFloatingRec] = useState(false);
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [dominantEmotion, setDominantEmotion] = useState<string>("neutral");
@@ -60,21 +62,17 @@ export default function ConversationsScreen() {
   const [hasNewRecommendations, setHasNewRecommendations] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<number>(0);
 
-  // 🔥 Check recommendations on mount and more frequently
+  // Check recommendations on mount
   useEffect(() => {
-    // Initial check
     checkAndShowRecommendations();
-
-    // Check every 2 minutes
     const interval = setInterval(checkAndShowRecommendations, CHECK_INTERVAL);
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Listen to ALL emotion-related socket events
+  // Socket listeners
   useEffect(() => {
     if (!socket) return;
 
-    // Real-time recommendations from backend
     socket.on("sendRecommendations", (data: any) => {
       console.log("📨 Received AI recommendations:", data);
       handleNewRecommendations(
@@ -84,20 +82,17 @@ export default function ConversationsScreen() {
       );
     });
 
-    // Emotion analysis complete (for all emotions, not just negative)
     socket.on("emotionAnalysisComplete", (data: any) => {
       console.log("😊 Emotion analyzed:", data);
       const emotion = data.emotion_data.dominant_emotion;
       const confidence = data.emotion_data.confidence_score;
 
-      // 🔥 Show recommendations for ALL strong emotions (confidence > 0.6)
       if (confidence > 0.6) {
         console.log(`🎯 Strong ${emotion} detected, fetching recommendations...`);
         checkAndShowRecommendations();
       }
     });
 
-    // Combined emotion + recommendations
     socket.on("emotionAnalyzedWithRecommendations", (data: any) => {
       console.log("🎁 Emotion + Recommendations received:", data);
       if (data.recommendations && data.recommendations.length > 0) {
@@ -109,7 +104,6 @@ export default function ConversationsScreen() {
       }
     });
 
-    // Emotion recommendations (dedicated event)
     socket.on("emotionRecommendations", (data: any) => {
       console.log("💡 Emotion recommendations:", data);
       handleNewRecommendations(
@@ -130,18 +124,14 @@ export default function ConversationsScreen() {
   const checkAndShowRecommendations = async () => {
     try {
       const now = Date.now();
-
-      // Check if user dismissed recommendations recently
       const dismissed = await AsyncStorage.getItem(RECOMMENDATION_STORAGE_KEY);
       const dismissedTime = dismissed ? parseInt(dismissed) : 0;
 
-      // Don't show if dismissed less than 15 minutes ago
       if (now - dismissedTime < DISMISS_COOLDOWN) {
         console.log(`⏳ Cooldown active, ${Math.round((DISMISS_COOLDOWN - (now - dismissedTime)) / 60000)}m remaining`);
         return;
       }
 
-      // Don't check too frequently (at least 1 minute between checks)
       if (now - lastCheckTime < 60000) {
         return;
       }
@@ -157,11 +147,9 @@ export default function ConversationsScreen() {
 
         console.log(`✅ Got ${data.recommendations.length} recommendations for ${emotion}`);
 
-        // 🔥 Show floating for ALL emotions with medium+ confidence (>0.5)
         if (confidence > 0.5) {
           handleNewRecommendations(data.recommendations, emotion, confidence);
         } else {
-          // Just set badge for low confidence
           setHasNewRecommendations(true);
           setRecommendations(data.recommendations);
           setDominantEmotion(emotion);
@@ -185,7 +173,6 @@ export default function ConversationsScreen() {
     setEmotionConfidence(confidence);
     setHasNewRecommendations(true);
 
-    // 🔥 Show floating for all emotions with confidence > 0.5
     if (confidence > 0.5) {
       setShowFloatingRec(true);
     }
@@ -193,7 +180,6 @@ export default function ConversationsScreen() {
 
   const handleCloseFloating = async () => {
     setShowFloatingRec(false);
-    // Store dismissal time
     await AsyncStorage.setItem(
       RECOMMENDATION_STORAGE_KEY,
       Date.now().toString()
@@ -201,12 +187,10 @@ export default function ConversationsScreen() {
     console.log("✅ Recommendations dismissed");
   };
 
-  // 🔥 Navigate to AI chat with recommendations context
   const handleAIChatPress = async (fromFloating: boolean = false) => {
     setHasNewRecommendations(false);
     setShowFloatingRec(false);
 
-    // Pass recommendations to AI chat screen
     router.push({
       pathname: "/ai-chat",
       params: {
@@ -256,7 +240,7 @@ export default function ConversationsScreen() {
       await refreshConversations();
       await checkAndShowRecommendations();
     } catch (error) {
-      Alert.alert("Error", "Failed to refresh conversations");
+      Alert.alert(t('error'), t('conversations.error.tryAgain'));
     } finally {
       setRefreshing(false);
     }
@@ -270,7 +254,7 @@ export default function ConversationsScreen() {
         params: { id: newConversation._id },
       });
     } catch (error) {
-      Alert.alert("Error", "Failed to create conversation");
+      Alert.alert(t('error'), t('conversations.createModal.errors.createFailed'));
       throw error;
     }
   };
@@ -293,25 +277,25 @@ export default function ConversationsScreen() {
   };
 
   const getLastMessageText = (conversation: any) => {
-    if (!conversation.last_message) return "No messages yet";
+    if (!conversation.last_message) return t('conversations.messageTypes.noMessages');
     const message = conversation.last_message;
     switch (message.type) {
       case "text":
         return message.content || "";
       case "image":
-        return "📷 Image";
+        return t('conversations.messageTypes.image');
       case "file":
-        return "📎 File";
+        return t('conversations.messageTypes.file');
       case "audio":
-        return "🎵 Audio";
+        return t('conversations.messageTypes.audio');
       case "video":
-        return "🎥 Video";
+        return t('conversations.messageTypes.video');
       case "voice_note":
-        return "🎤 Voice message";
+        return t('conversations.messageTypes.voiceNote');
       case "location":
-        return "📍 Location";
+        return t('conversations.messageTypes.location');
       default:
-        return "Message";
+        return t('conversations.messageTypes.message');
     }
   };
 
@@ -358,7 +342,7 @@ export default function ConversationsScreen() {
   };
 
   const renderSeparator = () => (
-    <View className="h-px bg-gray-200 dark:bg-gray-800 ml-16" />
+    <View className={`h-px ml-16 ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`} />
   );
 
   const renderEmptyState = () => (
@@ -368,26 +352,26 @@ export default function ConversationsScreen() {
         size={64}
         color={isDark ? "#4B5563" : "#D1D5DB"}
       />
-      <Text className="text-gray-500 dark:text-gray-400 text-center mt-4 text-lg">
-        No conversations yet
+      <Text className={`text-center mt-4 text-lg ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('conversations.empty.title')}
       </Text>
-      <Text className="text-gray-400 dark:text-gray-500 text-center mt-2">
-        Start a conversation with your friends
+      <Text className={`text-center mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {t('conversations.empty.subtitle')}
       </Text>
       <TouchableOpacity
         onPress={() => setIsCreateModalVisible(true)}
         className="bg-orange-500 rounded-full px-6 py-3 mt-6"
       >
-        <Text className="text-white font-semibold">Start Chatting</Text>
+        <Text className="text-white font-semibold">{t('conversations.empty.startChatting')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-white dark:bg-black">
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
         <Header
-          title="Conversations"
+          title={t('conversations.title')}
           onMenuPress={() => setIsSidebarVisible(true)}
         />
         <View className="flex-1 justify-center items-center px-8">
@@ -397,7 +381,7 @@ export default function ConversationsScreen() {
             onPress={handleRefresh}
             className="bg-orange-500 rounded-full px-6 py-3 mt-6"
           >
-            <Text className="text-white font-semibold">Try Again</Text>
+            <Text className="text-white font-semibold">{t('conversations.error.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -405,14 +389,14 @@ export default function ConversationsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
       />
 
       <Header
-        title="Conversations"
+        title={t('conversations.title')}
         onMenuPress={() => setIsSidebarVisible(true)}
         rightComponent={
           <View className="flex-row items-center gap-2">
@@ -427,18 +411,17 @@ export default function ConversationsScreen() {
               />
             </TouchableOpacity>
 
-            {/* 🔥 AI Chatbot Button with Enhanced Badge */}
+            {/* AI Chatbot Button */}
             <TouchableOpacity
               className="p-1 relative"
               onPress={() => handleAIChatPress(false)}
             >
-              <View className="w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center bg-orange-50 dark:bg-orange-900/20">
+              <View className={`w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center ${isDark ? 'bg-orange-900/20' : 'bg-orange-50'}`}>
                 <Ionicons name="happy" size={20} color="#F97316" />
               </View>
 
-              {/* Animated Notification Badge */}
               {hasNewRecommendations && (
-                <View className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 border-white dark:border-black">
+                <View className={`absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 ${isDark ? 'border-black' : 'border-white'}`}>
                   <Text className="text-white text-[9px] font-bold">
                     {recommendations.length}
                   </Text>
@@ -451,7 +434,7 @@ export default function ConversationsScreen() {
 
       <View className="px-4 py-2">
         <SearchInput
-          placeholder="Search conversations..."
+          placeholder={t('conversations.searchPlaceholder')}
           value={searchText}
           onSearch={handleSearch}
           onClear={handleClear}
@@ -480,7 +463,7 @@ export default function ConversationsScreen() {
         />
       )}
 
-      {/* 🔥 Enhanced Floating Recommendation */}
+      {/* Floating Recommendation */}
       <FloatingRecommendation
         visible={showFloatingRec}
         recommendations={recommendations}

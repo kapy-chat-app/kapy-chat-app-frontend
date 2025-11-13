@@ -7,12 +7,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { useSearchMessages } from "@/hooks/message/useMessageInfo";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface SearchMessagesProps {
   conversationId: string;
@@ -23,8 +24,9 @@ export default function SearchMessages({
   conversationId,
   onMessagePress,
 }: SearchMessagesProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
   const [searchText, setSearchText] = useState("");
   const { results, loading, hasMore, search, loadMore, reset } =
     useSearchMessages(conversationId);
@@ -48,7 +50,7 @@ export default function SearchMessages({
       <Text>
         {parts.map((part, index) =>
           part.toLowerCase() === query.toLowerCase() ? (
-            <Text key={index} className="bg-orange-200 dark:bg-orange-900 text-orange-900 dark:text-orange-200 font-semibold">
+            <Text key={index} className={`bg-orange-200 dark:bg-orange-900 text-orange-900 dark:text-orange-200 font-semibold`}>
               {part}
             </Text>
           ) : (
@@ -62,21 +64,21 @@ export default function SearchMessages({
   const renderSearchResult = ({ item }: { item: any }) => {
     return (
       <TouchableOpacity
-        className="bg-gray-50 dark:bg-gray-900 p-3 rounded-xl mb-3"
+        className={`p-3 rounded-xl mb-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
         onPress={() => onMessagePress(item._id)}
       >
         <View className="flex-row justify-between items-center mb-2">
-          <Text className="text-sm font-semibold text-gray-900 dark:text-white">
-            {item.sender?.full_name || "Unknown"}
+          <Text className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            {item.sender?.full_name || t('message.unknownUser')}
           </Text>
-          <Text className="text-xs text-gray-500 dark:text-gray-400">
+          <Text className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             {format(new Date(item.created_at), "dd/MM/yyyy HH:mm", {
               locale: vi,
             })}
           </Text>
         </View>
         <View>
-          <Text className="text-sm text-gray-700 dark:text-gray-300 leading-5">
+          <Text className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} leading-5`}>
             {highlightText(item.content || "", searchText)}
           </Text>
         </View>
@@ -87,8 +89,8 @@ export default function SearchMessages({
               size={14}
               color={isDark ? "#9CA3AF" : "#6B7280"}
             />
-            <Text className="text-xs text-gray-600 dark:text-gray-400 ml-1">
-              {item.attachments.length} tệp đính kèm
+            <Text className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} ml-1`}>
+              {item.attachments.length} {t('message.attachment.files')}
             </Text>
           </View>
         )}
@@ -122,8 +124,8 @@ export default function SearchMessages({
             size={64}
             color={isDark ? "#4B5563" : "#D1D5DB"}
           />
-          <Text className="text-base text-gray-400 dark:text-gray-600 mt-4 text-center">
-            Nhập từ khóa để tìm kiếm tin nhắn
+          <Text className={`text-base ${isDark ? 'text-gray-600' : 'text-gray-400'} mt-4 text-center`}>
+            {t('message.info.searchPlaceholder')}
           </Text>
         </View>
       );
@@ -137,8 +139,8 @@ export default function SearchMessages({
             size={64}
             color={isDark ? "#4B5563" : "#D1D5DB"}
           />
-          <Text className="text-base text-gray-400 dark:text-gray-600 mt-4 text-center">
-            Không tìm thấy kết quả
+          <Text className={`text-base ${isDark ? 'text-gray-600' : 'text-gray-400'} mt-4 text-center`}>
+            {t('message.info.noResults')}
           </Text>
         </View>
       );
@@ -148,8 +150,8 @@ export default function SearchMessages({
   };
 
   return (
-    <View className="flex-1 bg-white dark:bg-black">
-      <View className="flex-row items-center bg-gray-100 dark:bg-gray-900 m-4 px-3 rounded-xl h-11">
+    <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
+      <View className={`flex-row items-center m-4 px-3 rounded-xl h-11 ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <Ionicons
           name="search"
           size={20}
@@ -157,8 +159,8 @@ export default function SearchMessages({
           style={{ marginRight: 8 }}
         />
         <TextInput
-          className="flex-1 text-base text-gray-900 dark:text-white"
-          placeholder="Tìm kiếm tin nhắn..."
+          className={`flex-1 text-base ${isDark ? 'text-white' : 'text-gray-900'}`}
+          placeholder={t('message.info.searchMessages')}
           placeholderTextColor={isDark ? "#6B7280" : "#9CA3AF"}
           value={searchText}
           onChangeText={setSearchText}

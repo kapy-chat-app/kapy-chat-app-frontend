@@ -11,10 +11,11 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function AddMemberScreen() {
   const params = useLocalSearchParams();
@@ -25,12 +26,13 @@ export default function AddMemberScreen() {
   const [filteredUsers, setFilteredUsers] = useState<(Friend & { isInGroup?: boolean })[]>([]);
   const [adding, setAdding] = useState(false);
 
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
+
   const { friends, loading: loadingFriends, loadFriends } = useFriendsList();
   const { members, loading: loadingMembers, loadMembers } = useGroupMembers(conversationId);
   const { addParticipants } = useConversationActions();
-
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
 
   // Load friends và members khi component mount
   useEffect(() => {
@@ -75,13 +77,13 @@ export default function AddMemberScreen() {
       const result = await addParticipants(conversationId, selectedUsers);
       
       if (result.success) {
-        Alert.alert("Thành công", "Đã thêm thành viên vào nhóm");
+        Alert.alert(t('success'), t('message.addMembers.success'));
         router.back();
       } else {
-        Alert.alert("Lỗi", result.error || "Không thể thêm thành viên");
+        Alert.alert(t('error'), result.error || t('message.failed'));
       }
     } catch (error) {
-      Alert.alert("Lỗi", "Đã xảy ra lỗi khi thêm thành viên");
+      Alert.alert(t('error'), t('message.addMembers.error'));
     } finally {
       setAdding(false);
     }
@@ -94,7 +96,7 @@ export default function AddMemberScreen() {
     return (
       <TouchableOpacity
         disabled={isDisabled}
-        className={`flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800 
+        className={`flex-row items-center px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'} 
           ${isDisabled ? "opacity-50" : ""}`}
         onPress={() => toggleUserSelection(item.clerkId)}
       >
@@ -106,7 +108,7 @@ export default function AddMemberScreen() {
               className="w-12 h-12 rounded-full"
             />
           ) : (
-            <View className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-800 justify-center items-center">
+            <View className={`w-12 h-12 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-200'} justify-center items-center`}>
               <Ionicons
                 name="person"
                 size={24}
@@ -118,19 +120,19 @@ export default function AddMemberScreen() {
 
         {/* Info */}
         <View className="flex-1 ml-3">
-          <Text className="text-base font-semibold text-gray-900 dark:text-white">
+          <Text className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {item.full_name}
           </Text>
-          <Text className="text-sm text-gray-500 dark:text-gray-400">
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             @{item.username}
           </Text>
         </View>
 
         {/* Checkbox / Label */}
         {isDisabled ? (
-          <View className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full">
-            <Text className="text-xs text-gray-500 dark:text-gray-400">
-              Đã trong nhóm
+          <View className={`px-3 py-1 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <Text className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {t('message.addMembers.alreadyInGroup')}
             </Text>
           </View>
         ) : (
@@ -138,7 +140,7 @@ export default function AddMemberScreen() {
             className={`w-6 h-6 rounded-full border-2 justify-center items-center ${
               isSelected
                 ? "bg-orange-500 border-orange-500"
-                : "bg-transparent border-gray-300 dark:border-gray-600"
+                : `border-${isDark ? 'gray-600' : 'gray-300'} bg-transparent`
             }`}
           >
             {isSelected && <Ionicons name="checkmark" size={16} color="white" />}
@@ -151,9 +153,9 @@ export default function AddMemberScreen() {
   const loading = loadingFriends || loadingMembers;
 
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
       {/* Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+      <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons
             name="arrow-back"
@@ -161,8 +163,8 @@ export default function AddMemberScreen() {
             color={isDark ? "#F97316" : "#1F2937"}
           />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-          Thêm thành viên
+        <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {t('message.addMembers.title')}
         </Text>
         <TouchableOpacity
           onPress={handleAdd}
@@ -171,32 +173,32 @@ export default function AddMemberScreen() {
           <Text
             className={`text-base font-semibold ${
               selectedUsers.length === 0 || adding
-                ? "text-gray-400 dark:text-gray-600"
+                ? `text-${isDark ? 'gray-600' : 'gray-400'}`
                 : "text-orange-500"
             }`}
           >
-            {adding ? "..." : "Thêm"}
+            {adding ? t('loading') : t('message.addMembers.add')}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Selected count */}
       {selectedUsers.length > 0 && (
-        <View className="px-4 py-2 bg-orange-50 dark:bg-orange-900/20">
-          <Text className="text-sm text-orange-600 dark:text-orange-400">
-            Đã chọn {selectedUsers.length} người
+        <View className={`px-4 py-2 ${isDark ? 'bg-orange-900/20' : 'bg-orange-50'}`}>
+          <Text className={`text-sm ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
+            {t('message.addMembers.selected', { count: selectedUsers.length })}
           </Text>
         </View>
       )}
 
       {/* Search */}
-      <View className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+      <View className={`px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
         <TextInput
-          placeholder="Tìm kiếm bạn bè"
+          placeholder={t('message.addMembers.searchPlaceholder')}
           placeholderTextColor={isDark ? "#9CA3AF" : "#6B7280"}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          className="bg-gray-100 dark:bg-gray-900 rounded-full px-4 py-2 text-base text-gray-900 dark:text-white"
+          className={`rounded-full px-4 py-2 text-base ${isDark ? 'text-white bg-gray-900' : 'text-gray-900 bg-gray-100'}`}
         />
       </View>
 
@@ -204,8 +206,8 @@ export default function AddMemberScreen() {
       {loading ? (
         <View className="flex-1 justify-center items-center">
           <ActivityIndicator size="large" color="#F97316" />
-          <Text className="text-gray-500 dark:text-gray-400 mt-2">
-            Đang tải danh sách...
+          <Text className={`text-${isDark ? 'gray-400' : 'gray-500'} mt-2`}>
+            {t('message.addMembers.loading')}
           </Text>
         </View>
       ) : filteredUsers.length === 0 ? (
@@ -215,10 +217,10 @@ export default function AddMemberScreen() {
             size={64} 
             color={isDark ? "#4B5563" : "#9CA3AF"} 
           />
-          <Text className="text-gray-500 dark:text-gray-400 mt-4 text-center">
+          <Text className={`text-${isDark ? 'gray-400' : 'gray-500'} mt-4 text-center`}>
             {searchQuery.trim() 
-              ? "Không tìm thấy bạn bè nào" 
-              : "Tất cả bạn bè đã có trong nhóm"}
+              ? t('message.addMembers.noFriendsFound') 
+              : t('message.addMembers.allInGroup')}
           </Text>
         </View>
       ) : (

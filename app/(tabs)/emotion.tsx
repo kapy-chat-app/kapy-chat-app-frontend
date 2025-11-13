@@ -3,6 +3,8 @@ import { EmotionCard } from "@/components/page/emotion/EmotionCard";
 import { FilterModal } from "@/components/page/emotion/FilterModal";
 import { StatsOverview } from "@/components/page/emotion/StatsOverview";
 import { useEmotion } from "@/hooks/ai/useEmotion";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
@@ -14,13 +16,13 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function EmotionScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
   
   const {
     emotions,
@@ -50,19 +52,19 @@ export default function EmotionScreen() {
   // ============================================
   const handleDelete = async (emotionId: string) => {
     Alert.alert(
-      "Xác nhận xóa",
-      "Bạn có chắc chắn muốn xóa phân tích cảm xúc này?",
+      t('emotion.delete.confirmTitle'),
+      t('emotion.delete.confirmMessage'),
       [
-        { text: "Hủy", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Xóa",
+          text: t('emotion.delete.confirmTitle'),
           style: "destructive",
           onPress: async () => {
             const result = await deleteEmotion(emotionId);
             if (result.success) {
-              Alert.alert("Thành công", "Đã xóa phân tích cảm xúc");
+              Alert.alert(t('success'), t('emotion.delete.success'));
             } else {
-              Alert.alert("Lỗi", result.error || "Không thể xóa");
+              Alert.alert(t('error'), result.error || t('emotion.delete.failed'));
             }
           },
         },
@@ -89,8 +91,8 @@ export default function EmotionScreen() {
           size={64}
           color={isDark ? "#666" : "#ccc"}
         />
-        <Text className="text-base mt-3 text-gray-400 dark:text-gray-500">
-          Chưa có dữ liệu cảm xúc
+        <Text className={`text-base mt-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+          {t('emotion.empty')}
         </Text>
       </View>
     );
@@ -101,7 +103,7 @@ export default function EmotionScreen() {
   // ============================================
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-black">
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
         <View className="flex-1 justify-center items-center p-5">
           <Ionicons name="alert-circle" size={64} color="#DC143C" />
           <Text className="text-base text-red-600 mt-4 text-center">
@@ -111,7 +113,7 @@ export default function EmotionScreen() {
             className="mt-5 px-6 py-3 bg-[#F57206] rounded-lg"
             onPress={refresh}
           >
-            <Text className="text-white text-base font-semibold">Thử lại</Text>
+            <Text className="text-white text-base font-semibold">{t('emotion.tryAgain')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -122,11 +124,11 @@ export default function EmotionScreen() {
   // MAIN RENDER
   // ============================================
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-black">
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
       {/* Header */}
-      <View className="flex-row justify-between items-center px-4 py-3 border-b bg-white dark:bg-black border-gray-200 dark:border-gray-800">
-        <Text className="text-2xl font-bold text-gray-900 dark:text-white">
-          Cảm xúc của tôi
+      <View className={`flex-row justify-between items-center px-4 py-3 border-b ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'}`}>
+        <Text className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+          {t('emotion.title')}
         </Text>
 
         <View className="flex-row gap-3">
@@ -144,7 +146,7 @@ export default function EmotionScreen() {
       </View>
 
       {/* Tabs */}
-      <View className="flex-row border-b bg-white dark:bg-black border-gray-200 dark:border-gray-800">
+      <View className={`flex-row border-b ${isDark ? 'bg-black border-gray-800' : 'bg-white border-gray-200'}`}>
         <TouchableOpacity
           className={`flex-1 py-3 items-center border-b-2 ${
             selectedTab === "history"
@@ -157,10 +159,10 @@ export default function EmotionScreen() {
             className={`text-base font-medium ${
               selectedTab === "history"
                 ? "text-[#F57206] font-semibold"
-                : "text-gray-600 dark:text-gray-400"
+                : isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            Lịch sử ({total})
+            {t('emotion.tabs.history')} ({total})
           </Text>
         </TouchableOpacity>
 
@@ -174,10 +176,10 @@ export default function EmotionScreen() {
             className={`text-base font-medium ${
               selectedTab === "stats"
                 ? "text-[#F57206] font-semibold"
-                : "text-gray-600 dark:text-gray-400"
+                : isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            Thống kê
+            {t('emotion.tabs.stats')}
           </Text>
         </TouchableOpacity>
       </View>

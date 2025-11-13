@@ -1,6 +1,8 @@
 // components/emotion/StatsOverview.tsx
 import React from 'react';
-import { View, Text, ActivityIndicator, useColorScheme } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface StatsOverviewProps {
   stats: any;
@@ -19,16 +21,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   topEmotion,
   emotionsByContext,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  // Map contexts to Vietnamese
-  const contextMap: Record<string, string> = {
-    message: "Tin nhắn",
-    voice_note: "Ghi âm",
-    call: "Cuộc gọi",
-    general: "Chung",
-  };
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
 
   if (loading) {
     return (
@@ -43,9 +38,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   return (
     <View className="gap-4">
       {/* Overview Card */}
-      <View className={`rounded-xl p-4 ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} shadow-sm`}>
+      <View className={`rounded-xl p-4 shadow-sm ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
         <Text className={`text-xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Tổng quan
+          {t('emotion.stats.overview')}
         </Text>
         
         <View className="flex-row justify-around">
@@ -54,7 +49,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
               {stats.total_analyses}
             </Text>
             <Text className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-              Phân tích
+              {t('emotion.stats.analyses')}
             </Text>
           </View>
           
@@ -68,7 +63,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
                 {topEmotion.label}
               </Text>
               <Text className={`text-xs mt-0.5 ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                Cảm xúc chủ đạo
+                {t('emotion.stats.dominantEmotion')}
               </Text>
             </View>
           )}
@@ -76,9 +71,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
       </View>
 
       {/* Emotion Distribution */}
-      <View className={`rounded-xl p-4 ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} shadow-sm`}>
+      <View className={`rounded-xl p-4 shadow-sm ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
         <Text className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Phân bố cảm xúc
+          {t('emotion.stats.distribution')}
         </Text>
         
         {chartData.map((item) => (
@@ -108,9 +103,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
       </View>
 
       {/* Average Scores */}
-      <View className={`rounded-xl p-4 ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} shadow-sm`}>
+      <View className={`rounded-xl p-4 shadow-sm ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
         <Text className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-          Điểm trung bình
+          {t('emotion.stats.averageScores')}
         </Text>
         
         <View className="flex-row flex-wrap justify-between">
@@ -134,9 +129,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
 
       {/* Context Distribution */}
       {Object.keys(emotionsByContext).length > 0 && (
-        <View className={`rounded-xl p-4 ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'} shadow-sm`}>
+        <View className={`rounded-xl p-4 shadow-sm ${isDark ? 'bg-[#1a1a1a]' : 'bg-white'}`}>
           <Text className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Theo ngữ cảnh
+            {t('emotion.stats.byContext')}
           </Text>
           
           {Object.entries(emotionsByContext).map(([context, count]) => (
@@ -145,7 +140,7 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
               className={`flex-row justify-between items-center py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}
             >
               <Text className={`text-base ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {contextMap[context] || context}
+                {t(`emotion.contexts.${context}` as any) || context}
               </Text>
               <Text className="text-base font-semibold text-[#F57206]">
                 {count}

@@ -3,11 +3,11 @@ import {
   TouchableOpacity,
   Text,
   StyleSheet,
-  useColorScheme,
   ActivityIndicator,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/contexts/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -38,8 +38,8 @@ const Button: React.FC<ButtonProps> = ({
   fullWidth = false,
   borderRadius = 25,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
 
   // Định nghĩa màu sắc cho light/dark mode
   const colors = {

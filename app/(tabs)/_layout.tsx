@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
 
   const colors = {
     light: {
@@ -43,7 +45,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'home' : 'home-outline'} 
@@ -56,7 +58,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="conversations"
         options={{
-          title: 'Conversations',
+          title: t('tabs.conversations'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'chatbubbles' : 'chatbubbles-outline'} 
@@ -69,7 +71,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="contacts"
         options={{
-          title: 'Contacts',
+          title: t('tabs.contacts'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'people' : 'people-outline'} 
@@ -82,7 +84,7 @@ export default function TabLayout() {
        <Tabs.Screen
         name="emotion"
         options={{
-          title: 'Emotion',
+          title: t('tabs.emotion'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'sparkles' : 'sparkles-outline'} 
@@ -95,7 +97,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="ai-chat"
         options={{
-          title: 'AI',
+          title: t('tabs.ai'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'sparkles' : 'sparkles-outline'} 
@@ -106,9 +108,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="setting"
         options={{
-          title: 'Profile',
+          title: t('tabs.setting'),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons 
               name={focused ? 'person-circle-outline' : 'person-circle'} 

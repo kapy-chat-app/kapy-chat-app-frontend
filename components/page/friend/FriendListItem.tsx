@@ -1,5 +1,7 @@
 import { Friend } from "@/hooks/friend/useFriends";
 import { Ionicons } from "@expo/vector-icons";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import MenuDropdown from "@/components/ui/MenuDropdown";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
@@ -21,6 +23,10 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
   onBlock,
   onUnfriend,
 }) => {
+  const { t } = useLanguage();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
+
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -45,20 +51,20 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
   const menuOptions = [
     {
       id: 'message',
-      title: 'Send Message',
+      title: t('friends.menu.message'),
       icon: 'chatbubble-outline' as keyof typeof Ionicons.glyphMap,
       onPress: () => onMessage?.(),
     },
     {
       id: 'unfriend',
-      title: 'Unfriend',
+      title: t('friends.menu.unfriend'),
       icon: 'person-remove-outline' as keyof typeof Ionicons.glyphMap,
       onPress: () => onUnfriend?.(),
       destructive: false,
     },
     {
       id: 'block',
-      title: 'Block User',
+      title: t('friends.menu.block'),
       icon: 'ban-outline' as keyof typeof Ionicons.glyphMap,
       onPress: () => onBlock?.(),
       destructive: true,
@@ -68,7 +74,7 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-2 mx-4 shadow-sm"
+      className={`rounded-lg p-4 mb-2 mx-4 shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}
     >
       <View className="flex-row items-center">
         <View className="relative">
@@ -82,11 +88,11 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
         </View>
 
         <View className="flex-1 ml-3">
-          <Text className="text-gray-900 dark:text-white font-semibold">
+          <Text className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {friend.full_name}
           </Text>
-          <Text className="text-gray-500 text-sm">
-            {friend.mutualFriendsCount} mutual friends
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('friends.labels.mutual', { count: friend.mutualFriendsCount })}
           </Text>
           {friend.last_seen && (
             <Text className="text-orange-500 text-xs">

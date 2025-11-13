@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
-  useColorScheme,
   ActivityIndicator,
   Image,
   Alert,
@@ -14,6 +13,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useFriendsList, Friend } from '@/hooks/friend/useFriends';
 import { useAuth } from '@clerk/clerk-expo';
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import SearchInput from '@/components/ui/SearchInput';
 import Button from '@/components/ui/Button';
 
@@ -23,7 +24,6 @@ interface CreateConversationModalProps {
   onCreateConversation: (data: any) => Promise<void>;
 }
 
-// Extend Friend interface to include clerkId
 interface FriendWithClerkId extends Friend {
   clerkId: string;
 }
@@ -40,20 +40,19 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
   const [searchText, setSearchText] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
   const { userId } = useAuth();
   
   const { friends, loading, error, loadFriends } = useFriendsList();
 
-  // Load friends when modal opens
   useEffect(() => {
     if (visible) {
       loadFriends(1, '', 'all');
     }
   }, [visible]);
 
-  // Search friends
   useEffect(() => {
     if (visible && searchText.trim()) {
       const delaySearch = setTimeout(() => {
@@ -84,30 +83,27 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
 
   const handleCreate = async () => {
     if (selectedUsers.length === 0) {
-      Alert.alert('Error', 'Please select at least one friend');
+      Alert.alert(t('error'), t('conversations.createModal.errors.selectFriend'));
       return;
     }
     
     if (conversationType === 'group' && !groupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
+      Alert.alert(t('error'), t('conversations.createModal.errors.groupName'));
       return;
     }
 
     setIsCreating(true);
     
     try {
-      // Sử dụng clerkId từ friend object
       const participantClerkIds = selectedUsers
         .map(u => u.clerkId)
-        .filter(id => id); // Filter out undefined values
+        .filter(id => id);
       
-      // Thêm current user clerkId
       if (userId && !participantClerkIds.includes(userId)) {
         participantClerkIds.unshift(userId);
       }
 
       console.log('Creating conversation with participants:', participantClerkIds);
-      console.log('Selected users:', selectedUsers.map(u => ({ id: u.id, clerkId: u.clerkId, name: u.full_name })));
       
       const conversationData = {
         type: conversationType,
@@ -120,7 +116,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
       handleClose();
     } catch (error) {
       console.error('Failed to create conversation:', error);
-      Alert.alert('Error', 'Failed to create conversation. Please try again.');
+      Alert.alert(t('error'), t('conversations.createModal.errors.createFailed'));
     } finally {
       setIsCreating(false);
     }
@@ -142,7 +138,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
       <TouchableOpacity
         onPress={() => handleUserToggle(item)}
         className={`flex-row items-center px-4 py-3 ${
-          isSelected ? 'bg-orange-50 dark:bg-orange-950' : ''
+          isSelected ? (isDark ? 'bg-orange-950' : 'bg-orange-50') : ''
         }`}
         activeOpacity={0.7}
       >
@@ -161,15 +157,15 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
           )}
           
           {item.is_online && (
-            <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white dark:border-black" />
+            <View className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 ${isDark ? 'border-black' : 'border-white'}`} />
           )}
         </View>
         
         <View className="flex-1 ml-3">
-          <Text className="text-base font-semibold text-gray-800 dark:text-white">
+          <Text className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
             {item.full_name}
           </Text>
-          <Text className="text-sm text-gray-500 dark:text-gray-400">
+          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
             @{item.username}
           </Text>
         </View>
@@ -206,7 +202,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
         </TouchableOpacity>
       </View>
       
-      <Text className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-[60px]" numberOfLines={1}>
+      <Text className={`text-xs mt-1 max-w-[60px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`} numberOfLines={1}>
         {item.full_name}
       </Text>
     </View>
@@ -219,11 +215,11 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
         size={64}
         color={isDark ? '#666' : '#ccc'}
       />
-      <Text className="text-gray-500 dark:text-gray-400 text-center mt-4 text-base">
-        {searchText ? 'No friends found' : 'No friends yet'}
+      <Text className={`text-center mt-4 text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {searchText ? t('conversations.createModal.noResults') : t('conversations.createModal.noFriends')}
       </Text>
-      <Text className="text-gray-400 dark:text-gray-500 text-center mt-2 text-sm">
-        {searchText ? 'Try a different search' : 'Add friends to start chatting'}
+      <Text className={`text-center mt-2 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+        {searchText ? t('conversations.createModal.noResultsSubtitle') : t('conversations.createModal.noFriendsSubtitle')}
       </Text>
     </View>
   );
@@ -231,13 +227,13 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
-        <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
           <TouchableOpacity onPress={handleClose} disabled={isCreating}>
-            <Text className="text-orange-500 text-base font-medium">Cancel</Text>
+            <Text className="text-orange-500 text-base font-medium">{t('conversations.createModal.cancel')}</Text>
           </TouchableOpacity>
           
-          <Text className="text-lg font-semibold text-gray-800 dark:text-white">
-            New Conversation
+          <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+            {t('conversations.createModal.title')}
           </Text>
           
           <TouchableOpacity 
@@ -247,15 +243,15 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
             <Text className={`text-base font-medium ${
               selectedUsers.length > 0 && !isCreating ? 'text-orange-500' : 'text-gray-400'
             }`}>
-              {isCreating ? 'Creating...' : 'Create'}
+              {isCreating ? t('conversations.createModal.creating') : t('conversations.createModal.create')}
             </Text>
           </TouchableOpacity>
         </View>
 
         {selectedUsers.length > 0 && (
-          <View className="px-4 py-3 bg-gray-50 dark:bg-gray-900">
-            <Text className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
-              Selected ({selectedUsers.length})
+          <View className={`px-4 py-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            <Text className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {t('conversations.createModal.selected')} ({selectedUsers.length})
             </Text>
             <FlatList
               horizontal
@@ -268,25 +264,29 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
         )}
 
         {conversationType === 'group' && (
-          <View className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <View className={`px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
             <TextInput
               value={groupName}
               onChangeText={setGroupName}
-              placeholder="Group name (required)"
+              placeholder={t('conversations.createModal.groupName')}
               placeholderTextColor={isDark ? '#999' : '#666'}
-              className={`border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 mb-3 ${
-                isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
+              className={`border rounded-lg px-4 py-3 mb-3 ${
+                isDark 
+                  ? 'bg-gray-800 text-white border-gray-600' 
+                  : 'bg-white text-black border-gray-300'
               }`}
             />
             <TextInput
               value={groupDescription}
               onChangeText={setGroupDescription}
-              placeholder="Group description (optional)"
+              placeholder={t('conversations.createModal.groupDescription')}
               placeholderTextColor={isDark ? '#999' : '#666'}
               multiline
               numberOfLines={2}
-              className={`border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 ${
-                isDark ? 'bg-gray-800 text-white' : 'bg-white text-black'
+              className={`border rounded-lg px-4 py-3 ${
+                isDark 
+                  ? 'bg-gray-800 text-white border-gray-600' 
+                  : 'bg-white text-black border-gray-300'
               }`}
             />
           </View>
@@ -294,7 +294,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
 
         <View className="px-4 py-3">
           <SearchInput
-            placeholder="Search friends..."
+            placeholder={t('conversations.createModal.searchPlaceholder')}
             value={searchText}
             onSearch={setSearchText}
             onClear={() => setSearchText('')}
@@ -305,8 +305,8 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
         {loading ? (
           <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#FF8C42" />
-            <Text className="text-gray-500 dark:text-gray-400 mt-4">
-              Loading friends...
+            <Text className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {t('conversations.createModal.loading')}
             </Text>
           </View>
         ) : error ? (
@@ -314,7 +314,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
             <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
             <Text className="text-red-500 text-center mt-4">{error}</Text>
             <Button
-              title="Retry"
+              title={t('conversations.createModal.retry')}
               onPress={() => loadFriends(1, searchText, 'all')}
               variant="primary"
               size="medium"
@@ -331,7 +331,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
             className="flex-1"
             showsVerticalScrollIndicator={false}
             ItemSeparatorComponent={() => (
-              <View className="h-px bg-gray-200 dark:bg-gray-700 ml-16" />
+              <View className={`h-px ml-16 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
             )}
           />
         )}

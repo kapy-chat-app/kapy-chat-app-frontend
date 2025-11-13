@@ -3,7 +3,6 @@ import {
   View,
   TextInput,
   StyleSheet,
-  useColorScheme,
   TouchableOpacity,
   Text,
   TextInputProps,
@@ -11,6 +10,8 @@ import {
   BlurEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/contexts/ThemeContext';
+
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   leftIcon?: keyof typeof Ionicons.glyphMap;
@@ -54,8 +55,8 @@ const Input = forwardRef<TextInput, InputProps>(({
   required = false,
   ...props
 }, ref) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
   const [isFocused, setIsFocused] = useState(false);
   const [isSecure, setIsSecure] = useState(secureTextEntry);
 

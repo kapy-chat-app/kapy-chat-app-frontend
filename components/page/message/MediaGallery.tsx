@@ -10,13 +10,14 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    useColorScheme,
     View,
     Modal,
     ScrollView,
 } from 'react-native';
 import { Video, ResizeMode, Audio, AVPlaybackStatus } from 'expo-av';
 import Slider from '@react-native-community/slider';
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const { width } = Dimensions.get('window');
 const ITEM_SIZE = (width - 48) / 3;
@@ -33,8 +34,9 @@ export default function MediaGallery({
   type,
   onMediaPress,
 }: MediaGalleryProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
   const { media, loading, hasMore, loadMedia, loadMore, refresh } =
     useConversationMedia(conversationId);
 
@@ -470,7 +472,7 @@ export default function MediaGallery({
           color={isDark ? '#4B5563' : '#D1D5DB'}
         />
         <Text style={[styles.emptyText, isDark && styles.emptyTextDark]}>
-          Không có {getMediaTypeName(type)} nào
+          {t('message.info.noMedia', { type: t(`message.info.media.${type}`) })}
         </Text>
       </View>
     );
@@ -499,18 +501,7 @@ export default function MediaGallery({
 }
 
 function getMediaTypeName(type: string): string {
-  switch (type) {
-    case 'image':
-      return 'ảnh';
-    case 'video':
-      return 'video';
-    case 'file':
-      return 'tệp';
-    case 'audio':
-      return 'âm thanh';
-    default:
-      return 'media';
-  }
+  return t(`message.info.media.${type}`);
 }
 
 function getEmptyIcon(type: string): any {

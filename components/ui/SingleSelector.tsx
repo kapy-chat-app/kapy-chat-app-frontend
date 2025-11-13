@@ -1,16 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useTheme } from "@/contexts/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
+import React, { useRef, useState } from "react";
 import {
-  View,
-  useColorScheme,
-  TouchableOpacity,
-  Text,
+  Animated,
   FlatList,
   StyleSheet,
-  Animated,
+  Text,
+  TouchableOpacity,
+  View,
   ViewStyle,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-
+} from "react-native";
 export interface SelectOption {
   label: string;
   value: string;
@@ -46,54 +45,54 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
   label,
   required = false,
   placeholder = "Select an option",
-  leftIcon = 'list-outline',
+  leftIcon = "list-outline",
   disabled = false,
   maxHeight = 200,
   renderItem,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === "dark";
   const [isOpen, setIsOpen] = useState(false);
   const animatedHeight = useRef(new Animated.Value(0)).current;
 
   // Sử dụng cùng màu sắc với Input component
   const colors = {
     light: {
-      background: '#FFFFFF',
-      border: '#E5E5E5',
-      focusedBorder: '#007AFF',
-      text: '#000000',
-      placeholder: '#8E8E93',
-      icon: '#8E8E93',
-      error: '#FF3B30',
-      label: '#000000',
-      disabled: '#F2F2F7',
-      disabledText: '#C7C7CC',
-      selectedBackground: '#007AFF',
-      selectedText: '#FFFFFF',
-      dropdownBackground: '#FFFFFF',
-      dropdownBorder: '#E5E5E5',
+      background: "#FFFFFF",
+      border: "#E5E5E5",
+      focusedBorder: "#007AFF",
+      text: "#000000",
+      placeholder: "#8E8E93",
+      icon: "#8E8E93",
+      error: "#FF3B30",
+      label: "#000000",
+      disabled: "#F2F2F7",
+      disabledText: "#C7C7CC",
+      selectedBackground: "#007AFF",
+      selectedText: "#FFFFFF",
+      dropdownBackground: "#FFFFFF",
+      dropdownBorder: "#E5E5E5",
     },
     dark: {
-      background: '#1C1C1E',
-      border: '#38383A',
-      focusedBorder: '#0A84FF',
-      text: '#FFFFFF',
-      placeholder: '#8E8E93',
-      icon: '#8E8E93',
-      error: '#FF453A',
-      label: '#FFFFFF',
-      disabled: '#2C2C2E',
-      disabledText: '#8E8E93',
-      selectedBackground: '#0A84FF',
-      selectedText: '#FFFFFF',
-      dropdownBackground: '#1C1C1E',
-      dropdownBorder: '#38383A',
-    }
+      background: "#1C1C1E",
+      border: "#38383A",
+      focusedBorder: "#0A84FF",
+      text: "#FFFFFF",
+      placeholder: "#8E8E93",
+      icon: "#8E8E93",
+      error: "#FF453A",
+      label: "#FFFFFF",
+      disabled: "#2C2C2E",
+      disabledText: "#8E8E93",
+      selectedBackground: "#0A84FF",
+      selectedText: "#FFFFFF",
+      dropdownBackground: "#1C1C1E",
+      dropdownBorder: "#38383A",
+    },
   };
 
   const currentColors = isDark ? colors.dark : colors.light;
-  const selectedOption = options.find(option => option.value === value);
+  const selectedOption = options.find((option) => option.value === value);
 
   const getBorderColor = () => {
     if (error) return currentColors.error;
@@ -103,10 +102,10 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
 
   const toggleDropdown = () => {
     if (disabled) return;
-    
+
     const toValue = isOpen ? 0 : Math.min(options.length * 50, maxHeight);
     setIsOpen(!isOpen);
-    
+
     Animated.timing(animatedHeight, {
       toValue,
       duration: 200,
@@ -140,9 +139,9 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
         style={[
           styles.optionItem,
           {
-            backgroundColor: isSelected 
-              ? currentColors.selectedBackground 
-              : 'transparent',
+            backgroundColor: isSelected
+              ? currentColors.selectedBackground
+              : "transparent",
           },
         ]}
         onPress={() => handleSelectOption(item)}
@@ -153,30 +152,34 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
             <Ionicons
               name={item.icon}
               size={18}
-              color={isSelected ? currentColors.selectedText : currentColors.icon}
+              color={
+                isSelected ? currentColors.selectedText : currentColors.icon
+              }
               style={styles.optionIcon}
             />
           )}
-          
+
           <View style={styles.optionTextContainer}>
             <Text
               style={[
                 styles.optionLabel,
                 {
-                  color: isSelected ? currentColors.selectedText : currentColors.text,
+                  color: isSelected
+                    ? currentColors.selectedText
+                    : currentColors.text,
                 },
               ]}
             >
               {item.label}
             </Text>
-            
+
             {item.description && (
               <Text
                 style={[
                   styles.optionDescription,
                   {
-                    color: isSelected 
-                      ? currentColors.selectedText 
+                    color: isSelected
+                      ? currentColors.selectedText
                       : currentColors.placeholder,
                   },
                 ]}
@@ -186,7 +189,7 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
             )}
           </View>
         </View>
-        
+
         {isSelected && (
           <Ionicons
             name="checkmark"
@@ -212,14 +215,16 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
           )}
         </View>
       )}
-      
+
       <TouchableOpacity
         onPress={toggleDropdown}
         disabled={disabled}
         style={[
           styles.inputContainer,
           {
-            backgroundColor: disabled ? currentColors.disabled : currentColors.background,
+            backgroundColor: disabled
+              ? currentColors.disabled
+              : currentColors.background,
             borderColor: getBorderColor(),
             borderWidth: isOpen ? 2 : 1,
           },
@@ -236,27 +241,31 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
             />
           </View>
         )}
-        
+
         <View style={styles.textContainer}>
           <Text
             style={[
               styles.text,
               {
-                color: selectedOption 
-                  ? (disabled ? currentColors.disabledText : currentColors.text)
+                color: selectedOption
+                  ? disabled
+                    ? currentColors.disabledText
+                    : currentColors.text
                   : currentColors.placeholder,
               },
             ]}
           >
             {selectedOption ? selectedOption.label : placeholder}
           </Text>
-          
+
           {selectedOption?.description && (
             <Text
               style={[
                 styles.description,
                 {
-                  color: disabled ? currentColors.disabledText : currentColors.placeholder,
+                  color: disabled
+                    ? currentColors.disabledText
+                    : currentColors.placeholder,
                 },
               ]}
             >
@@ -264,7 +273,7 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
             </Text>
           )}
         </View>
-        
+
         <View style={styles.rightIconContainer}>
           <Ionicons
             name={isOpen ? "chevron-up-outline" : "chevron-down-outline"}
@@ -294,20 +303,22 @@ const SingleSelector: React.FC<SingleSelectorProps> = ({
             <View
               style={[
                 styles.separator,
-                { backgroundColor: currentColors.border }
+                { backgroundColor: currentColors.border },
               ]}
             />
           )}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: currentColors.placeholder }]}>
+              <Text
+                style={[styles.emptyText, { color: currentColors.placeholder }]}
+              >
                 No options available
               </Text>
             </View>
           )}
         />
       </Animated.View>
-      
+
       {error && errorMessage && (
         <Text style={[styles.errorMessage, { color: currentColors.error }]}>
           {errorMessage}
@@ -323,22 +334,22 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   labelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 6,
   },
   label: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   required: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
     marginLeft: 2,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderRadius: 25, // Giống Input component
     paddingHorizontal: 16,
@@ -347,17 +358,17 @@ const styles = StyleSheet.create({
   },
   leftIconContainer: {
     marginRight: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   rightIconContainer: {
     marginLeft: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   textContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   text: {
     fontSize: 16,
@@ -372,9 +383,9 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
     marginTop: -1,
-    overflow: 'hidden',
+    overflow: "hidden",
     elevation: 3,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -383,16 +394,16 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 50,
   },
   optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   optionIcon: {
@@ -403,7 +414,7 @@ const styles = StyleSheet.create({
   },
   optionLabel: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   optionDescription: {
     fontSize: 12,
@@ -415,11 +426,11 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     padding: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptyText: {
     fontSize: 14,
-    textAlign: 'center',
+    textAlign: "center",
   },
   errorMessage: {
     fontSize: 14,

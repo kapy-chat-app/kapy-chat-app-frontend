@@ -6,9 +6,9 @@ import {
   Text,
   Modal,
   Pressable,
-  useColorScheme,
   Dimensions,
 } from "react-native";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface MenuOption {
   id: string;
@@ -33,14 +33,14 @@ const MenuDropdown: React.FC<MenuDropdownProps> = ({
   triggerColor,
   style,
 }) => {
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === "dark";
   const [isVisible, setIsVisible] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
   const triggerRef = useRef<View>(null);
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
-  const defaultTriggerColor = triggerColor || "#FF8C42";
+  const defaultTriggerColor = triggerColor || (isDark ? "#D1D5DB" : "#6B7280");
 
   const handleTriggerPress = () => {
     if (triggerRef.current) {

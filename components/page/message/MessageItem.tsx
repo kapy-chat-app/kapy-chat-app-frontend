@@ -11,9 +11,10 @@ import {
   Image,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { MessageActionsMenu } from "./MessageActionsMenu";
 import { ReadReceiptsModal } from "./ReadReceiptsModal";
 import { MessageMediaGallery } from "./MessageMediaGallery";
@@ -46,13 +47,14 @@ const MessageItem: React.FC<MessageItemProps> = ({
   encryptionReady,
 }) => {
   const { user } = useUser();
-  const colorScheme = useColorScheme();
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
   const [showActions, setShowActions] = useState(false);
   const [showReadReceipts, setShowReadReceipts] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const bubbleRef = useRef<View>(null);
 
-  const isDark = colorScheme === "dark";
+  const isDark = actualTheme === "dark";
   const messageStatus = message.status || "sent";
   const isSending = messageStatus === "sending";
   const isFailed = messageStatus === "failed";
@@ -140,16 +142,16 @@ const MessageItem: React.FC<MessageItemProps> = ({
 
   const handleDelete = () => {
     setShowActions(false);
-    Alert.alert("Xóa tin nhắn", "Chọn cách xóa:", [
-      { text: "Hủy", style: "cancel" },
+    Alert.alert(t('message.actions.deleteTitle'), t('message.actions.deleteMessage'), [
+      { text: t('cancel'), style: "cancel" },
       {
-        text: "Xóa ở phía tôi",
+        text: t('message.actions.deleteForMe'),
         onPress: () => onDelete?.(message._id, "only_me"),
       },
       ...(isOwnMessage
         ? [
             {
-              text: "Xóa ở mọi người",
+              text: t('message.actions.deleteForEveryone'),
               style: "destructive" as const,
               onPress: () => onDelete?.(message._id, "both"),
             },
@@ -160,12 +162,12 @@ const MessageItem: React.FC<MessageItemProps> = ({
 
   const handleRetryDecryption = () => {
     Alert.alert(
-      "Thử giải mã lại",
-      "Bạn có muốn thử giải mã tin nhắn này lại không?",
+      t('message.encryption.retryTitle'),
+      t('message.encryption.retryMessage'),
       [
-        { text: "Hủy", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Thử lại",
+          text: t('message.encryption.retry'),
           onPress: () => onRetryDecryption?.(message._id),
         },
       ]
@@ -276,7 +278,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
           <Text
             className={`text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
           >
-            {message.sender?.full_name || "Unknown User"}
+            {message.sender?.full_name || t('message.unknownUser')}
           </Text>
         )}
 
@@ -302,7 +304,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                 <Text
                   className={`text-[10px] ${isOwnMessage ? "text-gray-200" : "text-gray-600"}`}
                 >
-                  Trả lời {message.reply_to.sender?.full_name}
+                  {t('message.reply.replyingTo', { name: message.reply_to.sender?.full_name })}
                 </Text>
                 <Text
                   className={`text-xs ${isOwnMessage ? "text-gray-200" : "text-gray-600"}`}
@@ -325,13 +327,13 @@ const MessageItem: React.FC<MessageItemProps> = ({
                     isOwnMessage ? "text-red-300" : isDark ? "text-red-400" : "text-red-600"
                   }`}
                 >
-                  🔒 Không thể giải mã một số tệp đính kèm
+                  {t('message.encryption.fileDecryptionError')}
                 </Text>
                 <TouchableOpacity
                   onPress={handleRetryDecryption}
                   className="mt-2 bg-red-500 px-3 py-1 rounded"
                 >
-                  <Text className="text-white text-xs">Thử lại</Text>
+                  <Text className="text-white text-xs">{t('message.encryption.retry')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -367,7 +369,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                     className="mx-3 mb-2 mt-1 bg-yellow-500 px-3 py-1 rounded"
                   >
                     <Text className="text-white text-xs text-center">
-                      Thử giải mã lại
+                      {t('message.encryption.retryDecryption')}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -380,7 +382,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   isOwnMessage ? "text-gray-200" : "text-gray-600"
                 }`}
               >
-                đã chỉnh sửa
+                {t('message.edited')}
               </Text>
             )}
           </TouchableOpacity>

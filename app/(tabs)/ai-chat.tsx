@@ -1,8 +1,10 @@
 /* eslint-disable react/no-unescaped-entities */
-// app/(root)/ai-chat.tsx - AUTO SHOW RECOMMENDATIONS ON ENTER
+// app/(root)/ai-chat.tsx
 import Header from "@/components/shared/Header";
 import { useChatbot } from "@/hooks/ai/useChatbot";
 import { useEmotion } from "@/hooks/ai/useEmotion";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
@@ -15,7 +17,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +30,7 @@ interface MessageBubbleProps {
   isDark: boolean;
   getEmotionEmoji: (emotion?: string) => string;
   getEmotionColor: (emotion?: string) => string;
+  translateEmotion: (emotion?: string) => string;
 }
 
 interface TypingIndicatorProps {
@@ -52,7 +54,8 @@ const MessageBubble = memo(function MessageBubble({
   index, 
   isDark, 
   getEmotionEmoji, 
-  getEmotionColor 
+  getEmotionColor,
+  translateEmotion
 }: MessageBubbleProps) {
   const isUser = item.role === "user";
   const emoji = getEmotionEmoji(item.emotion);
@@ -145,7 +148,7 @@ const MessageBubble = memo(function MessageBubble({
               className="text-xs font-medium capitalize"
               style={{ color: emotionColor }}
             >
-              {item.emotion}
+              {translateEmotion(item.emotion)}
             </Text>
           </View>
         )}
@@ -313,8 +316,9 @@ const SuggestionItem = memo(function SuggestionItem({
 // ============================================
 
 export default function AIChatbotScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === "dark";
   const router = useRouter();
   const params = useLocalSearchParams();
   const flatListRef = useRef<FlatList>(null);
@@ -355,6 +359,11 @@ export default function AIChatbotScreen() {
     };
     return emotion ? colorMap[emotion] || "#6B7280" : "#6B7280";
   }, []);
+
+  const translateEmotion = useCallback((emotion?: string) => {
+    if (!emotion) return "";
+    return t(`aiChat.emotions.${emotion}` as any) || emotion;
+  }, [t]);
 
   const loadRecommendationsInternal = useCallback(async () => {
     const data = await getRecommendations();
@@ -401,21 +410,17 @@ export default function AIChatbotScreen() {
     setShowSuggestions(false);
   }, []);
 
-  // 🔥 NEW: Send welcome message with recommendations automatically
+  // Send welcome message with recommendations
   const sendWelcomeWithRecommendations = useCallback(async (recs: string[]) => {
     if (hasAutoSentRecommendations.current || recs.length === 0) return;
     
     hasAutoSentRecommendations.current = true;
-
-    // Wait a bit for smooth animation
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Format recommendations as a nice message
-    const welcomeMessage = `Dựa trên cảm xúc của bạn, tôi có một số gợi ý:\n\n${recs.map((r, i) => `${i + 1}. ${r}`).join('\n\n')}\n\nBạn muốn trao đổi về điều gì?`;
+    const welcomeMessage = `${t('aiChat.welcome.intro')}\n\n${recs.map((r, i) => `${i + 1}. ${r}`).join('\n\n')}\n\n${t('aiChat.welcome.question')}`;
     
-    // Send as bot message (not user message)
     await handleSend(welcomeMessage);
-  }, [handleSend]);
+  }, [handleSend, t]);
 
   // Load recommendations once on mount
   useEffect(() => {
@@ -423,7 +428,6 @@ export default function AIChatbotScreen() {
       hasLoadedRecommendations.current = true;
       
       loadRecommendationsInternal().then(recs => {
-        // 🔥 Auto show suggestions if came from floating notification
         if (params.hasRecommendations === 'true' && recs.length > 0) {
           sendWelcomeWithRecommendations(recs);
         }
@@ -465,9 +469,10 @@ export default function AIChatbotScreen() {
         isDark={isDark}
         getEmotionEmoji={getEmotionEmoji}
         getEmotionColor={getEmotionColor}
+        translateEmotion={translateEmotion}
       />
     );
-  }, [isDark, getEmotionEmoji, getEmotionColor]);
+  }, [isDark, getEmotionEmoji, getEmotionColor, translateEmotion]);
 
   const renderTypingIndicator = useCallback(() => {
     if (!typing) return null;
@@ -492,14 +497,14 @@ export default function AIChatbotScreen() {
                   isDark ? "text-gray-300" : "text-gray-700"
                 }`}
               >
-                Gợi ý AI cho bạn
+                {t('aiChat.suggestions.title')}
               </Text>
               {currentEmotion && (
                 <Text
                   className="text-xs capitalize"
                   style={{ color: getEmotionColor(currentEmotion) }}
                 >
-                  {currentEmotion} · {(emotionConfidence * 100).toFixed(0)}%
+                  {translateEmotion(currentEmotion)} · {t('aiChat.empty.confidence', { percent: (emotionConfidence * 100).toFixed(0) })}
                 </Text>
               )}
             </View>
@@ -529,7 +534,7 @@ export default function AIChatbotScreen() {
         </View>
       </View>
     );
-  }, [showSuggestions, recommendations, currentEmotion, emotionConfidence, isDark, getEmotionEmoji, getEmotionColor, handleSuggestionPress]);
+  }, [showSuggestions, recommendations, currentEmotion, emotionConfidence, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, handleSuggestionPress, t]);
 
   const renderEmptyState = useCallback(() => (
     <View className="flex-1 justify-center items-center px-8">
@@ -551,7 +556,7 @@ export default function AIChatbotScreen() {
           isDark ? "text-white" : "text-gray-900"
         }`}
       >
-        Trợ Lý Sức Khỏe AI
+        {t('aiChat.empty.title')}
       </Text>
 
       {currentEmotion && (
@@ -562,10 +567,10 @@ export default function AIChatbotScreen() {
               className="text-base font-semibold capitalize"
               style={{ color: getEmotionColor(currentEmotion) }}
             >
-              Bạn đang {currentEmotion}
+              {t('aiChat.empty.emotionStatus', { emotion: translateEmotion(currentEmotion) })}
             </Text>
             <Text className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-              {(emotionConfidence * 100).toFixed(0)}% độ tin cậy
+              {t('aiChat.empty.confidence', { percent: (emotionConfidence * 100).toFixed(0) })}
             </Text>
           </View>
         </View>
@@ -576,8 +581,7 @@ export default function AIChatbotScreen() {
           isDark ? "text-gray-400" : "text-gray-600"
         }`}
       >
-        Tôi ở đây để hỗ trợ sức khỏe tinh thần của bạn.{"\n"}
-        Hãy chia sẻ cảm xúc của bạn!
+        {t('aiChat.empty.subtitle')}
       </Text>
 
       {recommendations.length > 0 && (
@@ -587,7 +591,7 @@ export default function AIChatbotScreen() {
               isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            Bắt đầu với các chủ đề:
+            {t('aiChat.suggestions.startWith')}
           </Text>
           {recommendations.slice(0, 4).map((rec, index) => (
             <TouchableOpacity
@@ -614,20 +618,20 @@ export default function AIChatbotScreen() {
         </View>
       )}
     </View>
-  ), [currentEmotion, emotionConfidence, recommendations, isDark, getEmotionEmoji, getEmotionColor, handleSuggestionPress]);
+  ), [currentEmotion, emotionConfidence, recommendations, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, handleSuggestionPress, t]);
 
   const inputHasText = useMemo(() => inputText.trim().length > 0, [inputText]);
 
   const headerRightComponent = useMemo(() => (
     <View className="flex-row items-center gap-2">
       {currentEmotion && (
-        <View className="flex-row items-center px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800">
+        <View className={`flex-row items-center px-3 py-1 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
           <Text className="text-sm mr-1">{getEmotionEmoji(currentEmotion)}</Text>
           <Text
             className="text-xs font-semibold capitalize"
             style={{ color: getEmotionColor(currentEmotion) }}
           >
-            {currentEmotion}
+            {translateEmotion(currentEmotion)}
           </Text>
         </View>
       )}
@@ -648,7 +652,7 @@ export default function AIChatbotScreen() {
         )}
       </TouchableOpacity>
     </View>
-  ), [currentEmotion, isDark, emotionLoading, getEmotionEmoji, getEmotionColor, handleRefreshRecommendations]);
+  ), [currentEmotion, isDark, emotionLoading, getEmotionEmoji, getEmotionColor, translateEmotion, handleRefreshRecommendations]);
 
   return (
     <SafeAreaView
@@ -656,7 +660,7 @@ export default function AIChatbotScreen() {
       edges={["top"]}
     >
       <Header
-        title="AI Assistant"
+        title={t('aiChat.title')}
         onBackPress={() => router.back()}
         rightComponent={headerRightComponent}
       />
@@ -736,7 +740,7 @@ export default function AIChatbotScreen() {
               <TextInput
                 value={inputText}
                 onChangeText={setInputText}
-                placeholder="Chia sẻ suy nghĩ của bạn..."
+                placeholder={t('aiChat.placeholder')}
                 placeholderTextColor={isDark ? "#9CA3AF" : "#6B7280"}
                 className={`text-[15px] leading-5 ${
                   isDark ? "text-white" : "text-gray-900"

@@ -5,14 +5,22 @@ import {
   ActivityIndicator,
   StatusBar,
   Text,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
+  
+  // Log theme để debug
+  useEffect(() => {
+    console.log('Theme changed to:', actualTheme, 'isDark:', isDark);
+  }, [actualTheme]);
+
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -25,42 +33,40 @@ export default function HomeScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Loading screen với styling đơn giản để tránh NativeWind
+  // Loading screen với NativeWind
   if (!isReady) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        backgroundColor: isDark ? '#000000' : '#FFFFFF'
-      }}>
+      <View className={`flex-1 justify-center items-center ${isDark ? 'bg-black' : 'bg-white'}`}>
         <ActivityIndicator size="large" color="#f97316" />
-        <Text style={{ 
-          marginTop: 16, 
-          color: isDark ? '#9CA3AF' : '#6B7280' 
-        }}>
-          Loading...
+        <Text className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+          {t('loading')}
         </Text>
       </View>
     );
   }
 
-  // Render component chính với NativeWind sau khi navigation context sẵn sàng
+  // Render component chính - Force background rõ hơn bằng style fallback nếu NativeWind fail
   return (
-    <SafeAreaView className="flex-1 bg-white dark:bg-black">
+    <SafeAreaView 
+      className="flex-1 bg-white dark:bg-black"
+      style={{ backgroundColor: isDark ? '#000000' : '#FFFFFF' }} // Fallback inline style
+    >
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
       />
 
-      <Header title="Home" onMenuPress={() => setIsSidebarVisible(true)} />
+      <Header title={t('home')} onMenuPress={() => setIsSidebarVisible(true)} />
 
-      <View className="flex-1 justify-center items-center px-5">
-        <Text className="text-2xl font-bold text-center text-black dark:text-white">
-          Home Screen
+      <View 
+        className="flex-1 justify-center items-center px-5 bg-white dark:bg-black"
+        style={{ backgroundColor: isDark ? '#000000' : '#FFFFFF' }} // Fallback cho content
+      >
+        <Text className="text-2xl font-bold text-center text-black dark:text-white mb-4">
+          {t('homeScreen.title')}
         </Text>
-        <Text className="text-base text-center mt-4 text-gray-600 dark:text-gray-400">
-          Welcome to your home page
+        <Text className="text-base text-center text-gray-600 dark:text-gray-400">
+          {t('homeScreen.welcome')}
         </Text>
       </View>
 

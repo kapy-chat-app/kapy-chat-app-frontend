@@ -13,6 +13,8 @@ import {
   useFriendsList,
 } from "@/hooks/friend/useFriends";
 import { useRouter } from "expo-router";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import React, { useMemo, useState, useCallback } from "react";
 import {
   Alert,
@@ -27,6 +29,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const FriendsScreen = () => {
+  const { actualTheme } = useTheme();
+  const { t } = useLanguage();
+  const isDark = actualTheme === 'dark';
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -96,43 +101,43 @@ const FriendsScreen = () => {
   const handleAcceptRequest = useCallback(async (requestId: string) => {
     const result = await respondToRequest(requestId, "accept");
     if (result.success) {
-      Alert.alert("Success", "Friend request accepted!");
+      Alert.alert(t('success'), t('friends.request.accepted'));
       loadFriends();
       loadFriendRequests();
     } else {
-      Alert.alert("Error", result.error || "Failed to accept request");
+      Alert.alert(t('error'), result.error || t('friends.request.acceptFailed'));
     }
-  }, [respondToRequest, loadFriends, loadFriendRequests]);
+  }, [respondToRequest, loadFriends, loadFriendRequests, t]);
 
   const handleDeclineRequest = useCallback(async (requestId: string) => {
     Alert.alert(
-      "Decline Request",
-      "Are you sure you want to decline this friend request?",
+      t('friends.request.declineTitle'),
+      t('friends.request.declineMessage'),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t('cancel'), style: "cancel" },
         {
-          text: "Decline",
+          text: t('friends.request.decline'),
           style: "destructive",
           onPress: async () => {
             const result = await respondToRequest(requestId, "decline");
             if (result.success) {
               loadFriendRequests();
             } else {
-              Alert.alert("Error", result.error || "Failed to decline request");
+              Alert.alert(t('error'), result.error || t('friends.request.declineFailed'));
             }
           },
         },
       ]
     );
-  }, [respondToRequest, loadFriendRequests]);
+  }, [respondToRequest, loadFriendRequests, t]);
 
   const handleSendFriendRequest = useCallback(async (userId: string) => {
     const result = await sendFriendRequest(userId);
     Alert.alert(
-      result.success ? "Success" : "Error", 
-      result.message || result.error || "Unknown error"
+      result.success ? t('success') : t('error'), 
+      result.message || result.error || t('friends.unknownError')
     );
-  }, [sendFriendRequest]);
+  }, [sendFriendRequest, t]);
 
   const handleViewAllRequests = useCallback(() => {
     router.push('/contacts/requests');
@@ -153,36 +158,36 @@ const FriendsScreen = () => {
         router.push(`contacts/public-profile/${item.id}`)
       }}
       onMenuPress={() => {
-        Alert.alert(item.full_name, "Choose an action", [
-          { text: "View Profile", onPress: () => console.log("View profile") },
-          { text: "Message", onPress: () => console.log("Message") },
+        Alert.alert(item.full_name, t('friends.menu.title'), [
+          { text: t('friends.menu.viewProfile'), onPress: () => console.log("View profile") },
+          { text: t('friends.menu.message'), onPress: () => console.log("Message") },
           {
-            text: "Block",
+            text: t('friends.menu.block'),
             style: "destructive",
             onPress: () => console.log("Block"),
           },
-          { text: "Cancel", style: "cancel" },
+          { text: t('cancel'), style: "cancel" },
         ]);
       }}
     />
-  ), []);
+  ), [t, router]);
 
   const renderSectionHeader = useCallback(({ section }: { section: { title: string } }) => (
-    <View className="bg-gray-100 dark:bg-gray-900 px-4 py-2">
-      <Text className="text-gray-900 dark:text-white font-semibold text-lg">
+    <View className={`px-4 py-2 ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`}>
+      <Text className={`font-semibold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>
         {section.title}
       </Text>
     </View>
-  ), []);
+  ), [isDark]);
 
   // Show search results when searching
   if (searchQuery.trim()) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50 dark:bg-black">
-        <Header title="Friends" onMenuPress={handleMenuPress} />
+      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
+        <Header title={t('friends.title')} onMenuPress={handleMenuPress} />
 
         <SearchInput
-          placeholder="Search friends..."
+          placeholder={t('friends.searchPlaceholder')}
           onSearch={handleSearch}
           style={{ marginHorizontal: 16, marginBottom: 16 }}
         />
@@ -190,14 +195,16 @@ const FriendsScreen = () => {
         <ScrollView className="flex-1">
           {searchLoading ? (
             <View className="flex-1 justify-center items-center py-8">
-              <Text className="text-gray-500">Searching...</Text>
+              <Text className={`text-lg ${isDark ? "text-white" : "text-black"}`}>
+                {t('friends.searching')}
+              </Text>
             </View>
           ) : searchResults.length > 0 ? (
             searchResults.map((user) => (
               <TouchableOpacity
                 onPress={()=>router.push(`/contacts/public-profile/${user.id}`)}
                 key={user.id}
-                className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-2 mx-4 shadow-sm"
+                className={`p-4 mb-2 mx-4 rounded-lg shadow-sm ${isDark ? 'bg-gray-800' : 'bg-white'}`}
               >
                 <View className="flex-row items-center">
                   <Image
@@ -207,35 +214,36 @@ const FriendsScreen = () => {
                     className="w-12 h-12 rounded-full"
                   />
                   <View className="flex-1 ml-3">
-                    <Text className="text-gray-900 dark:text-white font-semibold">
+                    <Text className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                       {user.full_name}
                     </Text>
-                    <Text className="text-gray-500 text-sm">
-                      @{user.username} • {user.mutualFriendsCount} mutual
-                      friends
+                    <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                      @{user.username} • {t('friends.labels.mutual', { count: user.mutualFriendsCount })}
                     </Text>
                   </View>
 
                   {user.friendshipStatus === "none" && (
                     <Button
-                      title="Add Friend"
+                      title={t('friends.addFriend')}
                       onPress={() => handleSendFriendRequest(user.id)}
                       variant="primary"
                       size="small"
                     />
                   )}
                   {user.friendshipStatus === "sent" && (
-                    <Text className="text-orange-500 text-sm">Sent</Text>
+                    <Text className={`text-sm ${isDark ? 'text-orange-400' : 'text-orange-500'}`}>{t('friends.sent')}</Text>
                   )}
                   {user.friendshipStatus === "accepted" && (
-                    <Text className="text-green-500 text-sm">Friends</Text>
+                    <Text className={`text-sm ${isDark ? 'text-green-400' : 'text-green-500'}`}>{t('friends.friends')}</Text>
                   )}
                 </View>
               </TouchableOpacity>
             ))
           ) : (
             <View className="flex-1 justify-center items-center py-8">
-              <Text className="text-gray-500">No users found</Text>
+              <Text className={`text-lg ${isDark ? "text-white" : "text-black"}`}>
+                {t('friends.noUsersFound')}
+              </Text>
             </View>
           )}
         </ScrollView>
@@ -250,11 +258,11 @@ const FriendsScreen = () => {
 
   // Main friends screen
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-black">
-      <Header title="Friends" onMenuPress={handleMenuPress} />
+    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-gray-50'}`}>
+      <Header title={t('friends.title')} onMenuPress={handleMenuPress} />
 
       <SearchInput
-        placeholder="Search friends..."
+        placeholder={t('friends.searchPlaceholder')}
         onSearch={handleSearch}
         style={{ marginHorizontal: 16, marginBottom: 16 }}
       />
@@ -263,8 +271,8 @@ const FriendsScreen = () => {
       {requests.length > 0 && (
         <View className="mb-3">
           <TabHeader
-            leftText="Friend requests"
-            rightText="All requests"
+            leftText={t('friends.requests.title')}
+            rightText={t('friends.requests.all')}
             rightAction={handleViewAllRequests}
           />
 
@@ -290,8 +298,8 @@ const FriendsScreen = () => {
       {/* My Friends Section */}
       <View className="flex-1">
         <TabHeader
-          leftText={`My friends (${friends.length})`}
-          rightText="See all"
+          leftText={t('friends.myFriends', { count: friends.length })}
+          rightText={t('friends.seeAll')}
           rightAction={() => {
             // Navigate to all friends screen
             router
