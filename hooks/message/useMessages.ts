@@ -1,8 +1,8 @@
-// hooks/useMessages.ts - WITH INTEGRATED FILE DECRYPTION
+// hooks/message/useMessages.ts (UPDATE interfaces at top of file)
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEncryption } from "./useEncryption";
-import { useFileDecryption } from "./useFileDecryption"; // ✅ Import file decryption
+import { useFileDecryption } from "./useFileDecryption";
 import { useSocket } from "./useSocket";
 
 export interface MessageSender {
@@ -26,12 +26,13 @@ export interface MessageAttachment {
     original_size: number;
     encrypted_size: number;
   };
-  decryptedUri?: string; // ✅ NEW: Decrypted URI được lưu ngay trong attachment
+  decryptedUri?: string;
 }
 
+// ✨ UPDATE: MessageReaction - Thêm dislike
 export interface MessageReaction {
   user: MessageSender;
-  type: string;
+  type: "heart" | "like" | "sad" | "angry" | "laugh" | "wow" | "dislike"; // ✨ NEW: dislike
   created_at: Date;
 }
 
@@ -48,6 +49,24 @@ export interface MessageReadBy {
 
 export type MessageStatus = 'sending' | 'sent' | 'failed' | 'encrypting' | 'decrypting';
 
+// ✨ NEW: Rich Media DTO
+export interface RichMediaDTO {
+  provider: "giphy" | "tenor" | "custom" | string;
+  provider_id: string;
+  url: string;
+  media_url: string;
+  preview_url?: string;
+  width: number;
+  height: number;
+  size?: number;
+  title?: string;
+  rating?: string;
+  tags?: string[];
+  source_url?: string;
+  extra_data?: Record<string, any>;
+}
+
+// ✨ UPDATE: Message - Thêm gif, sticker, rich_media
 export interface Message {
   _id: string;
   conversation: string;
@@ -60,13 +79,14 @@ export interface Message {
     pre_key_id?: number;
     signed_pre_key_id?: number;
   };
-  type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location";
+  type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location" | "gif" | "sticker"; // ✨ NEW: gif, sticker
   attachments: MessageAttachment[];
   reply_to?: Message;
   reactions: MessageReaction[];
   is_edited: boolean;
   edited_at?: Date;
   read_by: MessageReadBy[];
+  rich_media?: RichMediaDTO; // ✨ NEW
   created_at: Date;
   updated_at: Date;
   status?: MessageStatus;
@@ -75,13 +95,15 @@ export interface Message {
   decryption_error?: boolean;
 }
 
+// ✨ UPDATE: CreateMessageData - Thêm richMedia
 export interface CreateMessageData {
   content?: string;
-  type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location";
+  type: "text" | "image" | "video" | "audio" | "file" | "voice_note" | "location" | "gif" | "sticker"; // ✨ NEW
   attachments?: string[];
   replyTo?: string;
   encryptedFiles?: any[];
   localUris?: string[];
+  richMedia?: RichMediaDTO; // ✨ NEW
 }
 
 export interface TypingUser {
@@ -98,6 +120,7 @@ interface MessageHookReturn {
   deleteMessage: (id: string, type?: "only_me" | "both") => Promise<void>;
   addReaction: (id: string, reaction: string) => Promise<void>;
   removeReaction: (id: string) => Promise<void>;
+  toggleReaction: (id: string, reaction: string) => Promise<void>; // ✨ NEW
   markAsRead: (id: string) => Promise<void>;
   markConversationAsRead: (conversationId: string) => Promise<void>;
   loadMoreMessages: () => Promise<void>;
@@ -123,7 +146,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
   const { user } = useUser();
   const { getToken } = useAuth();
   const { encryptMessage, decryptMessage, isInitialized: encryptionInitialized } = useEncryption();
-  const { getDecryptedUri } = useFileDecryption(); // ✅ File decryption hook
+  const { getDecryptedUri } = useFileDecryption();
   
   const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
@@ -140,59 +163,59 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     messagesRef.current = messages;
   }, [messages]);
 
-  // ✨ NEW: Helper function to decrypt file attachments
+  // Helper function to decrypt file attachments
   const decryptAttachments = useCallback(
-  async (attachments: MessageAttachment[], senderClerkId: string): Promise<MessageAttachment[]> => {
-    if (!attachments || attachments.length === 0) {
-      return [];
-    }
+    async (attachments: MessageAttachment[], senderClerkId: string): Promise<MessageAttachment[]> => {
+      if (!attachments || attachments.length === 0) {
+        return [];
+      }
 
-    console.log(`🔓 Decrypting ${attachments.length} attachments from sender:`, senderClerkId);
+      console.log(`🔓 Decrypting ${attachments.length} attachments from sender:`, senderClerkId);
 
-    return await Promise.all(
-      attachments.map(async (att) => {
-        if (!att.is_encrypted || !att.encryption_metadata) {
-          console.log(`⏭️ File ${att.file_name} is not encrypted`);
-          return att;
-        }
-
-        try {
-          console.log(`🔓 Decrypting file: ${att.file_name}`);
-          
-          const decryptedUri = await getDecryptedUri(
-            att._id,
-            att.encryption_metadata.iv,
-            att.encryption_metadata.authTag,
-            senderClerkId,
-            att._id
-          );
-
-          console.log(`✅ File ${att.file_name} decrypted successfully`);
-
-          return {
-            ...att,
-            decryptedUri,
-          };
-        } catch (error) {
-          console.error(`❌ Failed to decrypt file ${att.file_name}:`, error);
-          
-          // ✅ Check if error is due to initialization
-          if (error instanceof Error && error.message.includes('not initialized')) {
-            console.warn('⚠️ E2EE not initialized, skipping file decryption');
-            return att; // Return unchanged attachment
+      return await Promise.all(
+        attachments.map(async (att) => {
+          if (!att.is_encrypted || !att.encryption_metadata) {
+            console.log(`⏭️ File ${att.file_name} is not encrypted`);
+            return att;
           }
-          
-          return {
-            ...att,
-            decryption_error: true,
-          };
-        }
-      })
-    );
-  },
-  [getDecryptedUri]
-);
-  // ✨ Helper function to decrypt message content
+
+          try {
+            console.log(`🔓 Decrypting file: ${att.file_name}`);
+            
+            const decryptedUri = await getDecryptedUri(
+              att._id,
+              att.encryption_metadata.iv,
+              att.encryption_metadata.authTag,
+              senderClerkId,
+              att._id
+            );
+
+            console.log(`✅ File ${att.file_name} decrypted successfully`);
+
+            return {
+              ...att,
+              decryptedUri,
+            };
+          } catch (error) {
+            console.error(`❌ Failed to decrypt file ${att.file_name}:`, error);
+            
+            if (error instanceof Error && error.message.includes('not initialized')) {
+              console.warn('⚠️ E2EE not initialized, skipping file decryption');
+              return att;
+            }
+            
+            return {
+              ...att,
+              decryption_error: true,
+            };
+          }
+        })
+      );
+    },
+    [getDecryptedUri]
+  );
+
+  // Helper function to decrypt message content
   const decryptMessageContent = useCallback(
     async (message: Message): Promise<string> => {
       if (!message.encrypted_content) {
@@ -218,7 +241,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     [decryptMessage, encryptionInitialized]
   );
 
-  // ✨ Retry decryption for a specific message
+  // Retry decryption for a specific message
   const retryDecryption = useCallback(
     async (messageId: string) => {
       try {
@@ -235,13 +258,11 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           throw new Error('Message not found');
         }
 
-        // ✅ Decrypt text content
         let decryptedContent = message.content;
         if (message.encrypted_content) {
           decryptedContent = await decryptMessageContent(message);
         }
 
-        // ✅ Decrypt attachments
         const decryptedAttachments = await decryptAttachments(
           message.attachments,
           message.sender.clerkId
@@ -327,7 +348,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     console.log(`⌨️ Sent typing indicator: ${isTyping}`);
   }, [socket, conversationId, user, emit]);
 
-  // ✨ Fetch and decrypt messages (with files)
+  // Fetch and decrypt messages
   const fetchMessages = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
       if (!conversationId || loadingRef.current) return;
@@ -359,18 +380,14 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           throw new Error(result.error || "Failed to fetch messages");
         }
 
-        console.log("Messaages>>>", result.data.messages);
-
         const encryptedMessages = result.data.messages || [];
         const pagination = result.data.pagination;
 
         console.log(`📦 Fetched ${encryptedMessages.length} messages, decrypting...`);
 
-        // ✅ FIXED: Decrypt messages + files sequentially
         const decryptedMessages = await Promise.all(
           encryptedMessages.map(async (msg: Message) => {
             try {
-              // ✅ 1. Decrypt text content
               let decryptedContent = msg.content;
               if (msg.encrypted_content && encryptionInitialized) {
                 console.log(`🔓 Decrypting message ${msg._id}`);
@@ -380,7 +397,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
                 );
               }
 
-              // ✅ 2. Decrypt attachments
               let decryptedAttachments = msg.attachments;
               if (msg.attachments && msg.attachments.length > 0) {
                 console.log(`🔓 Decrypting ${msg.attachments.length} attachments for message ${msg._id}`);
@@ -475,7 +491,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     };
   }, [conversationId, user]);
 
-  // Send message - GIỮ NGUYÊN CODE CŨ (không thay đổi)
+  // ✨ UPDATE: Send message - Support GIF/Sticker
   const sendMessage = useCallback(
     async (data: CreateMessageData | FormData): Promise<Message> => {
       if (!conversationId) {
@@ -498,6 +514,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         let replyToId: string | undefined;
         let encryptedFiles: any[] | undefined;
         let localUris: string[] | undefined;
+        let richMedia: RichMediaDTO | undefined; // ✨ NEW
 
         if (data instanceof FormData) {
           messageContent = (data.get('content') as string) || '';
@@ -508,10 +525,70 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           messageType = data.type;
           attachmentIds = data.attachments || [];
           replyToId = data.replyTo;
+          richMedia = data.richMedia; // ✨ NEW
           if ('encryptedFiles' in data) {
             encryptedFiles = (data as any).encryptedFiles;
             localUris = (data as any).localUris;
           }
+        }
+
+        // ✨ NEW: CASE 0: GIF/STICKER
+        if ((messageType === 'gif' || messageType === 'sticker') && richMedia) {
+          console.log(`✨ Sending ${messageType} message with rich media from ${richMedia.provider}`);
+
+          const optimisticMessage = createOptimisticMessage({
+            content: richMedia.title || messageType.toUpperCase(),
+            type: messageType,
+            richMedia,
+          });
+          setMessages((prev) => [...prev, optimisticMessage]);
+
+          const requestBody: any = {
+            conversationId,
+            type: messageType,
+            richMedia: richMedia,
+          };
+
+          if (messageContent) {
+            requestBody.content = messageContent;
+          }
+
+          if (replyToId) {
+            requestBody.replyTo = replyToId;
+          }
+
+          const response = await fetch(
+            `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(requestBody),
+            }
+          );
+
+          const result = await response.json();
+
+          if (!result.success) {
+            throw new Error(result.error || "Failed to send message");
+          }
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.tempId === optimisticMessage.tempId
+                ? {
+                    ...result.data,
+                    content: messageContent || richMedia.title || messageType.toUpperCase(),
+                    status: 'sent' as MessageStatus,
+                  }
+                : msg
+            )
+          );
+
+          console.log(`✅ ${messageType} sent successfully`);
+          return result.data;
         }
 
         // ✅ CASE 1: ENCRYPTED FILES
@@ -720,7 +797,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     [conversationId, getToken, user, createOptimisticMessage, encryptMessage, encryptionInitialized, API_BASE_URL]
   );
 
-  // ✅ GIỮ NGUYÊN CÁC FUNCTIONS KHÁC (editMessage, deleteMessage, etc.)
   const editMessage = useCallback(
     async (id: string, content: string): Promise<Message> => {
       try {
@@ -762,7 +838,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         throw new Error(errorMessage);
       }
     },
-    [getToken, API_BASE_URL, conversationId]
+    [getToken, API_BASE_URL]
   );
 
   const deleteMessage = useCallback(
@@ -872,6 +948,49 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "Failed to remove reaction";
+        setError(errorMessage);
+        throw new Error(errorMessage);
+      }
+    },
+    [conversationId, getToken, API_BASE_URL]
+  );
+
+  // ✨ NEW: Toggle Reaction
+  const toggleReaction = useCallback(
+    async (id: string, reaction: string): Promise<void> => {
+      if (!conversationId) return;
+      try {
+        setError(null);
+        const token = await getToken();
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ 
+              action: "reaction", 
+              reactionType: reaction,
+              toggle: true // ✨ Toggle mode
+            }),
+          }
+        );
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to toggle reaction");
+        }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
+          )
+        );
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to toggle reaction";
         setError(errorMessage);
         throw new Error(errorMessage);
       }
@@ -1003,7 +1122,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     setSocketMessageCount(0);
   }, []);
 
-  // ✅ Socket event handlers - UPDATED with file decryption
+  // Socket event handlers
   useEffect(() => {
     if (!socket || !conversationId) return;
 
@@ -1015,6 +1134,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         senderId: data.sender_id,
         hasEncryptedContent: !!data.encrypted_content,
         hasAttachments: !!data.message?.attachments?.length,
+        hasRichMedia: !!data.message?.rich_media, // ✨ NEW
       });
 
       if (data.conversation_id !== conversationId) {
@@ -1027,7 +1147,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
 
       let newMessage = data.message;
 
-      // Own message from socket
       if (data.sender_id === user?.id) {
         setMessages((prev) => {
           const optimisticIndex = prev.findIndex(msg => msg.tempId && msg.status === 'sending');
@@ -1049,9 +1168,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         return;
       }
 
-      // ✅ Message from another user - decrypt text + files
       try {
-        // Decrypt text
         if (newMessage.encrypted_content && encryptionInitialized) {
           console.log('🔓 Decrypting received message');
           const decrypted = await decryptMessage(
@@ -1064,7 +1181,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
           };
         }
 
-        // ✅ Decrypt files
         if (newMessage.attachments && newMessage.attachments.length > 0) {
           console.log('🔓 Decrypting received attachments');
           const decryptedAttachments = await decryptAttachments(
@@ -1092,7 +1208,6 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
         };
       }
 
-      // Add message
       setMessages((prev) => {
         const exists = prev.some((msg) => msg._id === newMessage._id);
         if (!exists) {
@@ -1276,6 +1391,7 @@ export const useMessages = (conversationId: string | null): MessageHookReturn =>
     deleteMessage,
     addReaction,
     removeReaction,
+    toggleReaction, // ✨ NEW
     markAsRead,
     markConversationAsRead,
     loadMoreMessages,

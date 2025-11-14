@@ -419,25 +419,59 @@ export default function MessageScreen() {
 
   // ✨ UPDATED: Send message với E2EE check
   const handleSendMessage = async (
-    contentOrData:
-      | string
-      | {
-          content?: string;
-          type: string;
-          replyTo?: string;
-          encryptedFiles?: any[];
-          localUris?: string[];
-        },
-    attachments?: string[],
-    replyToId?: string
-  ) => {
-    // ✅ Handle encrypted files case
-    if (typeof contentOrData === 'object' && contentOrData.encryptedFiles) {
+  contentOrData:
+    | string
+    | {
+        content?: string;
+        type: string;
+        replyTo?: string;
+        encryptedFiles?: any[];
+        localUris?: string[];
+        richMedia?: any; // ✨ NEW: Support GIF/Sticker
+      },
+  attachments?: string[],
+  replyToId?: string
+) => {
+  // ✅ CASE 0: Handle GIF/Sticker FIRST (từ MessageInput)
+  if (typeof contentOrData === 'object' && 
+      (contentOrData.type === 'gif' || contentOrData.type === 'sticker') && 
+      (contentOrData as any).richMedia) {
+    console.log(`✨ Sending ${contentOrData.type} from MessageScreen`);
+    
+    try {
+      await sendMessage({
+        content: contentOrData.content?.trim() || '',
+        type: contentOrData.type as any,
+        richMedia: (contentOrData as any).richMedia,
+        replyTo: contentOrData.replyTo,
+      });
+
+      setReplyTo(null);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      console.log(`✅ ${contentOrData.type} sent successfully from MessageScreen`);
+      return;
+    } catch (error: any) {
+      console.error(`❌ Failed to send ${contentOrData.type}:`, error);
+      Alert.alert(
+        t('message.failed'),
+        error.message || t('message.failed'),
+        [{ text: t('ok') }]
+      );
+      return;
+    }
+  }
+
+  // ✅ CASE 1: Handle encrypted files
+  if (typeof contentOrData === 'object' && contentOrData.encryptedFiles) {
     console.log('📤 Sending message with encrypted files:', {
       filesCount: contentOrData.encryptedFiles.length,
       hasContent: !!contentOrData.content,
       type: contentOrData.type,
-      hasLocalUris: !!contentOrData.localUris, // ✅ NEW
+      hasLocalUris: !!contentOrData.localUris,
     });
 
     if (!encryptionReady) {
@@ -456,7 +490,7 @@ export default function MessageScreen() {
         content: contentOrData.content?.trim() || '',
         type: contentOrData.type as any,
         encryptedFiles: contentOrData.encryptedFiles,
-        localUris: contentOrData.localUris, // ✅ NEW
+        localUris: contentOrData.localUris,
         replyTo: contentOrData.replyTo,
       });
 
@@ -479,81 +513,82 @@ export default function MessageScreen() {
     }
   }
 
-    // ✅ Handle normal message (text only)
-    let messageContent: string;
-    let messageAttachments: string[] | undefined;
-    let messageReplyTo: string | undefined;
+  // ✅ CASE 2: Handle normal message (text only)
+  let messageContent: string;
+  let messageAttachments: string[] | undefined;
+  let messageReplyTo: string | undefined;
 
-    if (typeof contentOrData === "string") {
-      // Called with (string, attachments, replyToId)
-      messageContent = contentOrData;
-      messageAttachments = attachments;
-      messageReplyTo = replyToId;
-    } else {
-      // Called with object (no encrypted files)
-      messageContent = contentOrData.content || "";
-      messageAttachments = undefined;
-      messageReplyTo = contentOrData.replyTo;
-    }
+  if (typeof contentOrData === "string") {
+    // Called with (string, attachments, replyToId)
+    messageContent = contentOrData;
+    messageAttachments = attachments;
+    messageReplyTo = replyToId;
+  } else {
+    // Called with object (no encrypted files)
+    messageContent = contentOrData.content || "";
+    messageAttachments = undefined;
+    messageReplyTo = contentOrData.replyTo;
+  }
 
-    // ✅ Validate
-    console.log("📤 handleSendMessage called:", {
-      contentType: typeof messageContent,
-      content: messageContent,
-      contentLength: messageContent?.length,
+  // ✅ Validate
+  console.log("📤 handleSendMessage called:", {
+    contentType: typeof messageContent,
+    content: messageContent,
+    contentLength: messageContent?.length,
+    attachments: messageAttachments,
+    replyToId: messageReplyTo,
+  });
+
+  if (typeof messageContent !== "string") {
+    console.error("❌ Content is not a string:", typeof messageContent);
+    Alert.alert(t('error'), "Invalid message content");
+    return;
+  }
+
+  if (
+    !messageContent.trim() &&
+    (!messageAttachments || messageAttachments.length === 0)
+  ) {
+    return;
+  }
+
+  // ✨ Check E2EE ready
+  if (!encryptionReady) {
+    Alert.alert(
+      t('message.encryption.notReady'),
+      t('message.encryption.waitMessage'),
+      [{ text: t('ok') }]
+    );
+    return;
+  }
+
+  try {
+    console.log("📤 Sending text message with E2EE...");
+
+    await sendMessage({
+      content: messageContent.trim(),
+      type: "text",
       attachments: messageAttachments,
-      replyToId: messageReplyTo,
+      replyTo: messageReplyTo,
     });
 
-    if (typeof messageContent !== "string") {
-      console.error("❌ Content is not a string:", typeof messageContent);
-      Alert.alert(t('error'), "Invalid message content");
-      return;
-    }
+    setReplyTo(null);
 
-    if (
-      !messageContent.trim() &&
-      (!messageAttachments || messageAttachments.length === 0)
-    ) {
-      return;
-    }
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
 
-    // ✨ Check E2EE ready
-    if (!encryptionReady) {
-      Alert.alert(
-        t('message.encryption.notReady'),
-        t('message.encryption.waitMessage'),
-        [{ text: t('ok') }]
-      );
-      return;
-    }
+    console.log("✅ Message sent successfully");
+  } catch (error: any) {
+    console.error("❌ Failed to send message:", error);
+    Alert.alert(
+      t('message.failed'),
+      error.message || t('message.failed'),
+      [{ text: t('ok') }]
+    );
+  }
+};
 
-    try {
-      console.log("📤 Sending text message with E2EE...");
-
-      await sendMessage({
-        content: messageContent.trim(),
-        type: "text",
-        attachments: messageAttachments,
-        replyTo: messageReplyTo,
-      });
-
-      setReplyTo(null);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      console.log("✅ Message sent successfully");
-    } catch (error: any) {
-      console.error("❌ Failed to send message:", error);
-      Alert.alert(
-        t('message.failed'),
-        error.message || t('message.failed'),
-        [{ text: t('ok') }]
-      );
-    }
-  };
 
   // GIỮ NGUYÊN
   const handleEditMessage = async (messageId: string, newContent: string) => {

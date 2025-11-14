@@ -1,5 +1,5 @@
+// components/page/message/MessageInput.tsx (UPDATE)
 /* eslint-disable import/namespace */
-// components/page/message/MessageInput.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
@@ -20,6 +20,8 @@ import { useFileEncryption } from "@/hooks/message/useFileEncryption";
 import { useAuth } from "@clerk/clerk-expo";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { GiphyPicker } from "./GiphyPicker"; // ✨ NEW
+import type { RichMediaDTO } from "@/hooks/message/useGiphy"; // ✨ NEW
 
 interface AttachmentPreview {
   id: string;
@@ -54,6 +56,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [showGiphyPicker, setShowGiphyPicker] = useState(false); // ✨ NEW
   
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
@@ -97,6 +100,34 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     };
   }, [onTyping]);
+
+  // ✨ NEW: Handle GIF/Sticker selection
+  const handleGiphySelect = async (richMedia: RichMediaDTO, type: "gif" | "sticker") => {
+    console.log(`✨ Selected ${type}:`, richMedia.title);
+
+    const messageContent = message.trim();
+    const currentReplyTo = replyTo?._id;
+
+    setMessage("");
+    if (onCancelReply) {
+      onCancelReply();
+    }
+
+    try {
+      const messageData = {
+        content: messageContent || undefined,
+        type: type,
+        richMedia: richMedia,
+        replyTo: currentReplyTo,
+      };
+
+      onSendMessage(messageData);
+      console.log(`✅ ${type} message sent`);
+    } catch (error: any) {
+      console.error(`❌ Failed to send ${type}:`, error);
+      Alert.alert(t('error'), error.message || `Failed to send ${type}`);
+    }
+  };
 
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
@@ -616,6 +647,19 @@ const MessageInput: React.FC<MessageInputProps> = ({
           />
         </TouchableOpacity>
 
+        {/* ✨ NEW: GIF/Sticker Button */}
+        <TouchableOpacity 
+          onPress={() => setShowGiphyPicker(true)} 
+          style={styles.iconButton}
+          disabled={uploadingFiles || disabled}
+        >
+          <Ionicons 
+            name="happy-outline" 
+            size={24} 
+            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          />
+        </TouchableOpacity>
+
         <TextInput
           value={message}
           onChangeText={handleTyping}
@@ -682,6 +726,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </Text>
         </View>
       )}
+
+      {/* ✨ NEW: GIF/Sticker Picker Modal */}
+      <GiphyPicker
+        visible={showGiphyPicker}
+        onClose={() => setShowGiphyPicker(false)}
+        onSelect={handleGiphySelect}
+      />
     </View>
   );
 };

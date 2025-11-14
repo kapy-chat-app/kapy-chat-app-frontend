@@ -1,4 +1,4 @@
-// components/page/message/MessageItem.tsx - INTEGRATED WITH MessageMediaGallery
+// components/page/message/MessageItem.tsx - COMPLETE UPDATE
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
@@ -18,6 +18,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { MessageActionsMenu } from "./MessageActionsMenu";
 import { ReadReceiptsModal } from "./ReadReceiptsModal";
 import { MessageMediaGallery } from "./MessageMediaGallery";
+import { ReactionPicker } from "./ReactionPicker";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -51,7 +52,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const { t } = useLanguage();
   const [showActions, setShowActions] = useState(false);
   const [showReadReceipts, setShowReadReceipts] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
+  const [reactionPickerPosition, setReactionPickerPosition] = useState({ top: 0, left: 0 });
   const bubbleRef = useRef<View>(null);
 
   const isDark = actualTheme === "dark";
@@ -63,9 +66,10 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const readBy = message.read_by?.filter((r: any) => r.user !== user?.id) || [];
   const hasBeenRead = readBy.length > 0;
 
-  // ✅ Check for attachment decryption errors
+  // Check for attachment decryption errors
   const hasAttachmentDecryptionError = message.attachments?.some((att: any) => att.decryption_error) || false;
 
+  // ✅ OPTION 1: Nhấn giữ hiển thị menu đầy đủ (giữ nguyên hành vi cũ)
   const handleLongPress = () => {
     if (!isSending && !showReadReceipts) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -234,33 +238,120 @@ const MessageItem: React.FC<MessageItemProps> = ({
     );
   };
 
+  // Render GIF/Sticker
+  const renderRichMedia = () => {
+    if (!message.rich_media || (message.type !== "gif" && message.type !== "sticker")) {
+      return null;
+    }
+
+    const { rich_media } = message;
+    const maxWidth = 250;
+    const aspectRatio = rich_media.width / rich_media.height;
+    const displayWidth = Math.min(rich_media.width, maxWidth);
+    const displayHeight = displayWidth / aspectRatio;
+
+    return (
+      <View className="p-0 overflow-hidden rounded-xl">
+        <Image
+          source={{ uri: rich_media.preview_url || rich_media.media_url }}
+          style={{
+            width: displayWidth,
+            height: displayHeight,
+          }}
+          resizeMode="cover"
+        />
+        {rich_media.title && (
+          <Text
+            className={`text-xs mt-1 px-3 pb-2 ${
+              isOwnMessage ? "text-gray-200" : isDark ? "text-gray-400" : "text-gray-600"
+            }`}
+            numberOfLines={1}
+          >
+            {rich_media.title}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   const renderReactions = () => {
     if (!message.reactions || message.reactions.length === 0) return null;
 
-    const reactionCounts: { [key: string]: number } = {};
+    const reactionCounts: { [key: string]: { count: number; userReacted: boolean } } = {};
+    
     message.reactions.forEach((reaction: any) => {
-      reactionCounts[reaction.type] = (reactionCounts[reaction.type] || 0) + 1;
+      if (!reactionCounts[reaction.type]) {
+        reactionCounts[reaction.type] = { count: 0, userReacted: false };
+      }
+      reactionCounts[reaction.type].count++;
+      
+      if (reaction.user.clerkId === user?.id) {
+        reactionCounts[reaction.type].userReacted = true;
+      }
     });
+
+    // ✨ Icon mapping (tĩnh - không animation)
+    const iconMap: { [key: string]: { icon: string; color: string } } = {
+      heart: { icon: "heart", color: "#ef4444" },
+      like: { icon: "thumbs-up", color: "#3b82f6" },
+      sad: { icon: "sad", color: "#8b5cf6" },
+      angry: { icon: "flame", color: "#f97316" },
+      laugh: { icon: "happy", color: "#eab308" },
+      wow: { icon: "telescope", color: "#06b6d4" },
+      dislike: { icon: "thumbs-down", color: "#6b7280" },
+    };
+
+    // ✨ Handler để toggle reaction
+    const handleReactionPress = (type: string, userReacted: boolean) => {
+      if (isSending) return;
+      
+      // ✨ Nếu user đã react → Remove reaction
+      if (userReacted) {
+        onRemoveReaction?.(message._id);
+      } else {
+        // ✨ Nếu chưa react → Add reaction
+        onReaction?.(message._id, type);
+      }
+    };
 
     return (
       <View className="flex-row flex-wrap mt-1.5">
-        {Object.entries(reactionCounts).map(([type, count]) => (
-          <TouchableOpacity
-            key={type}
-            onPress={() => !isSending && onReaction?.(message._id, type)}
-            disabled={isSending}
-            className={`flex-row items-center rounded-xl px-2 py-1 mr-1 mb-1 ${
-              isDark ? "bg-gray-700" : "bg-gray-100"
-            }`}
-          >
-            <Text className="text-sm">{type}</Text>
-            <Text
-              className={`text-xs ml-1 ${isDark ? "text-gray-300" : "text-gray-600"}`}
+        {Object.entries(reactionCounts).map(([type, data]) => {
+          const iconInfo = iconMap[type] || { icon: "heart", color: "#ef4444" };
+          
+          return (
+            <TouchableOpacity
+              key={type}
+              onPress={() => handleReactionPress(type, data.userReacted)}
+              disabled={isSending}
+              activeOpacity={0.7}
+              className={`flex-row items-center rounded-xl px-2 py-1 mr-1 mb-1 ${
+                data.userReacted
+                  ? "bg-orange-500"
+                  : isDark
+                    ? "bg-gray-700"
+                    : "bg-gray-100"
+              }`}
             >
-              {count}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Ionicons 
+                name={iconInfo.icon as any} 
+                size={16} 
+                color={data.userReacted ? "#ffffff" : iconInfo.color}
+              />
+              <Text
+                className={`text-xs ml-1 ${
+                  data.userReacted
+                    ? "text-white font-semibold"
+                    : isDark
+                      ? "text-gray-300"
+                      : "text-gray-600"
+                }`}
+              >
+                {data.count}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     );
   };
@@ -315,7 +406,10 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
-            {/* ✅ Render attachment decryption error if present */}
+            {/* Render GIF/Sticker */}
+            {(message.type === "gif" || message.type === "sticker") && renderRichMedia()}
+
+            {/* Render attachment decryption error if present */}
             {hasAttachmentDecryptionError && (
               <View
                 className={`px-3 py-2 ${
@@ -338,7 +432,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
-            {/* ✅ Render media gallery (replaces individual file rendering) */}
+            {/* Render media gallery */}
             {!hasAttachmentDecryptionError && message.attachments && message.attachments.length > 0 && (
               <MessageMediaGallery
                 message={message}
@@ -348,7 +442,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               />
             )}
 
-            {/* ✅ Render text content */}
+            {/* Render text content */}
             {message.content && (
               <View>
                 <Text
@@ -400,6 +494,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
         </View>
       </View>
 
+      {/* Actions Menu - Hiển thị khi long press */}
       <MessageActionsMenu
         visible={showActions}
         onClose={() => setShowActions(false)}
@@ -414,10 +509,28 @@ const MessageItem: React.FC<MessageItemProps> = ({
         }}
         onReact={() => {
           setShowActions(false);
-          onReaction?.(message._id, "👍");
+          // Hiển thị reaction picker khi chọn React từ menu
+          bubbleRef.current?.measureInWindow((x, y, width, height) => {
+            setReactionPickerPosition({
+              top: y - 70,
+              left: x + width / 2 - 160,
+            });
+            setShowReactionPicker(true);
+          });
         }}
         onViewReads={handleViewReads}
         onDelete={handleDelete}
+      />
+
+      {/* Reaction Picker - Hiển thị khi chọn React từ menu */}
+      <ReactionPicker
+        visible={showReactionPicker}
+        onClose={() => setShowReactionPicker(false)}
+        onSelect={(reaction) => {
+          onReaction?.(message._id, reaction);
+          setShowReactionPicker(false);
+        }}
+        position={reactionPickerPosition}
       />
 
       <ReadReceiptsModal
