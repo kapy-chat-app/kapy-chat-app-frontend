@@ -4,11 +4,17 @@ import Button from "@/components/ui/Button";
 import { useSignIn } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export default function SignInPage() {
   const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
+  const { t } = useLanguage();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
 
   const [emailAddress, setEmailAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -18,12 +24,12 @@ export default function SignInPage() {
     if (!isLoaded) return;
 
     if (!emailAddress.trim()) {
-      Alert.alert("Error", "Please enter your email or phone number");
+      Alert.alert(t('error'), t('auth.signIn.errors.emailRequired'));
       return;
     }
 
     if (!password.trim()) {
-      Alert.alert("Error", "Please enter your password");
+      Alert.alert(t('error'), t('auth.signIn.errors.passwordRequired'));
       return;
     }
 
@@ -37,21 +43,22 @@ export default function SignInPage() {
 
       if (signInAttempt.status === "complete") {
         await setActive({ session: signInAttempt.createdSessionId });
-        
-        // Redirect về home, useProfileCheck sẽ handle việc check profile
         router.replace("/");
       } else {
         console.error("Sign in incomplete:", signInAttempt);
-        Alert.alert("Sign In Incomplete", "Please complete additional steps required.");
+        Alert.alert(
+          t('auth.signIn.errors.signInFailed'),
+          t('auth.signIn.errors.incomplete')
+        );
       }
     } catch (err: any) {
       console.error("Sign in error:", err);
       
       if (err.errors && err.errors.length > 0) {
         const errorMessage = err.errors[0].longMessage || err.errors[0].message;
-        Alert.alert("Sign In Failed", errorMessage);
+        Alert.alert(t('auth.signIn.errors.signInFailed'), errorMessage);
       } else {
-        Alert.alert("Error", "Failed to sign in. Please try again.");
+        Alert.alert(t('error'), t('auth.signIn.errors.generic'));
       }
     } finally {
       setIsLoading(false);
@@ -59,65 +66,96 @@ export default function SignInPage() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50 dark:bg-gray-900 px-6 justify-center">
-      <Text className="text-4xl font-bold text-orange-500 dark:text-orange-400 text-center mb-12">
-        Sign in
-      </Text>
+    <SafeAreaView 
+      className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        className="flex-1"
+      >
+        <View className="flex-1 px-6 justify-center py-8">
+          {/* Title */}
+          <Text className={`text-4xl font-bold text-center mb-12 ${
+            isDark ? 'text-orange-400' : 'text-orange-500'
+          }`}>
+            {t('auth.signIn.title')}
+          </Text>
 
-      <View className="space-y-4">
-        <Input
-          placeholder="PhoneNumber or Email"
-          value={emailAddress}
-          onChangeText={setEmailAddress}
-          leftIcon="person-outline"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!isLoading}
-          style={{ marginVertical: 8 }}
-        />
+          {/* Form */}
+          <View className="space-y-4">
+            <Input
+              placeholder={t('auth.signIn.emailPlaceholder')}
+              value={emailAddress}
+              onChangeText={setEmailAddress}
+              leftIcon="person-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!isLoading}
+              style={{ marginVertical: 8 }}
+            />
 
-        <Input
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          leftIcon="lock-closed-outline"
-          secureTextEntry={true}
-          editable={!isLoading}
-          style={{ marginVertical: 8 }}
-        />
+            <Input
+              placeholder={t('auth.signIn.passwordPlaceholder')}
+              value={password}
+              onChangeText={setPassword}
+              leftIcon="lock-closed-outline"
+              secureTextEntry={true}
+              editable={!isLoading}
+              style={{ marginVertical: 8 }}
+            />
 
-        <View className="items-center mt-4">
-          <TouchableOpacity>
-            <Text className="text-gray-600 dark:text-gray-400 text-base">
-              Forgot your password?{" "}
-              <Text className="text-orange-500 dark:text-orange-400 font-semibold">Reset now</Text>
+            {/* Forgot Password */}
+            <View className="items-center mt-4">
+              <Link href="/(auth)/forgot-password" asChild>
+                <TouchableOpacity disabled={isLoading}>
+                  <Text className={`text-base ${
+                    isDark ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    {t('auth.signIn.forgotPassword')}{" "}
+                    <Text className={`font-semibold ${
+                      isDark ? 'text-orange-400' : 'text-orange-500'
+                    }`}>
+                      {t('auth.signIn.resetNow')}
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+
+            {/* Sign In Button */}
+            <View className="mt-8">
+              <Button
+                title={isLoading ? t('auth.signIn.signingIn') : t('auth.signIn.signInButton')}
+                onPress={onSignInPress}
+                variant="primary"
+                disabled={isLoading}
+                loading={isLoading}
+                fullWidth={true}
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          </View>
+
+          {/* Sign Up Link */}
+          <View className="items-center mt-8">
+            <Text className={`text-base ${
+              isDark ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              {t('auth.signIn.noAccount')}
             </Text>
-          </TouchableOpacity>
+            <Link href="/sign-up" asChild>
+              <TouchableOpacity className="mt-2">
+                <Text className={`font-semibold text-base ${
+                  isDark ? 'text-orange-400' : 'text-orange-500'
+                }`}>
+                  {t('auth.signIn.signUpLink')}
+                </Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
         </View>
-
-        <View className="mt-8">
-          <Button
-            title={isLoading ? "Signing In..." : "Sign In"}
-            onPress={onSignInPress}
-            variant="primary"
-            disabled={isLoading}
-            loading={isLoading}
-            fullWidth={true}
-            style={{ marginTop: 16 }}
-          />
-        </View>
-      </View>
-
-      <View className="items-center mt-8">
-        <Text className="text-gray-600 dark:text-gray-400 text-base">Don't have an account? </Text>
-        <Link href="/sign-up" asChild>
-          <TouchableOpacity className="mt-2">
-            <Text className="text-orange-500 dark:text-orange-400 font-semibold text-base">
-              Sign Up
-            </Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

@@ -4,39 +4,40 @@ import Button from "@/components/ui/Button";
 import { useSignUp } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
 import * as React from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 export default function SignUpScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const router = useRouter();
+  const { t } = useLanguage();
+  const { actualTheme } = useTheme();
+  const isDark = actualTheme === 'dark';
 
-  // Chỉ giữ Clerk verification states
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [pendingVerification, setPendingVerification] = React.useState(false);
   const [code, setCode] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
 
-  // Loại bỏ tất cả additional user info states
-  // Loại bỏ showAdditionalInfo
-  // Loại bỏ username checking logic
-
   // Handle Clerk sign-up
   const onSignUpPress = async () => {
     if (!isLoaded) return;
 
     if (!emailAddress.trim()) {
-      Alert.alert("Error", "Please enter your email address");
+      Alert.alert(t('error'), t('auth.signUp.errors.emailRequired'));
       return;
     }
 
     if (!password.trim()) {
-      Alert.alert("Error", "Please enter your password");
+      Alert.alert(t('error'), t('auth.signUp.errors.passwordRequired'));
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert("Error", "Password must be at least 8 characters");
+      Alert.alert(t('error'), t('auth.signUp.errors.passwordLength'));
       return;
     }
 
@@ -55,21 +56,21 @@ export default function SignUpScreen() {
       
       if (err.errors && err.errors.length > 0) {
         const errorMessage = err.errors[0].longMessage || err.errors[0].message;
-        Alert.alert("Sign Up Failed", errorMessage);
+        Alert.alert(t('auth.signUp.errors.signUpFailed'), errorMessage);
       } else {
-        Alert.alert("Error", "Failed to sign up. Please try again.");
+        Alert.alert(t('error'), t('auth.signUp.errors.generic'));
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle email verification - SIMPLIFIED
+  // Handle email verification
   const onVerifyPress = async () => {
     if (!isLoaded) return;
 
     if (!code.trim()) {
-      Alert.alert("Error", "Please enter the verification code");
+      Alert.alert(t('error'), t('auth.signUp.errors.codeRequired'));
       return;
     }
 
@@ -81,16 +82,13 @@ export default function SignUpScreen() {
       });
 
       if (signUpAttempt.status === "complete") {
-        // Set active session ngay lập tức
         await setActive?.({ session: signUpAttempt.createdSessionId });
-        
-        // Navigate trực tiếp đến complete-profile page
         router.push("/complete-profile");
       } else {
         console.error(JSON.stringify(signUpAttempt, null, 2));
         Alert.alert(
-          "Verification Incomplete",
-          "Please complete additional steps required."
+          t('auth.signUp.errors.verifyFailed'),
+          t('auth.signUp.errors.incomplete')
         );
       }
     } catch (err: any) {
@@ -98,124 +96,169 @@ export default function SignUpScreen() {
       
       if (err.errors && err.errors.length > 0) {
         const errorMessage = err.errors[0].longMessage || err.errors[0].message;
-        Alert.alert("Verification Failed", errorMessage);
+        Alert.alert(t('auth.signUp.errors.verifyFailed'), errorMessage);
       } else {
-        Alert.alert("Error", "Failed to verify. Please try again.");
+        Alert.alert(t('error'), t('auth.signUp.errors.generic'));
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Loại bỏ hoàn toàn onCompleteSignUp function
-  // Loại bỏ showAdditionalInfo screen
-
   // Verification Screen
   if (pendingVerification) {
     return (
-      <View className="flex-1 bg-gray-50 dark:bg-gray-900 px-6 justify-center">
-        <Text className="text-4xl font-bold text-orange-500 dark:text-orange-400 text-center mb-4">
-          Verify Email
-        </Text>
-        
-        <Text className="text-base text-gray-600 dark:text-gray-400 text-center mb-12">
-          We've sent a verification code to {emailAddress}
-        </Text>
-
-        <Input
-          placeholder="Enter verification code"
-          value={code}
-          onChangeText={setCode}
-          leftIcon="mail-outline"
-          keyboardType="number-pad"
-          maxLength={6}
-          editable={!isLoading}
-          style={{ marginBottom: 24 }}
-          inputStyle={{ textAlign: "center" }}
-        />
-
-        <Button
-          title={isLoading ? "Verifying..." : "Verify Email"}
-          onPress={onVerifyPress}
-          variant="primary"
-          disabled={isLoading}
-          loading={isLoading}
-          fullWidth={true}
-          style={{ marginBottom: 24 }}
-        />
-
-        <View className="items-center">
-          <TouchableOpacity onPress={() => setPendingVerification(false)}>
-            <Text className="text-gray-600 dark:text-gray-400 text-base">
-              Didn't receive code?{" "}
-              <Text className="text-orange-500 dark:text-orange-400 font-semibold">Go back</Text>
+      <SafeAreaView 
+        className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          className="flex-1"
+        >
+          <View className="flex-1 px-6 justify-center py-8">
+            {/* Title */}
+            <Text className={`text-4xl font-bold text-center mb-4 ${
+              isDark ? 'text-orange-400' : 'text-orange-500'
+            }`}>
+              {t('auth.signUp.verifyEmail.title')}
             </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            
+            {/* Description */}
+            <Text className={`text-base text-center mb-12 ${
+              isDark ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              {t('auth.signUp.verifyEmail.description')} {emailAddress}
+            </Text>
+
+            {/* Verification Code Input */}
+            <Input
+              placeholder={t('auth.signUp.verifyEmail.codePlaceholder')}
+              value={code}
+              onChangeText={setCode}
+              leftIcon="mail-outline"
+              keyboardType="number-pad"
+              maxLength={6}
+              editable={!isLoading}
+              style={{ marginBottom: 24 }}
+              inputStyle={{ textAlign: "center" }}
+            />
+
+            {/* Verify Button */}
+            <Button
+              title={isLoading ? t('auth.signUp.verifyEmail.verifying') : t('auth.signUp.verifyEmail.verifyButton')}
+              onPress={onVerifyPress}
+              variant="primary"
+              disabled={isLoading}
+              loading={isLoading}
+              fullWidth={true}
+              style={{ marginBottom: 24 }}
+            />
+
+            {/* Go Back Link */}
+            <View className="items-center">
+              <TouchableOpacity onPress={() => setPendingVerification(false)}>
+                <Text className={`text-base ${
+                  isDark ? 'text-gray-400' : 'text-gray-600'
+                }`}>
+                  {t('auth.signUp.verifyEmail.didntReceive')}{" "}
+                  <Text className={`font-semibold ${
+                    isDark ? 'text-orange-400' : 'text-orange-500'
+                  }`}>
+                    {t('auth.signUp.verifyEmail.goBack')}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
-  // Initial Sign Up Screen - KHÔNG THAY ĐỔI
+  // Initial Sign Up Screen
   return (
-    <View className="flex-1 bg-gray-50 dark:bg-gray-900 px-6 justify-center">
-      <Text className="text-4xl font-bold text-orange-500 dark:text-orange-400 text-center mb-12">
-        Sign up
-      </Text>
-
-      <View className="space-y-4">
-        <Input
-          placeholder="Enter your email"
-          value={emailAddress}
-          onChangeText={setEmailAddress}
-          leftIcon="mail-outline"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          editable={!isLoading}
-          style={{ marginVertical: 8 }}
-        />
-
-        <Input
-          placeholder="Enter password"
-          value={password}
-          onChangeText={setPassword}
-          leftIcon="lock-closed-outline"
-          secureTextEntry={true}
-          editable={!isLoading}
-          style={{ marginVertical: 8 }}
-        />
-
-        <View className="px-4 mt-2">
-          <Text className="text-sm text-gray-500 dark:text-gray-400">
-            Password must be at least 8 characters
+    <SafeAreaView 
+      className={`flex-1 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        className="flex-1"
+      >
+        <View className="flex-1 px-6 justify-center py-8">
+          {/* Title */}
+          <Text className={`text-4xl font-bold text-center mb-12 ${
+            isDark ? 'text-orange-400' : 'text-orange-500'
+          }`}>
+            {t('auth.signUp.title')}
           </Text>
-        </View>
 
-        <View className="mt-8">
-          <Button
-            title={isLoading ? "Creating Account..." : "Continue"}
-            onPress={onSignUpPress}
-            variant="primary"
-            disabled={isLoading}
-            loading={isLoading}
-            fullWidth={true}
-            style={{ marginTop: 16 }}
-          />
-        </View>
-      </View>
+          {/* Form */}
+          <View className="space-y-4">
+            <Input
+              placeholder={t('auth.signUp.emailPlaceholder')}
+              value={emailAddress}
+              onChangeText={setEmailAddress}
+              leftIcon="mail-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!isLoading}
+              style={{ marginVertical: 8 }}
+            />
 
-      <View className="items-center mt-8">
-        <Text className="text-gray-600 dark:text-gray-400 text-base">
-          Already have an account?{" "}
-        </Text>
-        <Link href="/sign-in" asChild>
-          <TouchableOpacity className="mt-2">
-            <Text className="text-orange-500 dark:text-orange-400 font-semibold text-base">
-              Sign In
+            <Input
+              placeholder={t('auth.signUp.passwordPlaceholder')}
+              value={password}
+              onChangeText={setPassword}
+              leftIcon="lock-closed-outline"
+              secureTextEntry={true}
+              editable={!isLoading}
+              style={{ marginVertical: 8 }}
+            />
+
+            {/* Password Requirement */}
+            <View className="px-4 mt-2">
+              <Text className={`text-sm ${
+                isDark ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                {t('auth.signUp.passwordRequirement')}
+              </Text>
+            </View>
+
+            {/* Continue Button */}
+            <View className="mt-8">
+              <Button
+                title={isLoading ? t('auth.signUp.creatingAccount') : t('auth.signUp.continueButton')}
+                onPress={onSignUpPress}
+                variant="primary"
+                disabled={isLoading}
+                loading={isLoading}
+                fullWidth={true}
+                style={{ marginTop: 16 }}
+              />
+            </View>
+          </View>
+
+          {/* Sign In Link */}
+          <View className="items-center mt-8">
+            <Text className={`text-base ${
+              isDark ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              {t('auth.signUp.haveAccount')}
             </Text>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    </View>
+            <Link href="/sign-in" asChild>
+              <TouchableOpacity className="mt-2">
+                <Text className={`font-semibold text-base ${
+                  isDark ? 'text-orange-400' : 'text-orange-500'
+                }`}>
+                  {t('auth.signUp.signInLink')}
+                </Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
