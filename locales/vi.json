@@ -12,15 +12,99 @@
   "next": "Tiếp theo",
   "skip": "Bỏ qua",
   "getStarted": "Bắt đầu",
-  "onboarding": {
-    "selectLanguage": "Chọn Ngôn Ngữ",
-    "languageDescription": "Chọn ngôn ngữ bạn muốn sử dụng",
-    "slide1Title": "Chào mừng đến với Ứng dụng",
-    "slide1Description": "Khám phá các tính năng tuyệt vời và trải nghiệm mượt mà",
-    "slide2Title": "Kết Nối Liên Tục",
-    "slide2Description": "Kết nối với bạn bè và chia sẻ khoảnh khắc",
-    "slide3Title": "Bắt Đầu Ngay",
-    "slide3Description": "Tham gia với chúng tôi và khám phá mọi thứ"
+  "auth": {
+    "signIn": {
+      "title": "Đăng nhập",
+      "emailPlaceholder": "Số điện thoại hoặc Email",
+      "passwordPlaceholder": "Mật khẩu",
+      "forgotPassword": "Quên mật khẩu?",
+      "resetNow": "Đặt lại ngay",
+      "signInButton": "Đăng nhập",
+      "signingIn": "Đang đăng nhập...",
+      "noAccount": "Chưa có tài khoản?",
+      "signUpLink": "Đăng ký",
+      "errors": {
+        "emailRequired": "Vui lòng nhập email hoặc số điện thoại",
+        "passwordRequired": "Vui lòng nhập mật khẩu",
+        "signInFailed": "Đăng nhập thất bại",
+        "incomplete": "Vui lòng hoàn thành các bước bổ sung.",
+        "generic": "Đăng nhập thất bại. Vui lòng thử lại."
+      }
+    },
+    "signUp": {
+      "title": "Đăng ký",
+      "emailPlaceholder": "Nhập email của bạn",
+      "passwordPlaceholder": "Nhập mật khẩu",
+      "passwordRequirement": "Mật khẩu phải có ít nhất 8 ký tự",
+      "continueButton": "Tiếp tục",
+      "creatingAccount": "Đang tạo tài khoản...",
+      "haveAccount": "Đã có tài khoản?",
+      "signInLink": "Đăng nhập",
+      "verifyEmail": {
+        "title": "Xác thực Email",
+        "description": "Chúng tôi đã gửi mã xác thực đến",
+        "codePlaceholder": "Nhập mã xác thực",
+        "verifyButton": "Xác thực Email",
+        "verifying": "Đang xác thực...",
+        "didntReceive": "Không nhận được mã?",
+        "goBack": "Quay lại"
+      },
+      "errors": {
+        "emailRequired": "Vui lòng nhập địa chỉ email",
+        "passwordRequired": "Vui lòng nhập mật khẩu",
+        "passwordLength": "Mật khẩu phải có ít nhất 8 ký tự",
+        "signUpFailed": "Đăng ký thất bại",
+        "codeRequired": "Vui lòng nhập mã xác thực",
+        "verifyFailed": "Xác thực thất bại",
+        "incomplete": "Vui lòng hoàn thành các bước bổ sung.",
+        "generic": "Đăng ký thất bại. Vui lòng thử lại."
+      }
+    },
+    "forgotPassword": {
+      "title": "Quên mật khẩu?",
+      "resetTitle": "Đặt lại mật khẩu",
+      "description": "Nhập địa chỉ email của bạn và chúng tôi sẽ gửi mã để đặt lại mật khẩu.",
+      "resetDescription": "Nhập mã xác thực được gửi đến email của bạn và mật khẩu mới.",
+      "emailPlaceholder": "Địa chỉ Email",
+      "codePlaceholder": "Mã xác thực",
+      "newPasswordPlaceholder": "Mật khẩu mới",
+      "confirmPasswordPlaceholder": "Xác nhận mật khẩu mới",
+      "sendCodeButton": "Gửi mã đặt lại",
+      "sending": "Đang gửi...",
+      "resetButton": "Đặt lại mật khẩu",
+      "resetting": "Đang đặt lại...",
+      "didntReceive": "Không nhận được mã?",
+      "resend": "Gửi lại",
+      "codeSentTo": "Mã đã được gửi đến:",
+      "requirements": {
+        "title": "Yêu cầu mật khẩu:",
+        "minLength": "• Ít nhất 8 ký tự",
+        "recommended": "• Nên kết hợp chữ cái, số và ký tự đặc biệt"
+      },
+      "alerts": {
+        "codeSent": {
+          "title": "Đã gửi mã",
+          "message": "Chúng tôi đã gửi mã xác thực đến email của bạn. Vui lòng kiểm tra hộp thư đến."
+        },
+        "success": {
+          "title": "Thành công",
+          "message": "Mật khẩu của bạn đã được đặt lại thành công. Vui lòng đăng nhập với mật khẩu mới."
+        },
+        "resendSuccess": "Mã xác thực đã được gửi lại đến email của bạn"
+      },
+      "errors": {
+        "emailRequired": "Vui lòng nhập địa chỉ email",
+        "emailInvalid": "Vui lòng nhập địa chỉ email hợp lệ",
+        "codeRequired": "Vui lòng nhập mã xác thực",
+        "passwordRequired": "Vui lòng nhập mật khẩu mới",
+        "passwordLength": "Mật khẩu phải có ít nhất 8 ký tự",
+        "passwordMismatch": "Mật khẩu không khớp",
+        "sendFailed": "Gửi mã đặt lại thất bại. Vui lòng thử lại.",
+        "resetFailed": "Đặt lại mật khẩu thất bại. Vui lòng thử lại.",
+        "incomplete": "Đặt lại mật khẩu chưa hoàn tất. Vui lòng thử lại.",
+        "resendFailed": "Gửi lại mã thất bại. Vui lòng thử lại."
+      }
+    }
   },
   "settingsScreen": {
     "account": {
@@ -594,5 +678,153 @@
   "homeScreen": {
     "title": "Màn hình chính",
     "welcome": "Chào mừng đến trang chủ của bạn"
+  },
+  "privacyScreen": {
+    "title": "Quyền riêng tư",
+    "info": "Quản lý quyền truy cập các tính năng thiết bị. Nhấn vào từng mục để cấp hoặc thay đổi quyền.",
+    "permissionsTitle": "CÁC QUYỀN",
+    "permissions": {
+      "camera": {
+        "title": "Máy ảnh",
+        "subtitle": "Cho phép chụp ảnh và quay video"
+      },
+      "microphone": {
+        "title": "Micrô",
+        "subtitle": "Cho phép ghi âm và cuộc gọi"
+      },
+      "photos": {
+        "title": "Thư viện ảnh",
+        "subtitle": "Truy cập ảnh và video trên thiết bị"
+      },
+      "location": {
+        "title": "Vị trí",
+        "subtitle": "Truy cập vị trí của bạn"
+      },
+      "notifications": {
+        "title": "Thông báo",
+        "subtitle": "Nhận thông báo từ ứng dụng"
+      }
+    },
+    "status": {
+      "granted": "Đã cho phép",
+      "denied": "Đã từ chối",
+      "notRequested": "Chưa yêu cầu"
+    },
+    "alert": {
+      "title": "Cần cấp quyền",
+      "message": "Vui lòng vào Cài đặt để bật quyền {permission}",
+      "openSettings": "Mở Cài đặt"
+    },
+    "granted": {
+      "title": "Quyền đã được cấp",
+      "message": "Quyền {permission} đã được cấp. Để thay đổi, vui lòng vào Cài đặt hệ thống.",
+      "changeInSettings": "Mở Cài đặt"
+    },
+    "openSystemSettings": "Mở Cài đặt hệ thống"
+  },
+  "onboarding": {
+    "language": {
+      "title": "Chọn Ngôn Ngữ",
+      "description": "Chọn ngôn ngữ ưa thích của bạn để tiếp tục",
+      "continue": "Tiếp tục"
+    },
+    "skip": "Bỏ qua",
+    "next": "Tiếp theo",
+    "getStarted": "Bắt đầu",
+    "slide1": {
+      "title": "Mã Hóa Đầu Cuối",
+      "description": "Cuộc trò chuyện của bạn được bảo vệ bằng mã hóa cấp quân sự. Chỉ bạn và người liên hệ có thể đọc tin nhắn."
+    },
+    "slide2": {
+      "title": "Phân Tích Cảm Xúc AI",
+      "description": "AI thông minh của chúng tôi phân tích trạng thái cảm xúc qua tin nhắn và cuộc gọi, cung cấp hỗ trợ và thông tin cá nhân hóa."
+    },
+    "slide3": {
+      "title": "Hỗ Trợ Cân Bằng Cảm Xúc",
+      "description": "Nhận tư vấn và đề xuất theo thời gian thực để duy trì sức khỏe tinh thần trong suốt cuộc trò chuyện."
+    }
+  },
+  "securityScreen": {
+    "title": "Bảo mật",
+    "info": "Quản lý bảo mật tài khoản, mật khẩu và các phiên đăng nhập trên tất cả thiết bị.",
+    "password": {
+      "title": "MẬT KHẨU",
+      "change": "Đổi Mật Khẩu",
+      "subtitle": "Cập nhật mật khẩu tài khoản"
+    },
+    "changePassword": {
+      "title": "Đổi Mật Khẩu",
+      "info": "Chọn mật khẩu mạnh để bảo vệ tài khoản. Đảm bảo mật khẩu mới khác với mật khẩu hiện tại.",
+      "labels": {
+        "current": "Mật Khẩu Hiện Tại",
+        "new": "Mật Khẩu Mới",
+        "confirm": "Xác Nhận Mật Khẩu Mới"
+      },
+      "placeholders": {
+        "current": "Nhập mật khẩu hiện tại",
+        "new": "Nhập mật khẩu mới",
+        "confirm": "Nhập lại mật khẩu mới"
+      },
+      "requirements": {
+        "title": "Yêu Cầu Mật Khẩu:",
+        "minLength": "Ít nhất 8 ký tự",
+        "uppercase": "Ít nhất một chữ hoa",
+        "lowercase": "Ít nhất một chữ thường",
+        "number": "Ít nhất một chữ số"
+      },
+      "validation": {
+        "currentRequired": "Vui lòng nhập mật khẩu hiện tại",
+        "newRequired": "Vui lòng nhập mật khẩu mới",
+        "minLength": "Mật khẩu phải có ít nhất 8 ký tự",
+        "uppercase": "Mật khẩu phải chứa ít nhất một chữ hoa",
+        "lowercase": "Mật khẩu phải chứa ít nhất một chữ thường",
+        "number": "Mật khẩu phải chứa ít nhất một chữ số",
+        "mismatch": "Mật khẩu không khớp",
+        "same": "Mật khẩu mới phải khác mật khẩu hiện tại"
+      },
+      "success": "Đổi mật khẩu thành công",
+      "error": {
+        "generic": "Đổi mật khẩu thất bại. Vui lòng thử lại.",
+        "incorrectCurrent": "Mật khẩu hiện tại không đúng"
+      },
+      "button": "Đổi Mật Khẩu"
+    },
+    "sessions": {
+      "title": "PHIÊN ĐĂNG NHẬP",
+      "current": "Hiện tại",
+      "lastActive": "Hoạt động lần cuối",
+      "justNow": "Vừa xong",
+      "minutesAgo": "{count} phút trước",
+      "hoursAgo": "{count} giờ trước",
+      "daysAgo": "{count} ngày trước",
+      "signOut": "Đăng Xuất",
+      "signOutCurrent": {
+        "title": "Đăng Xuất?",
+        "message": "Bạn có chắc muốn đăng xuất khỏi thiết bị này? Bạn sẽ cần đăng nhập lại."
+      },
+      "signOutOther": {
+        "title": "Kết Thúc Phiên?",
+        "message": "Thao tác này sẽ đăng xuất thiết bị này khỏi tài khoản của bạn."
+      },
+      "signOutAll": {
+        "title": "Đăng Xuất Tất Cả Thiết Bị Khác?",
+        "message": "Thao tác này sẽ kết thúc {count} phiên đăng nhập trên các thiết bị khác.",
+        "confirm": "Đăng Xuất Tất Cả",
+        "button": "Đăng Xuất Tất Cả"
+      },
+      "noOtherSessions": {
+        "title": "Không Có Phiên Khác",
+        "message": "Bạn chỉ đăng nhập trên thiết bị này."
+      },
+      "signOutSuccess": "Kết thúc phiên thành công",
+      "signOutError": "Kết thúc phiên thất bại. Vui lòng thử lại.",
+      "signOutAllSuccess": "Đã kết thúc tất cả các phiên khác",
+      "signOutAllError": "Kết thúc các phiên thất bại. Vui lòng thử lại.",
+      "noSessions": "Không tìm thấy phiên đăng nhập",
+      "loadError": {
+        "title": "Lỗi",
+        "message": "Không thể tải phiên đăng nhập. Vui lòng thử lại."
+      }
+    }
   }
 }

@@ -21,16 +21,6 @@ export interface TranslationKeys {
   next: string;
   skip: string;
   getStarted: string;
-  onboarding: {
-    selectLanguage: string;
-    languageDescription: string;
-    slide1Title: string;
-    slide1Description: string;
-    slide2Title: string;
-    slide2Description: string;
-    slide3Title: string;
-    slide3Description: string;
-  };
   settingsScreen: {
     account: {
       title: string;
@@ -602,6 +592,248 @@ export interface TranslationKeys {
   homeScreen: {
     title: string;
     welcome: string;
+  };
+  privacyScreen: {
+    title: string;
+    info: string;
+    permissionsTitle: string;
+    permissions: {
+      camera: {
+        title: string;
+        subtitle: string;
+      };
+      microphone: {
+        title: string;
+        subtitle: string;
+      };
+      photos: {
+        title: string;
+        subtitle: string;
+      };
+      location: {
+        title: string;
+        subtitle: string;
+      };
+      notifications: {
+        title: string;
+        subtitle: string;
+      };
+    };
+    status: {
+      granted: string;
+      denied: string;
+      notRequested: string;
+    };
+    alert: {
+      title: string;
+      message: string;
+      openSettings: string;
+    };
+    granted: {
+      title: string;
+      message: string;
+      changeInSettings: string;
+    };
+    openSystemSettings: string;
+  };
+  onboarding: {
+    language: {
+      title: string;
+      description: string;
+      continue: string;
+    };
+    skip: string;
+    next: string;
+    getStarted: string;
+    slide1: {
+      title: string;
+      description: string;
+    };
+    slide2: {
+      title: string;
+      description: string;
+    };
+    slide3: {
+      title: string;
+      description: string;
+    };
+  };
+  auth: {
+    signIn: {
+      title: string;
+      emailPlaceholder: string;
+      passwordPlaceholder: string;
+      forgotPassword: string;
+      resetNow: string;
+      signInButton: string;
+      signingIn: string;
+      noAccount: string;
+      signUpLink: string;
+      errors: {
+        emailRequired: string;
+        passwordRequired: string;
+        signInFailed: string;
+        incomplete: string;
+        generic: string;
+      };
+    };
+    signUp: {
+      title: string;
+      emailPlaceholder: string;
+      passwordPlaceholder: string;
+      passwordRequirement: string;
+      continueButton: string;
+      creatingAccount: string;
+      haveAccount: string;
+      signInLink: string;
+      verifyEmail: {
+        title: string;
+        description: string;
+        codePlaceholder: string;
+        verifyButton: string;
+        verifying: string;
+        didntReceive: string;
+        goBack: string;
+      };
+      errors: {
+        emailRequired: string;
+        passwordRequired: string;
+        passwordLength: string;
+        signUpFailed: string;
+        codeRequired: string;
+        verifyFailed: string;
+        incomplete: string;
+        generic: string;
+      };
+    };
+    forgotPassword: {
+      title: string;
+      resetTitle: string;
+      description: string;
+      resetDescription: string;
+      emailPlaceholder: string;
+      codePlaceholder: string;
+      newPasswordPlaceholder: string;
+      confirmPasswordPlaceholder: string;
+      sendCodeButton: string;
+      sending: string;
+      resetButton: string;
+      resetting: string;
+      didntReceive: string;
+      resend: string;
+      codeSentTo: string;
+      requirements: {
+        title: string;
+        minLength: string;
+        recommended: string;
+      };
+      alerts: {
+        codeSent: {
+          title: string;
+          message: string;
+        };
+        success: {
+          title: string;
+          message: string;
+        };
+        resendSuccess: string;
+      };
+      errors: {
+        emailRequired: string;
+        emailInvalid: string;
+        codeRequired: string;
+        passwordRequired: string;
+        passwordLength: string;
+        passwordMismatch: string;
+        sendFailed: string;
+        resetFailed: string;
+        incomplete: string;
+        resendFailed: string;
+      };
+    };
+  };
+  securityScreen: {
+    title: string;
+    info: string;
+    password: {
+      title: string;
+      change: string;
+      subtitle: string;
+    };
+    changePassword: {
+      title: string;
+      info: string;
+      labels: {
+        current: string;
+        new: string;
+        confirm: string;
+      };
+      placeholders: {
+        current: string;
+        new: string;
+        confirm: string;
+      };
+      requirements: {
+        title: string;
+        minLength: string;
+        uppercase: string;
+        lowercase: string;
+        number: string;
+      };
+      validation: {
+        currentRequired: string;
+        newRequired: string;
+        minLength: string;
+        uppercase: string;
+        lowercase: string;
+        number: string;
+        mismatch: string;
+        same: string;
+      };
+      success: string;
+      error: {
+        generic: string;
+        incorrectCurrent: string;
+      };
+      button: string;
+    };
+    sessions: {
+      title: string;
+      current: string;
+      lastActive: string;
+      justNow: string;
+      minutesAgo: string;
+      hoursAgo: string;
+      daysAgo: string;
+      signOut: string;
+      signOutCurrent: {
+        title: string;
+        message: string;
+      };
+      signOutOther: {
+        title: string;
+        message: string;
+      };
+      signOutAll: {
+        title: string;
+        message: string;
+        confirm: string;
+        button: string;
+      };
+      noOtherSessions: {
+        title: string;
+        message: string;
+      };
+      signOutSuccess: string;
+      signOutError: string;
+      signOutAllSuccess: string;
+      signOutAllError: string;
+      noSessions: string;
+      loadError: {
+        title: string;
+        message: string;
+      };
+    };
   };
 }
 

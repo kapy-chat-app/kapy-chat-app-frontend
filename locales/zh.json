@@ -12,15 +12,99 @@
   "next": "下一步",
   "skip": "跳过",
   "getStarted": "开始使用",
-  "onboarding": {
-    "selectLanguage": "选择语言",
-    "languageDescription": "选择您喜欢的语言继续",
-    "slide1Title": "欢迎使用我们的应用",
-    "slide1Description": "发现令人惊叹的功能和无缝体验",
-    "slide2Title": "保持联系",
-    "slide2Description": "与朋友联系并分享时刻",
-    "slide3Title": "立即开始",
-    "slide3Description": "加入我们，探索我们提供的一切"
+  "auth": {
+    "signIn": {
+      "title": "登录",
+      "emailPlaceholder": "手机号或电子邮件",
+      "passwordPlaceholder": "密码",
+      "forgotPassword": "忘记密码？",
+      "resetNow": "立即重置",
+      "signInButton": "登录",
+      "signingIn": "登录中...",
+      "noAccount": "还没有账户？",
+      "signUpLink": "注册",
+      "errors": {
+        "emailRequired": "请输入您的电子邮件或手机号",
+        "passwordRequired": "请输入您的密码",
+        "signInFailed": "登录失败",
+        "incomplete": "请完成所需的其他步骤。",
+        "generic": "登录失败。请重试。"
+      }
+    },
+    "signUp": {
+      "title": "注册",
+      "emailPlaceholder": "输入您的电子邮件",
+      "passwordPlaceholder": "输入密码",
+      "passwordRequirement": "密码必须至少8个字符",
+      "continueButton": "继续",
+      "creatingAccount": "创建账户中...",
+      "haveAccount": "已有账户？",
+      "signInLink": "登录",
+      "verifyEmail": {
+        "title": "验证电子邮件",
+        "description": "我们已将验证码发送到",
+        "codePlaceholder": "输入验证码",
+        "verifyButton": "验证电子邮件",
+        "verifying": "验证中...",
+        "didntReceive": "没有收到验证码？",
+        "goBack": "返回"
+      },
+      "errors": {
+        "emailRequired": "请输入您的电子邮件地址",
+        "passwordRequired": "请输入您的密码",
+        "passwordLength": "密码必须至少8个字符",
+        "signUpFailed": "注册失败",
+        "codeRequired": "请输入验证码",
+        "verifyFailed": "验证失败",
+        "incomplete": "请完成所需的其他步骤。",
+        "generic": "注册失败。请重试。"
+      }
+    },
+    "forgotPassword": {
+      "title": "忘记密码？",
+      "resetTitle": "重置密码",
+      "description": "输入您的电子邮件地址，我们将向您发送重置密码的验证码。",
+      "resetDescription": "输入发送到您电子邮件的验证码和新密码。",
+      "emailPlaceholder": "电子邮件地址",
+      "codePlaceholder": "验证码",
+      "newPasswordPlaceholder": "新密码",
+      "confirmPasswordPlaceholder": "确认新密码",
+      "sendCodeButton": "发送重置码",
+      "sending": "发送中...",
+      "resetButton": "重置密码",
+      "resetting": "重置中...",
+      "didntReceive": "没有收到验证码？",
+      "resend": "重新发送",
+      "codeSentTo": "验证码已发送至：",
+      "requirements": {
+        "title": "密码要求：",
+        "minLength": "• 至少8个字符",
+        "recommended": "• 建议混合使用字母、数字和符号"
+      },
+      "alerts": {
+        "codeSent": {
+          "title": "验证码已发送",
+          "message": "我们已将验证码发送到您的电子邮件。请检查您的收件箱。"
+        },
+        "success": {
+          "title": "成功",
+          "message": "您的密码已成功重置。请使用新密码登录。"
+        },
+        "resendSuccess": "验证码已重新发送到您的电子邮件"
+      },
+      "errors": {
+        "emailRequired": "请输入您的电子邮件地址",
+        "emailInvalid": "请输入有效的电子邮件地址",
+        "codeRequired": "请输入验证码",
+        "passwordRequired": "请输入新密码",
+        "passwordLength": "密码必须至少8个字符",
+        "passwordMismatch": "密码不匹配",
+        "sendFailed": "发送重置码失败。请重试。",
+        "resetFailed": "重置密码失败。请重试。",
+        "incomplete": "密码重置未完成。请重试。",
+        "resendFailed": "重新发送验证码失败。请重试。"
+      }
+    }
   },
   "settingsScreen": {
     "account": {
@@ -594,5 +678,153 @@
   "homeScreen": {
     "title": "首页",
     "welcome": "欢迎来到您的主页"
+  },
+  "privacyScreen": {
+    "title": "隐私与权限",
+    "info": "管理设备功能访问权限。点击每个项目以授予或更改权限。",
+    "permissionsTitle": "权限",
+    "permissions": {
+      "camera": {
+        "title": "相机",
+        "subtitle": "允许拍照和录像"
+      },
+      "microphone": {
+        "title": "麦克风",
+        "subtitle": "允许录音和通话"
+      },
+      "photos": {
+        "title": "照片库",
+        "subtitle": "访问设备上的照片和视频"
+      },
+      "location": {
+        "title": "位置",
+        "subtitle": "访问您的位置"
+      },
+      "notifications": {
+        "title": "通知",
+        "subtitle": "接收应用通知"
+      }
+    },
+    "status": {
+      "granted": "已授权",
+      "denied": "已拒绝",
+      "notRequested": "未请求"
+    },
+    "alert": {
+      "title": "需要权限",
+      "message": "请前往设置以启用{permission}权限",
+      "openSettings": "打开设置"
+    },
+    "granted": {
+      "title": "权限已授予",
+      "message": "{permission}权限已被授予。要更改它，请前往系统设置。",
+      "changeInSettings": "打开设置"
+    },
+    "openSystemSettings": "打开系统设置"
+  },
+  "onboarding": {
+    "language": {
+      "title": "选择语言",
+      "description": "选择您的首选语言以继续",
+      "continue": "继续"
+    },
+    "skip": "跳过",
+    "next": "下一步",
+    "getStarted": "开始使用",
+    "slide1": {
+      "title": "端到端加密",
+      "description": "您的对话受到军事级加密保护。只有您和您的联系人可以阅读您的消息。"
+    },
+    "slide2": {
+      "title": "AI情绪分析",
+      "description": "我们的智能AI通过消息和通话分析您的情绪状态，提供个性化支持和见解。"
+    },
+    "slide3": {
+      "title": "情绪平衡支持",
+      "description": "获得实时咨询和建议，在整个对话过程中保持情绪健康。"
+    }
+  },
+  "securityScreen": {
+    "title": "安全",
+    "info": "管理您的账户安全、密码和所有设备上的活跃会话。",
+    "password": {
+      "title": "密码",
+      "change": "更改密码",
+      "subtitle": "更新您的账户密码"
+    },
+    "changePassword": {
+      "title": "更改密码",
+      "info": "选择一个强密码来保护您的账户安全。确保它与当前密码不同。",
+      "labels": {
+        "current": "当前密码",
+        "new": "新密码",
+        "confirm": "确认新密码"
+      },
+      "placeholders": {
+        "current": "输入当前密码",
+        "new": "输入新密码",
+        "confirm": "重新输入新密码"
+      },
+      "requirements": {
+        "title": "密码要求：",
+        "minLength": "至少8个字符",
+        "uppercase": "至少一个大写字母",
+        "lowercase": "至少一个小写字母",
+        "number": "至少一个数字"
+      },
+      "validation": {
+        "currentRequired": "请输入当前密码",
+        "newRequired": "请输入新密码",
+        "minLength": "密码必须至少8个字符",
+        "uppercase": "密码必须包含至少一个大写字母",
+        "lowercase": "密码必须包含至少一个小写字母",
+        "number": "密码必须包含至少一个数字",
+        "mismatch": "密码不匹配",
+        "same": "新密码必须与当前密码不同"
+      },
+      "success": "密码更改成功",
+      "error": {
+        "generic": "更改密码失败。请重试。",
+        "incorrectCurrent": "当前密码不正确"
+      },
+      "button": "更改密码"
+    },
+    "sessions": {
+      "title": "活跃会话",
+      "current": "当前",
+      "lastActive": "最后活跃",
+      "justNow": "刚刚",
+      "minutesAgo": "{count}分钟前",
+      "hoursAgo": "{count}小时前",
+      "daysAgo": "{count}天前",
+      "signOut": "登出",
+      "signOutCurrent": {
+        "title": "登出？",
+        "message": "您确定要从此设备登出吗？您需要重新登录。"
+      },
+      "signOutOther": {
+        "title": "结束会话？",
+        "message": "这将从您的账户登出此设备。"
+      },
+      "signOutAll": {
+        "title": "登出所有其他设备？",
+        "message": "这将结束其他设备上的{count}个活跃会话。",
+        "confirm": "全部登出",
+        "button": "全部登出"
+      },
+      "noOtherSessions": {
+        "title": "没有其他会话",
+        "message": "您只在此设备上登录。"
+      },
+      "signOutSuccess": "会话结束成功",
+      "signOutError": "结束会话失败。请重试。",
+      "signOutAllSuccess": "已成功结束所有其他会话",
+      "signOutAllError": "结束会话失败。请重试。",
+      "noSessions": "未找到活跃会话",
+      "loadError": {
+        "title": "错误",
+        "message": "加载会话失败。请重试。"
+      }
+    }
   }
 }
