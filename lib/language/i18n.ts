@@ -37,7 +37,10 @@ function getNestedValue(obj: any, path: string): string {
 
 /**
  * Replace interpolation variables in string
- * Example: interpolate("Hello, {{name}}!", {name: "John"}) => "Hello, John!"
+ * Supports both {{variable}} and {variable} formats
+ * Example: 
+ *   interpolate("Hello, {{name}}!", {name: "John"}) => "Hello, John!"
+ *   interpolate("Enable {permission} access", {permission: "Camera"}) => "Enable Camera access"
  */
 function interpolate(
   text: string,
@@ -45,9 +48,19 @@ function interpolate(
 ): string {
   if (!options) return text;
 
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+  let result = text;
+
+  // Replace {{variable}} format (double braces)
+  result = result.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     return options[key]?.toString() || '';
   });
+
+  // Replace {variable} format (single braces)
+  result = result.replace(/\{(\w+)\}/g, (_, key) => {
+    return options[key]?.toString() || `{${key}}`;
+  });
+
+  return result;
 }
 
 /**
@@ -101,10 +114,24 @@ export const changeLanguage = async (language: Language): Promise<void> => {
 };
 
 /**
- * Translate function with nested key support
+ * Translate function with nested key support and variable interpolation
  * @param key - Translation key (supports nested like 'settingsScreen.account.title')
- * @param options - Optional interpolation variables
- * @returns Translated string
+ * @param options - Optional interpolation variables (supports both {{var}} and {var} formats)
+ * @returns Translated string with replaced variables
+ * 
+ * @example
+ * // Simple translation
+ * translate('home') // 'Home'
+ * 
+ * @example
+ * // With single brace variable (for permission messages)
+ * translate('privacyScreen.alert.message', { permission: 'Camera' })
+ * // 'Please go to Settings to enable Camera permission'
+ * 
+ * @example
+ * // With double brace variable (for other cases)
+ * translate('welcome.message', { name: 'John', age: 25 })
+ * // 'Hello {{name}}, you are {{age}} years old'
  */
 export const translate = (
   key: TranslationKey,

@@ -12,15 +12,99 @@
   "next": "Next",
   "skip": "Skip",
   "getStarted": "Get Started",
-  "onboarding": {
-    "selectLanguage": "Choose Your Language",
-    "languageDescription": "Select your preferred language to continue",
-    "slide1Title": "Welcome to Our App",
-    "slide1Description": "Discover amazing features and seamless experience",
-    "slide2Title": "Stay Connected",
-    "slide2Description": "Connect with friends and share moments",
-    "slide3Title": "Get Started Now",
-    "slide3Description": "Join us and explore everything we have to offer"
+  "auth": {
+    "signIn": {
+      "title": "Sign in",
+      "emailPlaceholder": "Phone Number or Email",
+      "passwordPlaceholder": "Password",
+      "forgotPassword": "Forgot your password?",
+      "resetNow": "Reset now",
+      "signInButton": "Sign In",
+      "signingIn": "Signing In...",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Sign Up",
+      "errors": {
+        "emailRequired": "Please enter your email or phone number",
+        "passwordRequired": "Please enter your password",
+        "signInFailed": "Sign In Failed",
+        "incomplete": "Please complete additional steps required.",
+        "generic": "Failed to sign in. Please try again."
+      }
+    },
+    "signUp": {
+      "title": "Sign up",
+      "emailPlaceholder": "Enter your email",
+      "passwordPlaceholder": "Enter password",
+      "passwordRequirement": "Password must be at least 8 characters",
+      "continueButton": "Continue",
+      "creatingAccount": "Creating Account...",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign In",
+      "verifyEmail": {
+        "title": "Verify Email",
+        "description": "We've sent a verification code to",
+        "codePlaceholder": "Enter verification code",
+        "verifyButton": "Verify Email",
+        "verifying": "Verifying...",
+        "didntReceive": "Didn't receive code?",
+        "goBack": "Go back"
+      },
+      "errors": {
+        "emailRequired": "Please enter your email address",
+        "passwordRequired": "Please enter your password",
+        "passwordLength": "Password must be at least 8 characters",
+        "signUpFailed": "Sign Up Failed",
+        "codeRequired": "Please enter the verification code",
+        "verifyFailed": "Verification Failed",
+        "incomplete": "Please complete additional steps required.",
+        "generic": "Failed to sign up. Please try again."
+      }
+    },
+    "forgotPassword": {
+      "title": "Forgot Password?",
+      "resetTitle": "Reset Password",
+      "description": "Enter your email address and we'll send you a code to reset your password.",
+      "resetDescription": "Enter the verification code sent to your email and your new password.",
+      "emailPlaceholder": "Email Address",
+      "codePlaceholder": "Verification Code",
+      "newPasswordPlaceholder": "New Password",
+      "confirmPasswordPlaceholder": "Confirm New Password",
+      "sendCodeButton": "Send Reset Code",
+      "sending": "Sending...",
+      "resetButton": "Reset Password",
+      "resetting": "Resetting...",
+      "didntReceive": "Didn't receive the code?",
+      "resend": "Resend",
+      "codeSentTo": "Code sent to:",
+      "requirements": {
+        "title": "Password Requirements:",
+        "minLength": "• At least 8 characters long",
+        "recommended": "• Mix of letters, numbers, and symbols recommended"
+      },
+      "alerts": {
+        "codeSent": {
+          "title": "Code Sent",
+          "message": "We've sent a verification code to your email. Please check your inbox."
+        },
+        "success": {
+          "title": "Success",
+          "message": "Your password has been reset successfully. Please sign in with your new password."
+        },
+        "resendSuccess": "Verification code resent to your email"
+      },
+      "errors": {
+        "emailRequired": "Please enter your email address",
+        "emailInvalid": "Please enter a valid email address",
+        "codeRequired": "Please enter the verification code",
+        "passwordRequired": "Please enter a new password",
+        "passwordLength": "Password must be at least 8 characters long",
+        "passwordMismatch": "Passwords do not match",
+        "sendFailed": "Failed to send reset code. Please try again.",
+        "resetFailed": "Failed to reset password. Please try again.",
+        "incomplete": "Password reset incomplete. Please try again.",
+        "resendFailed": "Failed to resend code. Please try again."
+      }
+    }
   },
   "settingsScreen": {
     "account": {
@@ -594,5 +678,153 @@
   "homeScreen": {
     "title": "Home Screen",
     "welcome": "Welcome to your home page"
+  },
+  "privacyScreen": {
+    "title": "Privacy & Permissions",
+    "info": "Manage device feature access permissions. Tap each item to grant or change permissions.",
+    "permissionsTitle": "PERMISSIONS",
+    "permissions": {
+      "camera": {
+        "title": "Camera",
+        "subtitle": "Allow taking photos and videos"
+      },
+      "microphone": {
+        "title": "Microphone",
+        "subtitle": "Allow audio recording and calls"
+      },
+      "photos": {
+        "title": "Photo Library",
+        "subtitle": "Access photos and videos on device"
+      },
+      "location": {
+        "title": "Location",
+        "subtitle": "Access your location"
+      },
+      "notifications": {
+        "title": "Notifications",
+        "subtitle": "Receive notifications from app"
+      }
+    },
+    "status": {
+      "granted": "Granted",
+      "denied": "Denied",
+      "notRequested": "Not Requested"
+    },
+    "alert": {
+      "title": "Permission Required",
+      "message": "Please go to Settings to enable {permission} permission",
+      "openSettings": "Open Settings"
+    },
+    "granted": {
+      "title": "Permission Granted",
+      "message": "{permission} permission has been granted. To change it, please go to System Settings.",
+      "changeInSettings": "Open Settings"
+    },
+    "openSystemSettings": "Open System Settings"
+  },
+   "onboarding": {
+    "language": {
+      "title": "Choose Your Language",
+      "description": "Select your preferred language to continue",
+      "continue": "Continue"
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "getStarted": "Get Started",
+    "slide1": {
+      "title": "End-to-End Encryption",
+      "description": "Your conversations are protected with military-grade encryption. Only you and your contacts can read your messages."
+    },
+    "slide2": {
+      "title": "AI Emotion Analysis",
+      "description": "Our intelligent AI analyzes your emotional state through messages and calls, providing personalized support and insights."
+    },
+    "slide3": {
+      "title": "Emotional Balance Support",
+      "description": "Get real-time counseling and recommendations to maintain your emotional wellbeing throughout your conversations."
+    }
+  },
+  "securityScreen": {
+    "title": "Security",
+    "info": "Manage your account security, password, and active sessions across all devices.",
+    "password": {
+      "title": "PASSWORD",
+      "change": "Change Password",
+      "subtitle": "Update your account password"
+    },
+    "changePassword": {
+      "title": "Change Password",
+      "info": "Choose a strong password to keep your account secure. Make sure it's different from your current password.",
+      "labels": {
+        "current": "Current Password",
+        "new": "New Password",
+        "confirm": "Confirm New Password"
+      },
+      "placeholders": {
+        "current": "Enter current password",
+        "new": "Enter new password",
+        "confirm": "Re-enter new password"
+      },
+      "requirements": {
+        "title": "Password Requirements:",
+        "minLength": "At least 8 characters",
+        "uppercase": "At least one uppercase letter",
+        "lowercase": "At least one lowercase letter",
+        "number": "At least one number"
+      },
+      "validation": {
+        "currentRequired": "Please enter your current password",
+        "newRequired": "Please enter a new password",
+        "minLength": "Password must be at least 8 characters",
+        "uppercase": "Password must contain at least one uppercase letter",
+        "lowercase": "Password must contain at least one lowercase letter",
+        "number": "Password must contain at least one number",
+        "mismatch": "Passwords do not match",
+        "same": "New password must be different from current password"
+      },
+      "success": "Password changed successfully",
+      "error": {
+        "generic": "Failed to change password. Please try again.",
+        "incorrectCurrent": "Current password is incorrect"
+      },
+      "button": "Change Password"
+    },
+    "sessions": {
+      "title": "ACTIVE SESSIONS",
+      "current": "Current",
+      "lastActive": "Last active",
+      "justNow": "Just now",
+      "minutesAgo": "{count} minutes ago",
+      "hoursAgo": "{count} hours ago",
+      "daysAgo": "{count} days ago",
+      "signOut": "Sign Out",
+      "signOutCurrent": {
+        "title": "Sign Out?",
+        "message": "Are you sure you want to sign out from this device? You'll need to sign in again."
+      },
+      "signOutOther": {
+        "title": "End Session?",
+        "message": "This will sign out this device from your account."
+      },
+      "signOutAll": {
+        "title": "Sign Out All Other Devices?",
+        "message": "This will end {count} active sessions on other devices.",
+        "confirm": "Sign Out All",
+        "button": "Sign Out All"
+      },
+      "noOtherSessions": {
+        "title": "No Other Sessions",
+        "message": "You're only signed in on this device."
+      },
+      "signOutSuccess": "Session ended successfully",
+      "signOutError": "Failed to end session. Please try again.",
+      "signOutAllSuccess": "All other sessions ended successfully",
+      "signOutAllError": "Failed to end sessions. Please try again.",
+      "noSessions": "No active sessions found",
+      "loadError": {
+        "title": "Error",
+        "message": "Failed to load sessions. Please try again."
+      }
+    }
   }
 }
