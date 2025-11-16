@@ -276,7 +276,7 @@ export default function MessageScreen() {
   }, [messages, markAsRead, userId]);
 
   // ========================================
-  // CALL HANDLERS - GIỮ NGUYÊN
+  // ✅ CALL HANDLERS - ĐÚNG THEO FILE CŨ (document 7)
   // ========================================
 
   const handleVideoCall = async () => {
@@ -284,34 +284,35 @@ export default function MessageScreen() {
 
     try {
       setIsInitiatingCall(true);
-
-      const isGroup = conversation?.type === "group";
-      const displayName = isGroup
-        ? conversation?.name || "Group"
+      
+      const isGroup = conversation?.type === 'group';
+      const displayName = isGroup 
+        ? (conversation?.name || 'Group')
         : getConversationTitle();
-
+      
       Alert.alert(
-        t('message.call.video.title'),
-        isGroup
-          ? t('message.call.video.groupMessage', { name: displayName })
-          : t('message.call.video.privateMessage', { name: displayName }),
+        `Start Video Call`,
+        isGroup 
+          ? `Do you want to start a video call in ${displayName}?`
+          : `Do you want to start a video call with ${displayName}?`,
         [
           {
-            text: t('message.call.cancel'),
-            style: "cancel",
+            text: 'Cancel',
+            style: 'cancel',
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: t('message.call.start'),
+            text: 'Call',
             onPress: async () => {
               try {
                 const token = await getToken();
-
+                
+                // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
-                  `${API_URL}/api/call/video/start`,
+                  `${API_URL}/api/calls/initiate`,
                   {
                     conversationId: id,
-                    type: isGroup ? "group" : "private",
+                    type: 'video',
                   },
                   {
                     headers: {
@@ -320,19 +321,26 @@ export default function MessageScreen() {
                   }
                 );
 
-                if (response.data.success) {
-                  router.push({
-                    pathname: "/call/video/[id]" as any,
-                    params: {
-                      id: response.data.data.callId,
-                      conversationId: id,
-                      isInitiator: true,
-                    },
-                  });
-                }
-              } catch (error) {
-                console.error("Failed to start video call:", error);
-                Alert.alert(t('error'), t('message.call.video.failed'));
+                const { call } = response.data;
+                
+                console.log('📞 Video call initiated:', call);
+                
+                // ✅ ĐÚNG: Navigate với call.id và call.channelName
+                router.push({
+                  pathname: '/call/[id]' as any,
+                  params: {
+                    id: call.id,
+                    channelName: call.channelName,
+                    conversationId: id,
+                    callType: 'video',
+                  },
+                });
+              } catch (error: any) {
+                console.error('❌ Error starting video call:', error);
+                Alert.alert(
+                  'Error', 
+                  error.response?.data?.error || 'Failed to start video call'
+                );
               } finally {
                 setIsInitiatingCall(false);
               }
@@ -341,7 +349,7 @@ export default function MessageScreen() {
         ]
       );
     } catch (error) {
-      console.error("Error:", error);
+      console.error('❌ Error:', error);
       setIsInitiatingCall(false);
     }
   };
@@ -351,34 +359,35 @@ export default function MessageScreen() {
 
     try {
       setIsInitiatingCall(true);
-
-      const isGroup = conversation?.type === "group";
-      const displayName = isGroup
-        ? conversation?.name || "Group"
+      
+      const isGroup = conversation?.type === 'group';
+      const displayName = isGroup 
+        ? (conversation?.name || 'Group')
         : getConversationTitle();
-
+      
       Alert.alert(
-        t('message.call.audio.title'),
-        isGroup
-          ? t('message.call.audio.groupMessage', { name: displayName })
-          : t('message.call.audio.privateMessage', { name: displayName }),
+        `Start Audio Call`,
+        isGroup 
+          ? `Do you want to start an audio call in ${displayName}?`
+          : `Do you want to start an audio call with ${displayName}?`,
         [
           {
-            text: t('message.call.cancel'),
-            style: "cancel",
+            text: 'Cancel',
+            style: 'cancel',
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: t('message.call.start'),
+            text: 'Call',
             onPress: async () => {
               try {
                 const token = await getToken();
-
+                
+                // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
-                  `${API_URL}/api/call/audio/start`,
+                  `${API_URL}/api/calls/initiate`,
                   {
                     conversationId: id,
-                    type: isGroup ? "group" : "private",
+                    type: 'audio',
                   },
                   {
                     headers: {
@@ -387,19 +396,26 @@ export default function MessageScreen() {
                   }
                 );
 
-                if (response.data.success) {
-                  router.push({
-                    pathname: "/call/audio/[id]" as any,
-                    params: {
-                      id: response.data.data.callId,
-                      conversationId: id,
-                      isInitiator: true,
-                    },
-                  });
-                }
-              } catch (error) {
-                console.error("Failed to start audio call:", error);
-                Alert.alert(t('error'), t('message.call.audio.failed'));
+                const { call } = response.data;
+                
+                console.log('📞 Audio call initiated:', call);
+                
+                // ✅ ĐÚNG: Navigate với call.id và call.channelName
+                router.push({
+                  pathname: '/call/[id]' as any,
+                  params: {
+                    id: call.id,
+                    channelName: call.channelName,
+                    conversationId: id,
+                    callType: 'audio',
+                  },
+                });
+              } catch (error: any) {
+                console.error('❌ Error starting audio call:', error);
+                Alert.alert(
+                  'Error', 
+                  error.response?.data?.error || 'Failed to start audio call'
+                );
               } finally {
                 setIsInitiatingCall(false);
               }
@@ -408,7 +424,7 @@ export default function MessageScreen() {
         ]
       );
     } catch (error) {
-      console.error("Error:", error);
+      console.error('❌ Error:', error);
       setIsInitiatingCall(false);
     }
   };
@@ -732,17 +748,17 @@ export default function MessageScreen() {
 
   // GIỮ NGUYÊN
   const getConversationTitle = () => {
-    if (!conversation) return t('loading');
+    if (!conversation) return "Chat";
 
     if (conversation.type === "group") {
-      return conversation.name || t('message.members', { count: conversation?.participants?.length || 0 });
+      return conversation.name || "Group Chat";
     }
 
     const otherParticipant = conversation.participants?.find(
       (p: any) => p.clerkId !== userId
     );
     return (
-      otherParticipant?.full_name || otherParticipant?.username || t('message.unknownUser')
+      otherParticipant?.full_name || otherParticipant?.username || "Unknown User"
     );
   };
 
@@ -769,7 +785,7 @@ export default function MessageScreen() {
     );
 
     if (otherParticipant?.is_online) {
-      return t('message.online');
+      return "Online";
     }
 
     if (otherParticipant?.last_seen) {
@@ -778,12 +794,12 @@ export default function MessageScreen() {
       const diffMs = now.getTime() - lastSeen.getTime();
       const diffMins = Math.floor(diffMs / 60000);
 
-      if (diffMins < 1) return t('message.justNow');
-      if (diffMins < 60) return t('message.minutesAgo', { minutes: diffMins });
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return t('message.hoursAgo', { hours: diffHours });
+      if (diffHours < 24) return `${diffHours}h ago`;
       const diffDays = Math.floor(diffHours / 24);
-      return t('message.daysAgo', { days: diffDays });
+      return `${diffDays}d ago`;
     }
 
     return null;
@@ -896,10 +912,10 @@ export default function MessageScreen() {
 
             {/* GIỮ NGUYÊN phần status */}
             {typingUsers.length > 0 ? (
-              <Text className="text-sm text-orange-500 italic">{t('message.typing')}</Text>
+              <Text className="text-sm text-orange-500 italic">typing...</Text>
             ) : isGroup ? (
               <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                {t('message.members', { count: conversation?.participants?.length || 0 })}
+                {conversation?.participants?.length || 0} members
               </Text>
             ) : getOnlineStatus() ? (
               <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -982,7 +998,7 @@ export default function MessageScreen() {
         <View className="flex-row items-center">
           <ActivityIndicator size="small" color="#f59e0b" />
           <Text className={`ml-2 text-xs font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
-            {t('message.encryption.initializing')}
+            Initializing encryption...
           </Text>
         </View>
       </View>
@@ -995,17 +1011,17 @@ export default function MessageScreen() {
       {/* ✨ UPDATED: Đổi icon thành lock */}
       <Text className="text-6xl mb-4">🔒</Text>
       <Text className={`text-center text-lg font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-        {t('message.empty.title')}
+        No messages yet
       </Text>
       <Text className={`text-center mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-        {t('message.empty.subtitle')}
+        Send the first message to start the conversation
       </Text>
 
       {/* ✨ NEW: E2EE status indicator */}
       {encryptionReady && (
         <View className={`mt-4 rounded-lg px-4 py-2 ${isDark ? 'bg-green-900/20' : 'bg-green-50'}`}>
           <Text className={`text-sm font-medium text-center ${isDark ? 'text-green-300' : 'text-green-700'}`}>
-            {t('message.encryption.enabled')}
+            End-to-end encryption enabled
           </Text>
         </View>
       )}
@@ -1068,7 +1084,7 @@ export default function MessageScreen() {
             onPress={() => router.back()}
             className="bg-orange-500 rounded-full px-6 py-3 mt-6"
           >
-            <Text className="text-white font-semibold">{t('cancel')}</Text>
+            <Text className="text-white font-semibold">Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
