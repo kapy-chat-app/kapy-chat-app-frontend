@@ -5,6 +5,7 @@ import { TypingIndicator } from "@/components/page/message/TypingIndicator";
 import { useConversations } from "@/hooks/message/useConversations";
 import { useEncryption } from "@/hooks/message/useEncryption"; // ✨ NEW: E2EE Hook
 import { useMessages } from "@/hooks/message/useMessages";
+import { useSocket } from "@/hooks/message/useSocket";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
@@ -89,6 +90,8 @@ export default function MessageScreen() {
   // ✨ NEW: E2EE Hook - Không ảnh hưởng code cũ
   const { isInitialized: encryptionReady, loading: encryptionLoading } =
     useEncryption();
+
+  const { isUserOnline } = useSocket();
 
   const {
     messages,
@@ -284,35 +287,35 @@ export default function MessageScreen() {
 
     try {
       setIsInitiatingCall(true);
-      
-      const isGroup = conversation?.type === 'group';
-      const displayName = isGroup 
-        ? (conversation?.name || 'Group')
+
+      const isGroup = conversation?.type === "group";
+      const displayName = isGroup
+        ? conversation?.name || "Group"
         : getConversationTitle();
-      
+
       Alert.alert(
         `Start Video Call`,
-        isGroup 
+        isGroup
           ? `Do you want to start a video call in ${displayName}?`
           : `Do you want to start a video call with ${displayName}?`,
         [
           {
-            text: 'Cancel',
-            style: 'cancel',
+            text: "Cancel",
+            style: "cancel",
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: 'Call',
+            text: "Call",
             onPress: async () => {
               try {
                 const token = await getToken();
-                
+
                 // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
                   `${API_URL}/api/calls/initiate`,
                   {
                     conversationId: id,
-                    type: 'video',
+                    type: "video",
                   },
                   {
                     headers: {
@@ -322,24 +325,24 @@ export default function MessageScreen() {
                 );
 
                 const { call } = response.data;
-                
-                console.log('📞 Video call initiated:', call);
-                
+
+                console.log("📞 Video call initiated:", call);
+
                 // ✅ ĐÚNG: Navigate với call.id và call.channelName
                 router.push({
-                  pathname: '/call/[id]' as any,
+                  pathname: "/call/[id]" as any,
                   params: {
                     id: call.id,
                     channelName: call.channelName,
                     conversationId: id,
-                    callType: 'video',
+                    callType: "video",
                   },
                 });
               } catch (error: any) {
-                console.error('❌ Error starting video call:', error);
+                console.error("❌ Error starting video call:", error);
                 Alert.alert(
-                  'Error', 
-                  error.response?.data?.error || 'Failed to start video call'
+                  "Error",
+                  error.response?.data?.error || "Failed to start video call"
                 );
               } finally {
                 setIsInitiatingCall(false);
@@ -349,7 +352,7 @@ export default function MessageScreen() {
         ]
       );
     } catch (error) {
-      console.error('❌ Error:', error);
+      console.error("❌ Error:", error);
       setIsInitiatingCall(false);
     }
   };
@@ -359,35 +362,35 @@ export default function MessageScreen() {
 
     try {
       setIsInitiatingCall(true);
-      
-      const isGroup = conversation?.type === 'group';
-      const displayName = isGroup 
-        ? (conversation?.name || 'Group')
+
+      const isGroup = conversation?.type === "group";
+      const displayName = isGroup
+        ? conversation?.name || "Group"
         : getConversationTitle();
-      
+
       Alert.alert(
         `Start Audio Call`,
-        isGroup 
+        isGroup
           ? `Do you want to start an audio call in ${displayName}?`
           : `Do you want to start an audio call with ${displayName}?`,
         [
           {
-            text: 'Cancel',
-            style: 'cancel',
+            text: "Cancel",
+            style: "cancel",
             onPress: () => setIsInitiatingCall(false),
           },
           {
-            text: 'Call',
+            text: "Call",
             onPress: async () => {
               try {
                 const token = await getToken();
-                
+
                 // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
                   `${API_URL}/api/calls/initiate`,
                   {
                     conversationId: id,
-                    type: 'audio',
+                    type: "audio",
                   },
                   {
                     headers: {
@@ -397,24 +400,24 @@ export default function MessageScreen() {
                 );
 
                 const { call } = response.data;
-                
-                console.log('📞 Audio call initiated:', call);
-                
+
+                console.log("📞 Audio call initiated:", call);
+
                 // ✅ ĐÚNG: Navigate với call.id và call.channelName
                 router.push({
-                  pathname: '/call/[id]' as any,
+                  pathname: "/call/[id]" as any,
                   params: {
                     id: call.id,
                     channelName: call.channelName,
                     conversationId: id,
-                    callType: 'audio',
+                    callType: "audio",
                   },
                 });
               } catch (error: any) {
-                console.error('❌ Error starting audio call:', error);
+                console.error("❌ Error starting audio call:", error);
                 Alert.alert(
-                  'Error', 
-                  error.response?.data?.error || 'Failed to start audio call'
+                  "Error",
+                  error.response?.data?.error || "Failed to start audio call"
                 );
               } finally {
                 setIsInitiatingCall(false);
@@ -424,7 +427,7 @@ export default function MessageScreen() {
         ]
       );
     } catch (error) {
-      console.error('❌ Error:', error);
+      console.error("❌ Error:", error);
       setIsInitiatingCall(false);
     }
   };
@@ -435,79 +438,157 @@ export default function MessageScreen() {
 
   // ✨ UPDATED: Send message với E2EE check
   const handleSendMessage = async (
-  contentOrData:
-    | string
-    | {
-        content?: string;
-        type: string;
-        replyTo?: string;
-        encryptedFiles?: any[];
-        localUris?: string[];
-        richMedia?: any; // ✨ NEW: Support GIF/Sticker
-      },
-  attachments?: string[],
-  replyToId?: string
-) => {
-  // ✅ CASE 0: Handle GIF/Sticker FIRST (từ MessageInput)
-  if (typeof contentOrData === 'object' && 
-      (contentOrData.type === 'gif' || contentOrData.type === 'sticker') && 
-      (contentOrData as any).richMedia) {
-    console.log(`✨ Sending ${contentOrData.type} from MessageScreen`);
-    
-    try {
-      await sendMessage({
-        content: contentOrData.content?.trim() || '',
-        type: contentOrData.type as any,
-        richMedia: (contentOrData as any).richMedia,
-        replyTo: contentOrData.replyTo,
+    contentOrData:
+      | string
+      | {
+          content?: string;
+          type: string;
+          replyTo?: string;
+          encryptedFiles?: any[];
+          localUris?: string[];
+          richMedia?: any; // ✨ NEW: Support GIF/Sticker
+        },
+    attachments?: string[],
+    replyToId?: string
+  ) => {
+    // ✅ CASE 0: Handle GIF/Sticker FIRST (từ MessageInput)
+    if (
+      typeof contentOrData === "object" &&
+      (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
+      (contentOrData as any).richMedia
+    ) {
+      console.log(`✨ Sending ${contentOrData.type} from MessageScreen`);
+
+      try {
+        await sendMessage({
+          content: contentOrData.content?.trim() || "",
+          type: contentOrData.type as any,
+          richMedia: (contentOrData as any).richMedia,
+          replyTo: contentOrData.replyTo,
+        });
+
+        setReplyTo(null);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        console.log(
+          `✅ ${contentOrData.type} sent successfully from MessageScreen`
+        );
+        return;
+      } catch (error: any) {
+        console.error(`❌ Failed to send ${contentOrData.type}:`, error);
+        Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+          { text: t("ok") },
+        ]);
+        return;
+      }
+    }
+
+    // ✅ CASE 1: Handle encrypted files
+    if (typeof contentOrData === "object" && contentOrData.encryptedFiles) {
+      console.log("📤 Sending message with encrypted files:", {
+        filesCount: contentOrData.encryptedFiles.length,
+        hasContent: !!contentOrData.content,
+        type: contentOrData.type,
+        hasLocalUris: !!contentOrData.localUris,
       });
 
-      setReplyTo(null);
+      if (!encryptionReady) {
+        Alert.alert(
+          t("message.encryption.notReady"),
+          t("message.encryption.waitMessage"),
+          [{ text: t("ok") }]
+        );
+        return;
+      }
 
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      try {
+        console.log("📤 Sending encrypted files...");
 
-      console.log(`✅ ${contentOrData.type} sent successfully from MessageScreen`);
-      return;
-    } catch (error: any) {
-      console.error(`❌ Failed to send ${contentOrData.type}:`, error);
-      Alert.alert(
-        t('message.failed'),
-        error.message || t('message.failed'),
-        [{ text: t('ok') }]
-      );
-      return;
+        await sendMessage({
+          content: contentOrData.content?.trim() || "",
+          type: contentOrData.type as any,
+          encryptedFiles: contentOrData.encryptedFiles,
+          localUris: contentOrData.localUris,
+          replyTo: contentOrData.replyTo,
+        });
+
+        setReplyTo(null);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        console.log("✅ Message with encrypted files sent successfully");
+        return;
+      } catch (error: any) {
+        console.error("❌ Failed to send encrypted files:", error);
+        Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+          { text: t("ok") },
+        ]);
+        return;
+      }
     }
-  }
 
-  // ✅ CASE 1: Handle encrypted files
-  if (typeof contentOrData === 'object' && contentOrData.encryptedFiles) {
-    console.log('📤 Sending message with encrypted files:', {
-      filesCount: contentOrData.encryptedFiles.length,
-      hasContent: !!contentOrData.content,
-      type: contentOrData.type,
-      hasLocalUris: !!contentOrData.localUris,
+    // ✅ CASE 2: Handle normal message (text only)
+    let messageContent: string;
+    let messageAttachments: string[] | undefined;
+    let messageReplyTo: string | undefined;
+
+    if (typeof contentOrData === "string") {
+      // Called with (string, attachments, replyToId)
+      messageContent = contentOrData;
+      messageAttachments = attachments;
+      messageReplyTo = replyToId;
+    } else {
+      // Called with object (no encrypted files)
+      messageContent = contentOrData.content || "";
+      messageAttachments = undefined;
+      messageReplyTo = contentOrData.replyTo;
+    }
+
+    // ✅ Validate
+    console.log("📤 handleSendMessage called:", {
+      contentType: typeof messageContent,
+      content: messageContent,
+      contentLength: messageContent?.length,
+      attachments: messageAttachments,
+      replyToId: messageReplyTo,
     });
 
+    if (typeof messageContent !== "string") {
+      console.error("❌ Content is not a string:", typeof messageContent);
+      Alert.alert(t("error"), "Invalid message content");
+      return;
+    }
+
+    if (
+      !messageContent.trim() &&
+      (!messageAttachments || messageAttachments.length === 0)
+    ) {
+      return;
+    }
+
+    // ✨ Check E2EE ready
     if (!encryptionReady) {
       Alert.alert(
-        t('message.encryption.notReady'),
-        t('message.encryption.waitMessage'),
-        [{ text: t('ok') }]
+        t("message.encryption.notReady"),
+        t("message.encryption.waitMessage"),
+        [{ text: t("ok") }]
       );
       return;
     }
 
     try {
-      console.log('📤 Sending encrypted files...');
-      
+      console.log("📤 Sending text message with E2EE...");
+
       await sendMessage({
-        content: contentOrData.content?.trim() || '',
-        type: contentOrData.type as any,
-        encryptedFiles: contentOrData.encryptedFiles,
-        localUris: contentOrData.localUris,
-        replyTo: contentOrData.replyTo,
+        content: messageContent.trim(),
+        type: "text",
+        attachments: messageAttachments,
+        replyTo: messageReplyTo,
       });
 
       setReplyTo(null);
@@ -516,102 +597,21 @@ export default function MessageScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
 
-      console.log('✅ Message with encrypted files sent successfully');
-      return;
+      console.log("✅ Message sent successfully");
     } catch (error: any) {
-      console.error('❌ Failed to send encrypted files:', error);
-      Alert.alert(
-        t('message.failed'),
-        error.message || t('message.failed'),
-        [{ text: t('ok') }]
-      );
-      return;
+      console.error("❌ Failed to send message:", error);
+      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+        { text: t("ok") },
+      ]);
     }
-  }
-
-  // ✅ CASE 2: Handle normal message (text only)
-  let messageContent: string;
-  let messageAttachments: string[] | undefined;
-  let messageReplyTo: string | undefined;
-
-  if (typeof contentOrData === "string") {
-    // Called with (string, attachments, replyToId)
-    messageContent = contentOrData;
-    messageAttachments = attachments;
-    messageReplyTo = replyToId;
-  } else {
-    // Called with object (no encrypted files)
-    messageContent = contentOrData.content || "";
-    messageAttachments = undefined;
-    messageReplyTo = contentOrData.replyTo;
-  }
-
-  // ✅ Validate
-  console.log("📤 handleSendMessage called:", {
-    contentType: typeof messageContent,
-    content: messageContent,
-    contentLength: messageContent?.length,
-    attachments: messageAttachments,
-    replyToId: messageReplyTo,
-  });
-
-  if (typeof messageContent !== "string") {
-    console.error("❌ Content is not a string:", typeof messageContent);
-    Alert.alert(t('error'), "Invalid message content");
-    return;
-  }
-
-  if (
-    !messageContent.trim() &&
-    (!messageAttachments || messageAttachments.length === 0)
-  ) {
-    return;
-  }
-
-  // ✨ Check E2EE ready
-  if (!encryptionReady) {
-    Alert.alert(
-      t('message.encryption.notReady'),
-      t('message.encryption.waitMessage'),
-      [{ text: t('ok') }]
-    );
-    return;
-  }
-
-  try {
-    console.log("📤 Sending text message with E2EE...");
-
-    await sendMessage({
-      content: messageContent.trim(),
-      type: "text",
-      attachments: messageAttachments,
-      replyTo: messageReplyTo,
-    });
-
-    setReplyTo(null);
-
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-
-    console.log("✅ Message sent successfully");
-  } catch (error: any) {
-    console.error("❌ Failed to send message:", error);
-    Alert.alert(
-      t('message.failed'),
-      error.message || t('message.failed'),
-      [{ text: t('ok') }]
-    );
-  }
-};
-
+  };
 
   // GIỮ NGUYÊN
   const handleEditMessage = async (messageId: string, newContent: string) => {
     try {
       await editMessage(messageId, newContent);
     } catch (error: any) {
-      Alert.alert(t('error'), error.message || t('message.failed'));
+      Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
@@ -623,7 +623,7 @@ export default function MessageScreen() {
     try {
       await deleteMessage(messageId, deleteType);
     } catch (error: any) {
-      Alert.alert(t('error'), error.message || t('message.failed'));
+      Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
@@ -632,7 +632,7 @@ export default function MessageScreen() {
     try {
       await addReaction(messageId, reaction);
     } catch (error: any) {
-      Alert.alert(t('error'), error.message || t('message.failed'));
+      Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
@@ -641,7 +641,7 @@ export default function MessageScreen() {
     try {
       await removeReaction(messageId);
     } catch (error: any) {
-      Alert.alert(t('error'), error.message || t('message.failed'));
+      Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
@@ -650,13 +650,13 @@ export default function MessageScreen() {
     try {
       console.log("🔄 Retrying decryption for message:", messageId);
       await retryDecryption(messageId);
-      Alert.alert(t('success'), t('message.encryption.retrySuccess'));
+      Alert.alert(t("success"), t("message.encryption.retrySuccess"));
     } catch (error: any) {
       console.error("❌ Retry decryption failed:", error);
       Alert.alert(
-        t('message.encryption.retryTitle'),
-        t('message.encryption.retryFailed'),
-        [{ text: t('ok') }]
+        t("message.encryption.retryTitle"),
+        t("message.encryption.retryFailed"),
+        [{ text: t("ok") }]
       );
     }
   };
@@ -758,7 +758,9 @@ export default function MessageScreen() {
       (p: any) => p.clerkId !== userId
     );
     return (
-      otherParticipant?.full_name || otherParticipant?.username || "Unknown User"
+      otherParticipant?.full_name ||
+      otherParticipant?.username ||
+      "Unknown User"
     );
   };
 
@@ -803,6 +805,27 @@ export default function MessageScreen() {
     }
 
     return null;
+  };
+
+  // ✨ NEW: Check if user is online (for green dot indicator)
+  const isUserOnlineInConversation = (): boolean => {
+    if (!conversation) return false;
+
+    // For groups: show online if at least one participant (including current user) is online
+    if (conversation.type === "group") {
+      const allParticipants = conversation.participants || [];
+
+      // Check if any participant (including current user) is online
+      return allParticipants.some((participant: any) =>
+        isUserOnline(participant.clerkId)
+      );
+    }
+
+    // For private chats
+    const otherParticipant = conversation.participants?.find(
+      (p: any) => p.clerkId !== userId
+    );
+    return otherParticipant ? isUserOnline(otherParticipant.clerkId) : false;
   };
 
   // GIỮ NGUYÊN
@@ -870,7 +893,9 @@ export default function MessageScreen() {
     const isGroup = conversation?.type === "group";
 
     return (
-      <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+      <View
+        className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-800" : "border-gray-200"}`}
+      >
         <TouchableOpacity onPress={() => router.back()} className="p-2">
           <Ionicons
             name="arrow-back"
@@ -880,25 +905,35 @@ export default function MessageScreen() {
         </TouchableOpacity>
 
         <View className="flex-1 flex-row items-center ml-3">
-          {avatarUrl ? (
-            <Image
-              source={{ uri: avatarUrl }}
-              className="w-10 h-10 rounded-full mr-3"
-            />
-          ) : (
-            <View className={`w-10 h-10 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-300'} items-center justify-center mr-3`}>
-              <Ionicons
-                name={isGroup ? "people" : "person"}
-                size={20}
-                color={isDark ? "#fff" : "#666"}
+          <View className="relative mr-3">
+            {avatarUrl ? (
+              <Image
+                source={{ uri: avatarUrl }}
+                className="w-10 h-10 rounded-full"
               />
-            </View>
-          )}
+            ) : (
+              <View
+                className={`w-10 h-10 rounded-full ${isDark ? "bg-gray-700" : "bg-gray-300"} items-center justify-center`}
+              >
+                <Ionicons
+                  name={isGroup ? "people" : "person"}
+                  size={20}
+                  color={isDark ? "#fff" : "#666"}
+                />
+              </View>
+            )}
+            {/* ✨ NEW: Green dot indicator for online status */}
+            {isUserOnlineInConversation() && (
+              <View className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full" />
+            )}
+          </View>
 
           <View className="flex-1">
             {/* ✨ UPDATED: Thêm E2EE badge */}
             <View className="flex-row items-center">
-              <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
+              <Text
+                className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-800"}`}
+              >
                 {getConversationTitle()}
               </Text>
 
@@ -914,11 +949,15 @@ export default function MessageScreen() {
             {typingUsers.length > 0 ? (
               <Text className="text-sm text-orange-500 italic">typing...</Text>
             ) : isGroup ? (
-              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <Text
+                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
+              >
                 {conversation?.participants?.length || 0} members
               </Text>
             ) : getOnlineStatus() ? (
-              <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              <Text
+                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
+              >
                 {getOnlineStatus()}
               </Text>
             ) : null}
@@ -934,13 +973,7 @@ export default function MessageScreen() {
           <Ionicons
             name="call"
             size={24}
-            color={
-              isInitiatingCall
-                ? "#ccc"
-                : isDark
-                  ? "#fff"
-                  : "#000"
-            }
+            color={isInitiatingCall ? "#ccc" : isDark ? "#fff" : "#000"}
           />
         </TouchableOpacity>
 
@@ -953,13 +986,7 @@ export default function MessageScreen() {
           <Ionicons
             name="videocam"
             size={24}
-            color={
-              isInitiatingCall
-                ? "#ccc"
-                : isDark
-                  ? "#fff"
-                  : "#000"
-            }
+            color={isInitiatingCall ? "#ccc" : isDark ? "#fff" : "#000"}
           />
         </TouchableOpacity>
 
@@ -994,10 +1021,14 @@ export default function MessageScreen() {
     if (encryptionReady) return null;
 
     return (
-      <View className={`px-4 py-2 border-b ${isDark ? 'bg-yellow-900/20 border-yellow-800' : 'bg-yellow-50 border-yellow-200'}`}>
+      <View
+        className={`px-4 py-2 border-b ${isDark ? "bg-yellow-900/20 border-yellow-800" : "bg-yellow-50 border-yellow-200"}`}
+      >
         <View className="flex-row items-center">
           <ActivityIndicator size="small" color="#f59e0b" />
-          <Text className={`ml-2 text-xs font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+          <Text
+            className={`ml-2 text-xs font-medium ${isDark ? "text-yellow-300" : "text-yellow-700"}`}
+          >
             Initializing encryption...
           </Text>
         </View>
@@ -1010,17 +1041,25 @@ export default function MessageScreen() {
     <View className="flex-1 justify-center items-center px-8">
       {/* ✨ UPDATED: Đổi icon thành lock */}
       <Text className="text-6xl mb-4">🔒</Text>
-      <Text className={`text-center text-lg font-semibold ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+      <Text
+        className={`text-center text-lg font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}
+      >
         No messages yet
       </Text>
-      <Text className={`text-center mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+      <Text
+        className={`text-center mt-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}
+      >
         Send the first message to start the conversation
       </Text>
 
       {/* ✨ NEW: E2EE status indicator */}
       {encryptionReady && (
-        <View className={`mt-4 rounded-lg px-4 py-2 ${isDark ? 'bg-green-900/20' : 'bg-green-50'}`}>
-          <Text className={`text-sm font-medium text-center ${isDark ? 'text-green-300' : 'text-green-700'}`}>
+        <View
+          className={`mt-4 rounded-lg px-4 py-2 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}
+        >
+          <Text
+            className={`text-sm font-medium text-center ${isDark ? "text-green-300" : "text-green-700"}`}
+          >
             End-to-end encryption enabled
           </Text>
         </View>
@@ -1071,7 +1110,7 @@ export default function MessageScreen() {
 
   if (error) {
     return (
-      <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
+      <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
         <StatusBar
           barStyle={isDark ? "light-content" : "dark-content"}
           backgroundColor={isDark ? "#000000" : "#FFFFFF"}
@@ -1079,7 +1118,11 @@ export default function MessageScreen() {
         {renderHeader()}
         <View className="flex-1 justify-center items-center px-8">
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
-          <Text className={`text-center mt-4 text-lg ${isDark ? 'text-red-400' : 'text-red-500'}`}>{error}</Text>
+          <Text
+            className={`text-center mt-4 text-lg ${isDark ? "text-red-400" : "text-red-500"}`}
+          >
+            {error}
+          </Text>
           <TouchableOpacity
             onPress={() => router.back()}
             className="bg-orange-500 rounded-full px-6 py-3 mt-6"
@@ -1092,7 +1135,7 @@ export default function MessageScreen() {
   }
 
   return (
-    <SafeAreaView className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
+    <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
