@@ -1,10 +1,9 @@
-// hooks/message/useFileEncryption.ts - FIXED: Verify key sync before encrypt
+// hooks/message/useFileEncryption.ts - FIXED: Pass recipient info for shared secret
 
 import { simpleEncryptionService } from "@/lib/encryption/EncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useMemo } from "react";
 import { useEncryption } from "./useEncryption";
-import CryptoJS from "crypto-js";
 
 export const useFileEncryption = () => {
   const { isInitialized } = useEncryption();
@@ -15,7 +14,7 @@ export const useFileEncryption = () => {
     []
   );
 
-  // ✅ Helper: Get MIME type from file name
+  // Helper: Get MIME type from file name
   const getMimeType = (fileName: string): string => {
     const ext = fileName.split(".").pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = {
@@ -40,54 +39,13 @@ export const useFileEncryption = () => {
   };
 
   /**
-   * ✅ NEW: Verify that local key matches server key
-   */
-  const verifyKeySync = useCallback(async (): Promise<boolean> => {
-    if (!userId) return false;
-
-    try {
-      const token = await getToken();
-      if (!token) return false;
-
-      // Get local key
-      const localKey = await simpleEncryptionService.getPublicKey();
-      const localKeyHash = CryptoJS.SHA256(localKey).toString(CryptoJS.enc.Hex);
-
-      // Get key from server
-      const response = await fetch(`${API_BASE_URL}/api/keys/${userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const result = await response.json();
-      if (!result.success) {
-        console.error("❌ Failed to fetch server key");
-        return false;
-      }
-
-      const serverKey = result.data.publicKey;
-      const serverKeyHash = CryptoJS.SHA256(serverKey).toString(CryptoJS.enc.Hex);
-
-      const match = localKey === serverKey;
-
-      console.log("🔍 KEY SYNC CHECK");
-      console.log("Local key hash:", localKeyHash);
-      console.log("Server key hash:", serverKeyHash);
-      console.log("Match:", match ? "✅" : "❌");
-
-      return match;
-    } catch (error) {
-      console.error("❌ Key sync verification failed:", error);
-      return false;
-    }
-  }, [userId, getToken, API_BASE_URL]);
-
-  /**
-   * ✅ FIXED: Verify and re-upload key if needed before encrypting
+   * ✅ FIXED: Encrypt file with recipient info for proper shared secret
    */
   const encryptFile = useCallback(
     async (
       fileUri: string,
-      fileName: string
+      fileName: string,
+      recipientUserId?: string // ✅ NEW: Optional recipient for shared secret
     ): Promise<{
       encryptedBase64: string;
       metadata: {
@@ -111,37 +69,15 @@ export const useFileEncryption = () => {
           throw new Error("Authentication token not available");
         }
 
-        // ✅ CRITICAL: Verify key sync before encrypting
-        console.log("🔍 Verifying key synchronization...");
-        const isKeySynced = await verifyKeySync();
-
-        if (!isKeySynced) {
-          console.warn("⚠️ Keys not synced! Re-uploading key to server...");
-          
-          // Re-upload key to ensure sync
-          await simpleEncryptionService.uploadKeysToServer(
-            API_BASE_URL,
-            token
-          );
-
-          // Verify again
-          const isSyncedNow = await verifyKeySync();
-          if (!isSyncedNow) {
-            throw new Error("Failed to sync encryption key with server");
-          }
-
-          console.log("✅ Key re-uploaded and verified");
-        } else {
-          console.log("✅ Keys already synced");
-        }
-
-        // ✅ Now encrypt file (key is guaranteed to be synced)
+        // ✅ Pass recipient info for shared secret derivation
         const encryptionResult = await simpleEncryptionService.encryptFile(
           fileUri,
-          fileName
+          fileName,
+          recipientUserId,
+          API_BASE_URL,
+          token
         );
 
-        // ✅ Determine MIME type from file name
         const mimeType = getMimeType(fileName);
 
         console.log("✅ File encrypted successfully:", {
@@ -149,6 +85,7 @@ export const useFileEncryption = () => {
           mimeType,
           originalSize: encryptionResult.metadata.original_size,
           encryptedSize: encryptionResult.metadata.encrypted_size,
+          hasRecipient: !!recipientUserId,
         });
 
         return {
@@ -167,7 +104,7 @@ export const useFileEncryption = () => {
         throw error;
       }
     },
-    [isInitialized, getToken, verifyKeySync, API_BASE_URL]
+    [isInitialized, getToken, API_BASE_URL]
   );
 
   const decryptFile = useCallback(
@@ -199,7 +136,6 @@ export const useFileEncryption = () => {
           token
         );
 
-        // ✅ Convert Uint8Array to Buffer
         const decryptedBuffer = Buffer.from(decryptedUint8Array);
 
         console.log("✅ File decrypted successfully:", {
@@ -220,6 +156,5 @@ export const useFileEncryption = () => {
     decryptFile,
     isInitialized,
     isReady: isInitialized,
-    verifyKeySync, // ✅ Export for debugging
   };
 };

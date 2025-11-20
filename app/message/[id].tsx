@@ -2,6 +2,8 @@
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useConversations } from "@/hooks/message/useConversations";
 import { useEncryption } from "@/hooks/message/useEncryption"; // ✨ NEW: E2EE Hook
 import { useMessages } from "@/hooks/message/useMessages";
@@ -25,8 +27,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -90,9 +90,6 @@ export default function MessageScreen() {
   // ✨ NEW: E2EE Hook - Không ảnh hưởng code cũ
   const { isInitialized: encryptionReady, loading: encryptionLoading } =
     useEncryption();
-
-  const { isUserOnline } = useSocket();
-
   const {
     messages,
     loading,
@@ -111,7 +108,7 @@ export default function MessageScreen() {
     sendTypingIndicator,
     retryDecryption, // ✨ NEW: Function để retry decrypt
   } = useMessages(id || null);
-
+  const { socket, isUserOnline, onlineUsers } = useSocket();
   const { conversations } = useConversations();
 
   useEffect(() => {
@@ -786,10 +783,14 @@ export default function MessageScreen() {
       (p: any) => p.clerkId !== userId
     );
 
-    if (otherParticipant?.is_online) {
+    if (!otherParticipant) return null;
+
+    // ✅ Check from socket instead of database
+    if (isUserOnline(otherParticipant.clerkId)) {
       return "Online";
     }
 
+    // Fallback to last_seen if not online
     if (otherParticipant?.last_seen) {
       const lastSeen = new Date(otherParticipant.last_seen);
       const now = new Date();
@@ -804,28 +805,29 @@ export default function MessageScreen() {
       return `${diffDays}d ago`;
     }
 
-    return null;
+    return "Offline";
   };
 
   // ✨ NEW: Check if user is online (for green dot indicator)
   const isUserOnlineInConversation = (): boolean => {
     if (!conversation) return false;
 
-    // For groups: show online if at least one participant (including current user) is online
-    if (conversation.type === "group") {
-      const allParticipants = conversation.participants || [];
-
-      // Check if any participant (including current user) is online
-      return allParticipants.some((participant: any) =>
-        isUserOnline(participant.clerkId)
+    // For private chats only - check from socket
+    if (conversation.type === "private") {
+      const otherParticipant = conversation.participants?.find(
+        (p: any) => p.clerkId !== userId
       );
+      if (otherParticipant) {
+        const online = isUserOnline(otherParticipant.clerkId);
+        console.log(
+          `🔍 MessageScreen: ${otherParticipant.full_name} is ${online ? "🟢 Online" : "⚪ Offline"}`
+        );
+        return online;
+      }
     }
 
-    // For private chats
-    const otherParticipant = conversation.participants?.find(
-      (p: any) => p.clerkId !== userId
-    );
-    return otherParticipant ? isUserOnline(otherParticipant.clerkId) : false;
+    // For group chats - don't show single online indicator
+    return false;
   };
 
   // GIỮ NGUYÊN

@@ -323,14 +323,29 @@
     },
     "labels": {
       "mutual": "{{count}} mutual friends"
+    },
+    "unfriend": {
+      "title": "Unfriend",
+      "message": "Are you sure you want to remove {{name}} from your friends?",
+      "confirm": "Unfriend",
+      "success": "{{name}} has been removed from your friends",
+      "failed": "Failed to remove friend"
+    },
+    "block": {
+      "title": "Block User",
+      "message": "Block {{name}}? They won't be able to contact you or see your profile.",
+      "confirm": "Block",
+      "success": "{{name}} has been blocked",
+      "failed": "Failed to block user"
+    },
+    "notifications": {
+      "requestReceived": "{{name}} sent you a friend request",
+      "requestAccepted": "{{name}} accepted your friend request",
+      "requestDeclined": "{{name}} declined your friend request",
+      "requestCancelled": "{{name}} cancelled their friend request",
+      "friendRemoved": "{{name}} removed you from friends",
+      "friendOnline": "{{name}} is now online"
     }
-  },
-  "blockedUsers": {
-    "title": "Blocked Users",
-    "empty": "No blocked users",
-    "emptyDescription": "You haven't blocked anyone yet",
-    "unblockSuccess": "User unblocked successfully",
-    "unblockFailed": "Failed to unblock user"
   },
   "publicProfile": {
     "title": "Profile",
@@ -361,11 +376,35 @@
       "addFriend": "Add Friend",
       "message": "Message",
       "requestSent": "Request Sent",
+      "cancelRequest": "Cancel Request",
+      "unfriend": "Unfriend",
       "shareProfile": "Share Profile",
       "reportUser": "Report User",
       "blockUser": "Block User",
       "acceptRequest": "Accept Request",
       "declineRequest": "Decline Request"
+    },
+    "cancelRequest": {
+      "title": "Cancel Request",
+      "message": "Are you sure you want to cancel this friend request?",
+      "confirm": "Cancel Request",
+      "success": "Friend request cancelled",
+      "failed": "Failed to cancel request",
+      "notFound": "Friend request not found"
+    },
+    "unfriend": {
+      "title": "Unfriend",
+      "message": "Are you sure you want to remove {{name}} from your friends?",
+      "confirm": "Unfriend",
+      "success": "Friend removed successfully",
+      "failed": "Failed to remove friend"
+    },
+    "declineRequest": {
+      "title": "Decline Request",
+      "message": "Are you sure you want to decline this friend request?",
+      "confirm": "Decline",
+      "success": "Friend request declined",
+      "failed": "Failed to decline request"
     },
     "block": {
       "confirmTitle": "Block User",
@@ -385,7 +424,8 @@
       "failed": "Failed to send friend request",
       "accepted": "Friend request accepted",
       "acceptFailed": "Failed to accept request",
-      "declineInfo": "Decline functionality not implemented yet"
+      "declineInfo": "Decline functionality not implemented yet",
+      "notFound": "Friend request not found"
     },
     "share": {
       "info": "Share functionality not implemented yet"
@@ -393,6 +433,13 @@
     "report": {
       "success": "User reported successfully"
     }
+  },
+  "blockedUsers": {
+    "title": "Blocked Users",
+    "empty": "No blocked users",
+    "emptyDescription": "You haven't blocked anyone yet",
+    "unblockSuccess": "User unblocked successfully",
+    "unblockFailed": "Failed to unblock user"
   },
   "emotion": {
     "title": "My Emotions",
@@ -826,5 +873,15 @@
         "message": "Failed to load sessions. Please try again."
       }
     }
+  },
+  "requests": {
+    "title": "Friend Requests",
+    "searchPlaceholder": "Search requests...",
+    "count": "{{count}} pending requests",
+    "resultsCount": "{{count}} results found",
+    "empty": "No friend requests",
+    "emptyDescription": "You don't have any pending friend requests",
+    "noResults": "No requests found",
+    "noResultsDescription": "Try searching with a different name"
   }
 }

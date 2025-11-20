@@ -1,9 +1,13 @@
 // components/page/message/media/FileAttachment.tsx
-import React, { useEffect } from 'react';
-import { ActivityIndicator, Alert, Text, TouchableOpacity, View, Platform } from 'react-native';
+// Redesigned with cleaner compact list style
+
+import React from 'react';
+import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system/legacy'; // ✅ Use legacy import
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+
+const GALLERY_WIDTH = 260;
 
 interface FileAttachmentProps {
   files: any[];
@@ -18,46 +22,25 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
   isSending, 
   isDark 
 }) => {
-  // ✅ Debug logging
-  useEffect(() => {
-    console.log('📄 [FileAttachment] Rendering with:', {
-      fileCount: files.length,
-      isSending,
-      files: files.map((f, idx) => ({
-        index: idx,
-        fileName: f.file_name,
-        fileType: f.file_type,
-        hasDecryptedUri: !!f.decryptedUri,
-        hasUrl: !!f.url,
-        decryptionError: f.decryption_error,
-      })),
-    });
-  }, [files, isSending]);
-
-  // ✅ FIXED: Get file URI with priority
   const getFileUri = (attachment: any): string | null => {
-    // 1st priority: decryptedUri
-    if (attachment.decryptedUri) {
-      console.log(`✅ [FileAttachment] Using decryptedUri for ${attachment.file_name}`);
-      return attachment.decryptedUri;
-    }
-
-    // 2nd priority: server URL
-    if (attachment.url) {
-      console.warn(`⚠️ [FileAttachment] Using server URL for ${attachment.file_name}`);
-      return attachment.url;
-    }
-
-    console.error(`❌ [FileAttachment] No valid URI for ${attachment.file_name}`);
+    if (attachment.decryptedUri) return attachment.decryptedUri;
+    if (attachment.url) return attachment.url;
     return null;
   };
 
-  const getFileIcon = (fileType: string) => {
+  const getFileIcon = (fileType: string): string => {
     if (!fileType) return 'document-outline';
-    if (fileType.includes('pdf')) return 'document-text';
-    if (fileType.includes('word')) return 'document';
-    if (fileType.includes('excel') || fileType.includes('sheet')) return 'grid';
+    if (fileType.includes('pdf')) return 'document-text-outline';
+    if (fileType.includes('word')) return 'document-outline';
+    if (fileType.includes('excel') || fileType.includes('sheet')) return 'grid-outline';
+    if (fileType.includes('zip') || fileType.includes('rar')) return 'archive-outline';
     return 'document-outline';
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleDownload = async (attachment: any) => {
@@ -69,62 +52,51 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     }
 
     try {
-      console.log('📥 [FileAttachment] Downloading file:', attachment.file_name);
-
       const fileName = attachment.file_name;
       const localUri = `${FileSystem.documentDirectory}${fileName}`;
 
-      // For data URIs (decrypted files), save directly
       if (fileUri.startsWith('data:')) {
         const base64Data = fileUri.split(',')[1];
-
-        // Convert base64 to file
         await FileSystem.writeAsStringAsync(localUri, base64Data, {
           encoding: FileSystem.EncodingType.Base64,
         });
-
-        console.log('✅ [FileAttachment] File saved to:', localUri);
       } else {
-        // For server URLs, download first
-        const downloadResult = await FileSystem.downloadAsync(fileUri, localUri);
-        console.log('✅ [FileAttachment] File downloaded to:', downloadResult.uri);
+        await FileSystem.downloadAsync(fileUri, localUri);
       }
 
-      // Share or save the file
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(localUri, {
           mimeType: attachment.file_type,
           dialogTitle: `Share ${fileName}`,
         });
-        console.log('✅ [FileAttachment] File shared successfully');
       } else {
-        Alert.alert(
-          'Success', 
-          `File saved to:\n${localUri}`,
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Success', `File saved to:\n${localUri}`);
       }
     } catch (error) {
-      console.error('❌ [FileAttachment] Download error:', error);
-      Alert.alert('Error', 'Failed to download file. Please try again.');
+      Alert.alert('Error', 'Failed to download file');
     }
   };
 
   return (
-    <View className="py-1">
+    <View>
       {files.map((att: any, index: number) => {
         const fileUri = getFileUri(att);
         const hasError = att.decryption_error;
 
         return (
-          <View 
-            key={att._id || index} 
-            className={`flex-row items-center px-3 py-3 min-h-[72px] w-[280px] ${
+          <TouchableOpacity 
+            key={att._id || index}
+            onPress={() => fileUri && !hasError && handleDownload(att)}
+            disabled={isSending || !fileUri || hasError}
+            activeOpacity={0.7}
+            style={{ width: GALLERY_WIDTH }}
+            className={`flex-row items-center p-3 ${index > 0 ? 'mt-1' : ''} ${
               (isSending || !fileUri) && 'opacity-60'
             }`}
           >
+            {/* File icon */}
             <View 
-              className={`w-12 h-12 rounded-lg items-center justify-center mr-3 ${
+              className={`w-10 h-10 rounded-lg items-center justify-center ${
                 isOwnMessage 
                   ? 'bg-white/20' 
                   : hasError 
@@ -133,61 +105,55 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
               }`}
             >
               {isSending || !fileUri ? (
-                <ActivityIndicator 
-                  size="small" 
-                  color={isOwnMessage ? 'white' : '#f97316'} 
-                />
+                <ActivityIndicator size="small" color={isOwnMessage ? 'white' : '#f97316'} />
               ) : hasError ? (
-                <Ionicons name="alert-circle" size={32} color="#ef4444" />
+                <Ionicons name="alert-circle" size={20} color="#ef4444" />
               ) : (
                 <Ionicons 
                   name={getFileIcon(att.file_type)} 
-                  size={32} 
+                  size={20} 
                   color={isOwnMessage ? 'white' : '#f97316'} 
                 />
               )}
             </View>
 
-            <View className="flex-1 mr-2">
+            {/* File info */}
+            <View className="flex-1 ml-3 mr-2">
               <Text 
-                className={`text-[15px] font-medium mb-1 ${
+                className={`text-sm font-medium ${
                   isOwnMessage 
                     ? 'text-white' 
                     : isDark 
                     ? 'text-white' 
                     : 'text-gray-900'
                 }`} 
-                numberOfLines={2}
+                numberOfLines={1}
               >
                 {att.file_name}
               </Text>
-              <Text className={`text-xs ${isOwnMessage ? 'text-white/70' : 'text-gray-500'}`}>
+              <Text className={`text-xs mt-0.5 ${
+                isOwnMessage ? 'text-white/60' : 'text-gray-400'
+              }`}>
                 {isSending 
-                  ? 'Uploading...' 
+                  ? 'Sending...' 
                   : !fileUri 
-                  ? 'Decrypting...'
+                  ? 'Loading...'
                   : hasError
-                  ? 'Decryption failed'
-                  : `${(att.file_size / 1024).toFixed(1)} KB • ${
-                      att.file_type?.split('/')[1]?.toUpperCase() || 'FILE'
-                    }`
+                  ? 'Failed'
+                  : formatFileSize(att.file_size)
                 }
               </Text>
             </View>
 
+            {/* Download icon */}
             {!isSending && fileUri && !hasError && (
-              <TouchableOpacity 
-                className="p-1"
-                onPress={() => handleDownload(att)}
-              >
-                <Ionicons 
-                  name="download-outline" 
-                  size={24} 
-                  color={isOwnMessage ? 'white' : '#666'} 
-                />
-              </TouchableOpacity>
+              <Ionicons 
+                name="download-outline" 
+                size={18} 
+                color={isOwnMessage ? 'rgba(255,255,255,0.7)' : '#9ca3af'} 
+              />
             )}
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>

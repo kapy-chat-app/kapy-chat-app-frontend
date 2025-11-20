@@ -1,4 +1,4 @@
-// components/page/message/MessageInput.tsx (UPDATE)
+// components/page/message/MessageInput.tsx (UPDATED - Simplified encryption)
 /* eslint-disable import/namespace */
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -16,12 +16,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFileEncryption } from "@/hooks/message/useFileEncryption";
+import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
+import { EncryptionProgress } from "@/lib/encryption/ChunkedEncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { GiphyPicker } from "./GiphyPicker"; // ✨ NEW
-import type { RichMediaDTO } from "@/hooks/message/useGiphy"; // ✨ NEW
+import { GiphyPicker } from "./GiphyPicker";
+import type { RichMediaDTO } from "@/hooks/message/useGiphy";
 
 interface AttachmentPreview {
   id: string;
@@ -56,7 +57,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [showGiphyPicker, setShowGiphyPicker] = useState(false); // ✨ NEW
+  const [showGiphyPicker, setShowGiphyPicker] = useState(false);
+  
+  // Encryption progress state
+  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgress | null>(null);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
+  const [totalFiles, setTotalFiles] = useState(0);
   
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
@@ -64,8 +70,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
   
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
+  const isSendingRef = useRef(false);
 
-  const { encryptFile, isReady: encryptionReady } = useFileEncryption();
+  const { 
+    encryptFile, 
+    isReady: encryptionReady,
+    resetProgress 
+  } = useChunkedFileEncryption();
+  
   const { getToken } = useAuth();
 
   const handleTyping = (text: string) => {
@@ -101,7 +113,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     };
   }, [onTyping]);
 
-  // ✨ NEW: Handle GIF/Sticker selection
   const handleGiphySelect = async (richMedia: RichMediaDTO, type: "gif" | "sticker") => {
     console.log(`✨ Selected ${type}:`, richMedia.title);
 
@@ -131,6 +142,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
+    
+    if (isSendingRef.current || uploadingFiles) {
+      console.log("⏭️ Already sending, skipping...");
+      return;
+    }
 
     if (isTypingRef.current && onTyping) {
       isTypingRef.current = false;
@@ -152,52 +168,74 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     try {
+      isSendingRef.current = true;
       const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
 
       if (shouldEncryptFiles) {
         console.log('🔒 Encrypting files before sending...');
         setUploadingFiles(true);
+        setTotalFiles(currentAttachments.length);
+        setEncryptionProgress(null);
 
         const encryptedFiles: any[] = [];
         const localUris: string[] = [];
 
-        for (const att of currentAttachments) {
+        for (let i = 0; i < currentAttachments.length; i++) {
+          const att = currentAttachments[i];
+          setCurrentFileIndex(i + 1);
+          
           try {
-            console.log('🔒 Encrypting file:', att.name);
+            console.log(`🔒 Encrypting file ${i + 1}/${currentAttachments.length}: ${att.name}`);
 
-            const { encryptedBase64, metadata } = await encryptFile(
+            const result = await encryptFile(
               att.uri,
               att.name,
-              recipientId
+              recipientId,
+              {
+                onProgress: (progress) => {
+                  setEncryptionProgress(progress);
+                },
+              }
             );
 
+            // ✅ Now result always has same format (no more chunkedResult)
             encryptedFiles.push({
-              encryptedBase64,
+              encryptedBase64: result.encryptedBase64,
               originalFileName: att.name,
-              originalFileType: att.mimeType || 'application/octet-stream',
+              originalFileType: att.mimeType || result.metadata.file_type,
               encryptionMetadata: {
-                iv: metadata.iv,
-                authTag: metadata.authTag,
-                original_size: metadata.original_size,
-                encrypted_size: metadata.encrypted_size,
+                iv: result.metadata.iv,
+                authTag: result.metadata.authTag,
+                original_size: result.metadata.original_size,
+                encrypted_size: result.metadata.encrypted_size,
               },
             });
 
             localUris.push(att.uri);
-            console.log('✅ File encrypted:', att.name);
-          } catch (error) {
+            console.log('✅ File encrypted:', att.name, result.isLargeFile ? '(large file)' : '(small file)');
+          } catch (error: any) {
             console.error('❌ Failed to encrypt file:', att.name, error);
-            Alert.alert(t('error'), `Failed to encrypt ${att.name}`);
+            setUploadingFiles(false);
+            setEncryptionProgress(null);
+            isSendingRef.current = false;
+            
+            Alert.alert(
+              t('error'), 
+              `Không thể mã hóa ${att.name}: ${error.message || 'Unknown error'}`
+            );
+            return;
           }
         }
 
         setUploadingFiles(false);
+        setEncryptionProgress(null);
+        resetProgress();
 
         if (messageContent || encryptedFiles.length > 0) {
           const messageData = {
             content: messageContent || undefined,
             type: 'file' as const,
-            encryptedFiles: encryptedFiles.length > 0 ? encryptedFiles : undefined,
+            encryptedFiles: encryptedFiles,
             localUris: localUris,
             replyTo: currentReplyTo,
           };
@@ -205,6 +243,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           onSendMessage(messageData);
         }
 
+        isSendingRef.current = false;
         return;
       }
 
@@ -284,9 +323,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
         onSendMessage(docFormData);
       }
+      
+      isSendingRef.current = false;
     } catch (error: any) {
       console.error("Send error:", error);
       setUploadingFiles(false);
+      setEncryptionProgress(null);
+      isSendingRef.current = false;
       Alert.alert(t('error'), error.message || t('message.failed'));
     }
   };
@@ -553,6 +596,29 @@ const MessageInput: React.FC<MessageInputProps> = ({
     </View>
   );
 
+  const getProgressText = () => {
+    if (!encryptionProgress) {
+      return t('message.encryption.encryptingFiles');
+    }
+
+    const { phase, percentage } = encryptionProgress;
+    
+    if (totalFiles > 1) {
+      return `Đang mã hóa ${currentFileIndex}/${totalFiles}: ${percentage.toFixed(0)}%`;
+    }
+
+    switch (phase) {
+      case 'reading':
+        return `Đang đọc file... ${percentage.toFixed(0)}%`;
+      case 'encrypting':
+        return `Đang mã hóa: ${percentage.toFixed(0)}%`;
+      case 'finalizing':
+        return 'Hoàn tất...';
+      default:
+        return `${percentage.toFixed(0)}%`;
+    }
+  };
+
   const isSendDisabled = uploadingFiles || disabled || (!message.trim() && attachments.length === 0);
 
   return (
@@ -603,10 +669,29 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
       {uploadingFiles && (
         <View style={styles.uploadingContainer}>
-          <ActivityIndicator size="small" color="#f97316" />
-          <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
-            {t('message.encryption.encryptingFiles')}
-          </Text>
+          <View style={styles.progressHeader}>
+            <ActivityIndicator size="small" color="#f97316" />
+            <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
+              {getProgressText()}
+            </Text>
+          </View>
+          
+          <View style={styles.progressBarContainer}>
+            <View style={styles.progressBarBackground}>
+              <View 
+                style={[
+                  styles.progressBarFill, 
+                  { width: `${encryptionProgress?.percentage || 0}%` }
+                ]} 
+              />
+            </View>
+          </View>
+          
+          {encryptionProgress && encryptionProgress.totalBytes > 0 && (
+            <Text style={[styles.progressDetail, isDark && styles.textGray400]}>
+              {(encryptionProgress.bytesProcessed / 1024 / 1024).toFixed(1)} / {(encryptionProgress.totalBytes / 1024 / 1024).toFixed(1)} MB
+            </Text>
+          )}
         </View>
       )}
 
@@ -647,7 +732,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
           />
         </TouchableOpacity>
 
-        {/* ✨ NEW: GIF/Sticker Button */}
         <TouchableOpacity 
           onPress={() => setShowGiphyPicker(true)} 
           style={styles.iconButton}
@@ -727,7 +811,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
-      {/* ✨ NEW: GIF/Sticker Picker Modal */}
       <GiphyPicker
         visible={showGiphyPicker}
         onClose={() => setShowGiphyPicker(false)}
@@ -737,7 +820,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
   );
 };
 
-// Styles remain the same...
 const styles = StyleSheet.create({
   container: {
     padding: 16,
@@ -775,6 +857,9 @@ const styles = StyleSheet.create({
   },
   textGray300: {
     color: "#d1d5db",
+  },
+  textGray400: {
+    color: "#9ca3af",
   },
   textGray700: {
     color: "#374151",
@@ -835,18 +920,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   uploadingContainer: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  progressHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    marginBottom: 8,
   },
   uploadingText: {
     marginLeft: 8,
-    fontSize: 12,
+    fontSize: 13,
     color: '#6b7280',
+    fontWeight: '500',
   },
   textWhite: {
     color: '#ffffff',
+  },
+  progressBarContainer: {
+    marginBottom: 4,
+  },
+  progressBarBackground: {
+    height: 6,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#f97316',
+    borderRadius: 3,
+  },
+  progressDetail: {
+    fontSize: 11,
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   inputRow: {
     flexDirection: "row",
