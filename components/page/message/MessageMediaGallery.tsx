@@ -1,5 +1,8 @@
+// components/page/message/MessageMediaGallery.tsx
+// Redesigned with unified gallery style for cleaner appearance
+
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { ImageGallery } from './media/ImageGallery';
 import { VideoPlayer } from './media/VideoPlayer';
 import { AudioPlayer } from './media/AudioPlayer';
@@ -18,34 +21,6 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
   isSending,
   isDark,
 }) => {
-  // ✅ CRITICAL: Debug log attachments
-  useEffect(() => {
-    if (message.attachments && message.attachments.length > 0) {
-      console.log('📊 [MessageMediaGallery] Received attachments:', {
-        messageId: message._id,
-        attachmentCount: message.attachments.length,
-        isSending,
-        hasLocalUris: !!message.localUri,
-        localUriCount: message.localUri?.length || 0,
-        attachments: message.attachments.map((att: any, index: number) => ({
-          index,
-          fileName: att.file_name,
-          fileType: att.file_type,
-          hasDecryptedUri: !!att.decryptedUri,
-          hasUrl: !!att.url,
-          isEncrypted: att.is_encrypted,
-          decryptionError: att.decryption_error,
-          decryptedUriPreview: att.decryptedUri 
-            ? `${att.decryptedUri.substring(0, 50)}...` 
-            : 'NO DECRYPTED URI',
-          urlPreview: att.url 
-            ? `${att.url.substring(0, 50)}...` 
-            : 'NO URL',
-        })),
-      });
-    }
-  }, [message.attachments, message._id, message.localUri, isSending]);
-
   const imageAttachments = message.attachments?.filter((att: any) => 
     att.file_type?.startsWith('image/')
   ) || [];
@@ -64,47 +39,51 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
     !att.file_type?.startsWith('audio/')
   ) || [];
 
-  // ✅ Log filtered results
-  useEffect(() => {
-    console.log('🔍 [MessageMediaGallery] Filtered attachments:', {
-      messageId: message._id,
-      images: imageAttachments.length,
-      videos: videoAttachments.length,
-      audios: audioAttachments.length,
-      files: fileAttachments.length,
-    });
-  }, [imageAttachments, videoAttachments, audioAttachments, fileAttachments, message._id]);
+  const totalAttachments = message.attachments?.length || 0;
+  const hasMultipleTypes = [
+    imageAttachments.length > 0,
+    videoAttachments.length > 0,
+    audioAttachments.length > 0,
+    fileAttachments.length > 0
+  ].filter(Boolean).length > 1;
 
   return (
-    <View>
+    <View className="overflow-hidden">
+      {/* Images - Full width gallery */}
       {imageAttachments.length > 0 && (
-        <>
-          {console.log('🖼️ [MessageMediaGallery] Rendering ImageGallery with', imageAttachments.length, 'images')}
+        <View className={hasMultipleTypes ? 'mb-1' : ''}>
           <ImageGallery 
             images={imageAttachments}
             localUris={message.localUri}
             isSending={isSending}
           />
-        </>
+        </View>
       )}
 
+      {/* Videos - Stacked below images */}
       {videoAttachments.length > 0 && (
-        <VideoPlayer 
-          videos={videoAttachments}
-          localUris={message.localUri}
-          isSending={isSending}
-        />
+        <View className={hasMultipleTypes ? 'mb-1' : ''}>
+          <VideoPlayer 
+            videos={videoAttachments}
+            localUris={message.localUri}
+            isSending={isSending}
+          />
+        </View>
       )}
 
+      {/* Audio - Compact inline player */}
       {audioAttachments.length > 0 && (
-        <AudioPlayer 
-          audios={audioAttachments}
-          isOwnMessage={isOwnMessage}
-          isSending={isSending}
-          isDark={isDark}
-        />
+        <View className={hasMultipleTypes ? 'mb-1' : ''}>
+          <AudioPlayer 
+            audios={audioAttachments}
+            isOwnMessage={isOwnMessage}
+            isSending={isSending}
+            isDark={isDark}
+          />
+        </View>
       )}
 
+      {/* Files - Clean list */}
       {fileAttachments.length > 0 && (
         <FileAttachment 
           files={fileAttachments}

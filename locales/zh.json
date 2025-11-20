@@ -280,165 +280,158 @@
     "ai": "AI",
     "setting": "设置"
   },
-  "friends": {
-    "title": "朋友",
-    "searchPlaceholder": "搜索朋友...",
-    "searching": "正在搜索...",
+   "friends": {
+    "title": "好友",
+    "searchPlaceholder": "搜索好友...",
+    "searching": "搜索中...",
     "noUsersFound": "未找到用户",
     "requests": {
       "title": "好友请求",
       "all": "所有请求",
       "accepted": "已接受好友请求！",
-      "acceptFailed": "无法接受请求",
+      "acceptFailed": "接受请求失败",
       "declineTitle": "拒绝请求",
-      "declineMessage": "您确定要拒绝此好友请求吗？",
+      "declineMessage": "确定要拒绝这个好友请求吗？",
       "decline": "拒绝",
-      "declineFailed": "无法拒绝请求"
+      "declineFailed": "拒绝请求失败"
     },
-    "myFriends": "我的朋友 ({{count}})",
+    "myFriends": "我的好友 ({{count}})",
     "seeAll": "查看全部",
     "addFriend": "添加好友",
     "sent": "已发送",
-    "friends": "朋友",
+    "friends": "好友",
     "unknownError": "未知错误",
     "menu": {
       "title": "选择操作",
       "viewProfile": "查看资料",
       "message": "发送消息",
-      "unfriend": "取消好友",
+      "unfriend": "删除好友",
       "block": "屏蔽用户"
     },
     "blocked": {
-      "title": "取消屏蔽用户",
-      "confirm": "您确定要取消屏蔽 {{name}} 吗？",
+      "title": "解除屏蔽",
+      "confirm": "确定要解除对 {{name}} 的屏蔽吗？",
       "cancel": "取消",
-      "unblock": "取消屏蔽",
+      "unblock": "解除屏蔽",
       "on": "屏蔽于 {{date}}",
-      "reason": "原因： {{reason}}"
+      "reason": "原因：{{reason}}"
     },
     "request": {
-      "message": "想要成为你的朋友",
+      "message": "想和你成为好友",
       "accept": "接受",
       "decline": "拒绝"
     },
     "labels": {
-      "mutual": "{{count}} 共同好友"
+      "mutual": "{{count}} 个共同好友"
+    },
+    "unfriend": {
+      "title": "删除好友",
+      "message": "确定要删除 {{name}} 好友吗？",
+      "confirm": "删除好友",
+      "success": "已删除 {{name}} 好友",
+      "failed": "删除好友失败"
+    },
+    "block": {
+      "title": "屏蔽用户",
+      "message": "屏蔽 {{name}}？他们将无法联系你或查看你的资料。",
+      "confirm": "屏蔽",
+      "success": "已屏蔽 {{name}}",
+      "failed": "屏蔽用户失败"
+    },
+    "notifications": {
+      "requestReceived": "{{name}} 向你发送了好友请求",
+      "requestAccepted": "{{name}} 接受了你的好友请求",
+      "requestDeclined": "{{name}} 拒绝了你的好友请求",
+      "requestCancelled": "{{name}} 取消了好友请求",
+      "friendRemoved": "{{name}} 已将你从好友中移除",
+      "friendOnline": "{{name}} 现在在线"
     }
-  },
-  "blockedUsers": {
-    "title": "已屏蔽用户",
-    "empty": "没有被屏蔽的用户",
-    "emptyDescription": "您还没有屏蔽任何人",
-    "unblockSuccess": "成功取消屏蔽用户",
-    "unblockFailed": "无法取消屏蔽用户"
   },
   "publicProfile": {
     "title": "个人资料",
-    "loading": "正在加载个人资料...",
-    "notFound": "未找到个人资料",
-    "notFoundDescription": "无法加载用户个人资料",
+    "loading": "加载资料中...",
+    "notFound": "未找到资料",
+    "notFoundDescription": "无法加载用户资料",
     "tryAgain": "重试",
     "information": "信息",
     "location": "位置",
     "website": "网站",
     "status": "状态",
-    "friends": "朋友",
-    "mutual": "共同",
+    "friends": "好友",
+    "mutual": "共同好友",
     "online": "在线",
     "offline": "离线",
-    "recentlyOnline": "最近在线",
+    "recentlyOnline": "刚刚在线",
     "hoursAgo": "{{hours}}小时前",
     "daysAgo": "{{days}}天前",
     "blocked": {
-      "title": "此用户已被屏蔽",
-      "message": "您已屏蔽此用户，无法查看其个人资料"
+      "title": "该用户已被屏蔽",
+      "message": "你已屏蔽该用户，无法查看其资料"
     },
     "private": {
-      "title": "此个人资料为私密",
+      "title": "该资料为私密",
       "message": "发送好友请求以查看更多详情"
     },
     "actions": {
       "addFriend": "添加好友",
-      "message": "消息",
+      "message": "发消息",
       "requestSent": "已发送请求",
-      "shareProfile": "分享个人资料",
+      "cancelRequest": "取消请求",
+      "unfriend": "删除好友",
+      "shareProfile": "分享资料",
       "reportUser": "举报用户",
       "blockUser": "屏蔽用户",
       "acceptRequest": "接受请求",
       "declineRequest": "拒绝请求"
     },
+    "cancelRequest": {
+      "title": "取消请求",
+      "message": "确定要取消这个好友请求吗？",
+      "confirm": "取消请求",
+      "success": "已取消好友请求",
+      "failed": "取消请求失败",
+      "notFound": "未找到好友请求"
+    },
+    "unfriend": {
+      "title": "删除好友",
+      "message": "确定要删除 {{name}} 好友吗？",
+      "confirm": "删除好友",
+      "success": "已删除好友",
+      "failed": "删除好友失败"
+    },
+    "declineRequest": {
+      "title": "拒绝请求",
+      "message": "确定要拒绝这个好友请求吗？",
+      "confirm": "拒绝",
+      "success": "已拒绝好友请求",
+      "failed": "拒绝请求失败"
+    },
     "block": {
       "confirmTitle": "屏蔽用户",
-      "confirmMessage": "您确定要屏蔽 {{name}} 吗？他们将无法与您联系或查看您的个人资料。",
+      "confirmMessage": "确定要屏蔽 {{name}} 吗？他们将无法联系你或查看你的资料。",
       "reasonTitle": "屏蔽原因（可选）",
-      "reasonDescription": "您为什么屏蔽此用户？这将帮助我们改进平台。",
+      "reasonDescription": "为什么要屏蔽该用户？这将帮助我们改进平台。",
       "reasonPlaceholder": "输入原因（可选）...",
-      "blocking": "正在屏蔽...",
+      "blocking": "屏蔽中...",
       "skip": "跳过",
       "block": "屏蔽",
-      "success": "成功屏蔽用户",
-      "failed": "无法屏蔽用户",
-      "unexpectedError": "屏蔽用户时发生意外错误"
+      "success": "已屏蔽用户",
+      "failed": "屏蔽用户失败",
+      "unexpectedError": "屏蔽用户时发生错误"
     },
     "friendRequest": {
-      "success": "成功发送好友请求",
-      "failed": "无法发送好友请求",
+      "success": "已发送好友请求",
+      "failed": "发送好友请求失败",
       "accepted": "已接受好友请求",
-      "acceptFailed": "无法接受请求",
-      "declineInfo": "拒绝功能尚未实现"
+      "acceptFailed": "接受请求失败",
+      "declineInfo": "拒绝功能尚未实现",
+      "notFound": "未找到好友请求"
     },
     "share": {
       "info": "分享功能尚未实现"
     },
     "report": {
-      "success": "成功举报用户"
-    }
-  },
-  "emotion": {
-    "title": "我的情绪",
-    "tabs": {
-      "history": "历史",
-      "stats": "统计"
-    },
-    "empty": "没有情绪数据",
-    "delete": {
-      "confirmTitle": "确认删除",
-      "confirmMessage": "您确定要删除此情绪分析吗？",
-      "success": "情绪分析已删除",
-      "failed": "无法删除"
-    },
-    "tryAgain": "重试",
-    "filter": {
-      "title": "筛选",
-      "context": "情境",
-      "timeRange": "时间范围",
-      "clear": "清除筛选",
-      "apply": "应用",
-      "days": "{{count}}天"
-    },
-    "contexts": {
-      "message": "消息",
-      "voice_note": "语音笔记",
-      "call": "通话",
-      "general": "一般"
-    },
-    "emotions": {
-      "joy": "喜悦",
-      "sadness": "悲伤",
-      "anger": "愤怒",
-      "fear": "恐惧",
-      "surprise": "惊讶",
-      "love": "爱",
-      "neutral": "中立"
-    },
-    "stats": {
-      "overview": "概览",
-      "analyses": "分析",
-      "dominantEmotion": "主导情绪",
-      "distribution": "情绪分布",
-      "averageScores": "平均分数",
-      "byContext": "按情境",
-      "confidence": "{{percent}}%置信度"
+      "success": "已举报用户"
     }
   },
 
@@ -826,5 +819,15 @@
         "message": "加载会话失败。请重试。"
       }
     }
+  },
+  "requests": {
+    "title": "好友请求",
+    "searchPlaceholder": "搜索请求...",
+    "count": "{{count}} 个待处理请求",
+    "resultsCount": "找到 {{count}} 个结果",
+    "empty": "没有好友请求",
+    "emptyDescription": "您没有待处理的好友请求",
+    "noResults": "未找到请求",
+    "noResultsDescription": "尝试使用其他名称搜索"
   }
 }

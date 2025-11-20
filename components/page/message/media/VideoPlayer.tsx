@@ -1,8 +1,12 @@
 // components/page/message/media/VideoPlayer.tsx
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Text, View } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+// FIXED: Better handling of data URIs for encrypted videos
+
+import React, { useState, useEffect } from 'react';
+import { ActivityIndicator, Image, Text, View, Dimensions } from 'react-native';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+
+const GALLERY_WIDTH = 260;
 
 interface VideoPlayerProps {
   videos: any[];
@@ -16,50 +20,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   isSending 
 }) => {
   const [videoLoadErrors, setVideoLoadErrors] = useState<{ [key: string]: boolean }>({});
+  const [videoLoadStates, setVideoLoadStates] = useState<{ [key: string]: 'loading' | 'ready' | 'error' }>({});
 
-  // ✅ Debug logging
-  useEffect(() => {
-    console.log('🎥 [VideoPlayer] Rendering with:', {
-      videoCount: videos.length,
-      isSending,
-      hasLocalUris: !!localUris,
-      videos: videos.map((v, idx) => ({
-        index: idx,
-        fileName: v.file_name,
-        hasDecryptedUri: !!v.decryptedUri,
-        hasUrl: !!v.url,
-        decryptedUriPreview: v.decryptedUri?.substring(0, 60),
-      })),
-    });
-  }, [videos, localUris, isSending]);
-
-  // ✅ FIXED: Get video URI with priority
   const getVideoUri = (attachment: any, index: number): string | null => {
-    // 1st priority: decryptedUri
+    // Priority: decryptedUri > localUri (when sending) > url
     if (attachment.decryptedUri) {
-      console.log(`✅ [VideoPlayer] Using decryptedUri for ${attachment.file_name}`);
+      console.log(`🎬 Video ${index}: Using decryptedUri`);
+      console.log(`   URI type: ${attachment.decryptedUri.substring(0, 50)}...`);
+      console.log(`   Is data URI: ${attachment.decryptedUri.startsWith('data:')}`);
       return attachment.decryptedUri;
     }
-
-    // 2nd priority: localUri (while sending)
+    
     if (isSending && localUris && localUris[index]) {
-      console.log(`⏳ [VideoPlayer] Using localUri for ${attachment.file_name}`);
+      console.log(`🎬 Video ${index}: Using localUri (sending)`);
       return localUris[index];
     }
-
-    // 3rd priority: server URL
+    
     if (attachment.url) {
-      console.warn(`⚠️ [VideoPlayer] Using server URL for ${attachment.file_name}`);
+      console.log(`🎬 Video ${index}: Using server URL`);
       return attachment.url;
     }
-
-    console.error(`❌ [VideoPlayer] No valid URI for ${attachment.file_name}`);
+    
+    console.log(`⚠️ Video ${index}: No URI available`);
     return null;
   };
 
   const handleVideoError = (attachmentId: string, error: any) => {
-    console.error(`❌ [VideoPlayer] Video load error for ${attachmentId}:`, error);
+    console.error(`❌ Video load error for ${attachmentId}:`, error);
     setVideoLoadErrors(prev => ({ ...prev, [attachmentId]: true }));
+    setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'error' }));
+  };
+
+  const handleVideoLoad = (attachmentId: string, status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      console.log(`✅ Video loaded successfully: ${attachmentId}`);
+      console.log(`   Duration: ${status.durationMillis}ms`);
+      setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'ready' }));
+    }
+  };
+
+  const handleVideoLoadStart = (attachmentId: string) => {
+    console.log(`🔄 Video loading started: ${attachmentId}`);
+    setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'loading' }));
   };
 
   return (
@@ -67,56 +69,102 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {videos.map((att: any, index: number) => {
         const videoUri = getVideoUri(att, index);
         const hasError = videoLoadErrors[att._id] || att.decryption_error;
+        const loadState = videoLoadStates[att._id] || 'loading';
+
+        // Log attachment info for debugging
+        useEffect(() => {
+          console.log(`📹 Video attachment ${index}:`, {
+            id: att._id,
+            file_name: att.file_name,
+            file_type: att.file_type,
+            is_encrypted: att.is_encrypted,
+            has_decryptedUri: !!att.decryptedUri,
+            decryption_error: att.decryption_error,
+          });
+        }, [att]);
 
         return (
-          <View key={att._id || index} className="mb-2">
+          <View 
+            key={att._id || index} 
+            className={index > 0 ? 'mt-1' : ''}
+          >
             {/* Error state */}
             {hasError && (
-              <View className="w-[250px] h-[200px] rounded-2xl bg-red-100 items-center justify-center">
-                <Ionicons name="alert-circle" size={48} color="#ef4444" />
-                <Text className="text-red-600 mt-2 text-sm font-medium">
-                  {att.decryption_error ? 'Decryption failed' : 'Load failed'}
-                </Text>
-                <Text className="text-red-500 text-xs mt-1">{att.file_name}</Text>
+              <View 
+                style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
+                className="rounded-xl bg-gray-100 items-center justify-center"
+              >
+                <Ionicons name="videocam-off-outline" size={32} color="#d1d5db" />
+                <Text className="text-gray-400 text-xs mt-2">Failed to load video</Text>
+                {att.decryption_error && (
+                  <Text className="text-red-400 text-xs mt-1">Decryption failed</Text>
+                )}
               </View>
             )}
 
-            {/* Loading state (no URI yet) */}
+            {/* Loading state - No URI yet */}
             {!hasError && !videoUri && (
-              <View className="w-[250px] h-[200px] rounded-2xl bg-gray-200 items-center justify-center">
-                <ActivityIndicator size="large" color="#f97316" />
-                <Text className="text-gray-600 mt-2 text-sm">
-                  {isSending ? 'Uploading...' : 'Decrypting...'}
+              <View 
+                style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
+                className="rounded-xl bg-gray-100 items-center justify-center"
+              >
+                <ActivityIndicator size="small" color="#f97316" />
+                <Text className="text-gray-400 text-xs mt-2">
+                  {isSending ? 'Encrypting...' : 'Decrypting...'}
                 </Text>
               </View>
             )}
 
             {/* Sending state with preview */}
             {!hasError && videoUri && isSending && (
-              <View className="w-[250px] h-[200px] rounded-2xl bg-gray-800 items-center justify-center">
-                <Image 
-                  source={{ uri: videoUri }} 
-                  className="absolute w-full h-full rounded-2xl" 
-                  resizeMode="cover" 
+              <View 
+                style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
+                className="rounded-xl bg-gray-900 overflow-hidden"
+              >
+                {/* Try to show first frame as preview */}
+                <Video
+                  source={{ uri: videoUri }}
+                  style={{ position: 'absolute', width: '100%', height: '100%' }}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={false}
+                  isMuted={true}
                 />
-                <View className="absolute inset-0 bg-black/30 items-center justify-center rounded-2xl">
-                  <ActivityIndicator size="large" color="white" />
-                  <Text className="text-white mt-2 text-sm">Uploading...</Text>
+                <View className="absolute inset-0 bg-black/40 items-center justify-center">
+                  <View className="bg-black/60 rounded-full p-3">
+                    <ActivityIndicator size="small" color="white" />
+                  </View>
+                  <Text className="text-white text-xs mt-2">Sending...</Text>
                 </View>
               </View>
             )}
 
-            {/* Ready to play */}
+            {/* Ready to play - Decrypted video */}
             {!hasError && videoUri && !isSending && (
-              <Video
-                source={{ uri: videoUri }}
-                className="w-[250px] h-[200px] rounded-2xl"
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping={false}
-                onError={(error) => handleVideoError(att._id, error)}
-                onLoad={() => console.log(`✅ [VideoPlayer] Video loaded: ${att.file_name}`)}
-              />
+              <View 
+                style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
+                className="rounded-xl overflow-hidden bg-black"
+              >
+                <Video
+                  source={{ uri: videoUri }}
+                  style={{ width: '100%', height: '100%' }}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping={false}
+                  shouldPlay={false}
+                  onLoadStart={() => handleVideoLoadStart(att._id)}
+                  onLoad={(status) => handleVideoLoad(att._id, status)}
+                  onError={(error) => handleVideoError(att._id, error)}
+                  // Important for data URIs
+                  progressUpdateIntervalMillis={500}
+                />
+                
+                {/* Loading overlay while video is loading */}
+                {loadState === 'loading' && (
+                  <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                    <ActivityIndicator size="small" color="white" />
+                  </View>
+                )}
+              </View>
             )}
           </View>
         );

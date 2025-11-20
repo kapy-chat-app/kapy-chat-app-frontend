@@ -1,4 +1,6 @@
 // components/page/message/media/ImageGallery.tsx
+// Redesigned with cleaner masonry-style gallery layout
+
 import React, { useState, useEffect } from 'react';
 import { 
   ActivityIndicator, 
@@ -13,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const GALLERY_WIDTH = 260;
 
 interface ImageGalleryProps {
   images: any[];
@@ -29,78 +32,42 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageLoadErrors, setImageLoadErrors] = useState<{ [key: string]: boolean }>({});
 
-  // ✅ CRITICAL: Debug log to verify decryptedUri
-  useEffect(() => {
-    console.log('🖼️ [ImageGallery] Rendering with:', {
-      imageCount: images.length,
-      isSending,
-      hasLocalUris: !!localUris,
-      localUriCount: localUris?.length || 0,
-      images: images.map((img, idx) => ({
-        index: idx,
-        fileName: img.file_name,
-        hasDecryptedUri: !!img.decryptedUri,
-        hasUrl: !!img.url,
-        decryptedUriPreview: img.decryptedUri 
-          ? `${img.decryptedUri.substring(0, 60)}...` 
-          : 'NONE',
-        urlPreview: img.url 
-          ? `${img.url.substring(0, 60)}...` 
-          : 'NONE',
-      })),
-    });
-  }, [images, localUris, isSending]);
-
-  // ✅ FIXED: Priority order - decryptedUri > localUri > url
   const getImageUri = (attachment: any, index: number): string | null => {
-    // 1st priority: decryptedUri (from successful decryption)
-    if (attachment.decryptedUri) {
-      console.log(`✅ [ImageGallery] Using decryptedUri for ${attachment.file_name}`);
-      return attachment.decryptedUri;
-    }
-
-    // 2nd priority: localUri (while sending, before uploaded)
-    if (isSending && localUris && localUris.length > index) {
-      console.log(`⏳ [ImageGallery] Using localUri for ${attachment.file_name}`);
-      return localUris[index];
-    }
-
-    // 3rd priority: server URL (fallback, should not happen for encrypted files)
-    if (attachment.url) {
-      console.warn(`⚠️ [ImageGallery] Using server URL for ${attachment.file_name} (not decrypted?)`);
-      return attachment.url;
-    }
-
-    console.error(`❌ [ImageGallery] No valid URI for ${attachment.file_name}`);
+    if (localUris && localUris[index]) return localUris[index];
+    if (attachment?.decryptedUri) return attachment.decryptedUri;
+    if (attachment?.url) return attachment.url;
     return null;
   };
 
-  const getImageSource = (attachment: any, index: number) => {
-    const uri = getImageUri(attachment, index);
-    return uri ? { uri } : null;
+  const handleImageError = (key: string) => {
+    setImageLoadErrors(prev => ({ ...prev, [key]: true }));
   };
 
-  const handleImageError = (attachmentId: string, error: any) => {
-    console.error(`❌ [ImageGallery] Image load error for ${attachmentId}:`, error);
-    setImageLoadErrors(prev => ({ ...prev, [attachmentId]: true }));
+  const handleImageLoad = (key: string) => {
+    setImageLoadErrors(prev => ({ ...prev, [key]: false }));
   };
 
-  const handleImageLoad = (attachmentId: string) => {
-    console.log(`✅ [ImageGallery] Image loaded successfully: ${attachmentId}`);
-    setImageLoadErrors(prev => ({ ...prev, [attachmentId]: false }));
-  };
+  const itemCount = (isSending && localUris?.length) ? localUris.length : images.length;
 
-  // ✅ Render single image
-  if (images.length === 1) {
-    const imageSource = getImageSource(images[0], 0);
-    const imageUri = getImageUri(images[0], 0);
-    const hasError = imageLoadErrors[images[0]._id];
+  if (itemCount === 0) return null;
 
-    if (!imageSource || !imageUri) {
+  // Single image - clean rounded display
+  if (itemCount === 1) {
+    const attachment = images[0] || {};
+    const imageUri = getImageUri(attachment, 0);
+    const key = attachment._id || 'local-0';
+    const hasError = imageLoadErrors[key];
+
+    if (!imageUri) {
       return (
-        <View className="w-[250px] h-[250px] rounded-2xl bg-gray-200 items-center justify-center">
-          <ActivityIndicator size="large" color="#f97316" />
-          <Text className="text-gray-500 text-xs mt-2">Decrypting...</Text>
+        <View 
+          style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.75 }}
+          className="rounded-xl bg-gray-100 items-center justify-center"
+        >
+          <ActivityIndicator size="small" color="#f97316" />
+          <Text className="text-gray-400 text-xs mt-2">
+            {isSending ? 'Sending...' : 'Loading...'}
+          </Text>
         </View>
       );
     }
@@ -108,37 +75,36 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
     return (
       <>
         <TouchableOpacity
-          onPress={() => {
-            if (!isSending && !hasError) {
-              setCurrentImageIndex(0);
-              setFullScreenImage(imageUri);
-            }
-          }}
-          disabled={isSending || hasError}
+          onPress={() => !hasError && setFullScreenImage(imageUri)}
+          disabled={hasError}
+          activeOpacity={0.95}
         >
-          <View className="w-[250px] h-[250px] rounded-2xl overflow-hidden bg-gray-200">
+          <View 
+            style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.75 }}
+            className="rounded-xl overflow-hidden bg-gray-100"
+          >
             <Image 
-              source={imageSource}
+              source={{ uri: imageUri }}
               className="w-full h-full"
               resizeMode="cover"
-              onLoad={() => handleImageLoad(images[0]._id)}
-              onError={(e) => handleImageError(images[0]._id, e.nativeEvent.error)}
+              onLoad={() => handleImageLoad(key)}
+              onError={() => handleImageError(key)}
             />
             {isSending && (
-              <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                <ActivityIndicator size="large" color="white" />
+              <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                <View className="bg-black/60 rounded-full p-2">
+                  <ActivityIndicator size="small" color="white" />
+                </View>
               </View>
             )}
             {hasError && (
-              <View className="absolute inset-0 bg-red-100 items-center justify-center">
-                <Ionicons name="alert-circle" size={40} color="#ef4444" />
-                <Text className="text-red-500 text-xs mt-2">Load failed</Text>
+              <View className="absolute inset-0 bg-gray-100 items-center justify-center">
+                <Ionicons name="image-outline" size={32} color="#d1d5db" />
               </View>
             )}
           </View>
         </TouchableOpacity>
 
-        {/* Full screen modal */}
         <Modal 
           visible={fullScreenImage !== null} 
           transparent 
@@ -147,10 +113,10 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
         >
           <View className="flex-1 bg-black justify-center">
             <TouchableOpacity 
-              className="absolute top-12 right-5 z-10 w-11 h-11 rounded-full bg-black/50 items-center justify-center" 
+              className="absolute top-12 right-5 z-10 w-10 h-10 rounded-full bg-white/20 items-center justify-center" 
               onPress={() => setFullScreenImage(null)}
             >
-              <Ionicons name="close" size={32} color="white" />
+              <Ionicons name="close" size={24} color="white" />
             </TouchableOpacity>
             <Image 
               source={{ uri: fullScreenImage || '' }} 
@@ -163,61 +129,257 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
     );
   }
 
-  // ✅ Render multiple images (grid)
+  // Two images - side by side
+  if (itemCount === 2) {
+    return (
+      <>
+        <View style={{ width: GALLERY_WIDTH }} className="flex-row rounded-xl overflow-hidden">
+          {[0, 1].map((index) => {
+            const attachment = images[index] || {};
+            const imageUri = getImageUri(attachment, index);
+            const key = attachment._id || `local-${index}`;
+            const hasError = imageLoadErrors[key];
+
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => imageUri && !hasError && (setCurrentImageIndex(index), setFullScreenImage(imageUri))}
+                disabled={hasError || !imageUri}
+                activeOpacity={0.95}
+                style={{ width: (GALLERY_WIDTH - 2) / 2, height: GALLERY_WIDTH * 0.75 }}
+                className={`bg-gray-100 ${index === 0 ? 'mr-0.5' : 'ml-0.5'}`}
+              >
+                {imageUri ? (
+                  <>
+                    <Image 
+                      source={{ uri: imageUri }} 
+                      className="w-full h-full" 
+                      resizeMode="cover"
+                      onLoad={() => handleImageLoad(key)}
+                      onError={() => handleImageError(key)}
+                    />
+                    {isSending && index === 0 && (
+                      <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                        <View className="bg-black/60 rounded-full p-2">
+                          <ActivityIndicator size="small" color="white" />
+                        </View>
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View className="flex-1 items-center justify-center">
+                    <ActivityIndicator size="small" color="#f97316" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Modal 
+          visible={fullScreenImage !== null} 
+          transparent 
+          animationType="fade" 
+          onRequestClose={() => setFullScreenImage(null)}
+        >
+          <View className="flex-1 bg-black justify-center">
+            <TouchableOpacity 
+              className="absolute top-12 right-5 z-10 w-10 h-10 rounded-full bg-white/20 items-center justify-center" 
+              onPress={() => setFullScreenImage(null)}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setCurrentImageIndex(index);
+              }}
+              contentOffset={{ x: currentImageIndex * SCREEN_WIDTH, y: 0 }}
+            >
+              {[0, 1].map((index) => {
+                const uri = getImageUri(images[index] || {}, index);
+                return (
+                  <View 
+                    key={index} 
+                    style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} 
+                    className="justify-center items-center"
+                  >
+                    {uri && <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} resizeMode="contain" />}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View className="absolute bottom-12 self-center bg-black/60 px-3 py-1.5 rounded-full">
+              <Text className="text-white text-xs">{currentImageIndex + 1} / 2</Text>
+            </View>
+          </View>
+        </Modal>
+      </>
+    );
+  }
+
+  // Three images - 1 large + 2 small
+  if (itemCount === 3) {
+    return (
+      <>
+        <View style={{ width: GALLERY_WIDTH }} className="rounded-xl overflow-hidden">
+          {/* Top large image */}
+          <TouchableOpacity
+            onPress={() => {
+              const uri = getImageUri(images[0] || {}, 0);
+              if (uri) { setCurrentImageIndex(0); setFullScreenImage(uri); }
+            }}
+            activeOpacity={0.95}
+            style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.5 }}
+            className="bg-gray-100 mb-0.5"
+          >
+            {getImageUri(images[0] || {}, 0) ? (
+              <Image 
+                source={{ uri: getImageUri(images[0] || {}, 0)! }} 
+                className="w-full h-full" 
+                resizeMode="cover"
+              />
+            ) : (
+              <View className="flex-1 items-center justify-center">
+                <ActivityIndicator size="small" color="#f97316" />
+              </View>
+            )}
+            {isSending && (
+              <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                <View className="bg-black/60 rounded-full p-2">
+                  <ActivityIndicator size="small" color="white" />
+                </View>
+              </View>
+            )}
+          </TouchableOpacity>
+          
+          {/* Bottom two images */}
+          <View className="flex-row">
+            {[1, 2].map((index) => {
+              const imageUri = getImageUri(images[index] || {}, index);
+              return (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => imageUri && (setCurrentImageIndex(index), setFullScreenImage(imageUri))}
+                  activeOpacity={0.95}
+                  style={{ width: (GALLERY_WIDTH - 2) / 2, height: GALLERY_WIDTH * 0.35 }}
+                  className={`bg-gray-100 ${index === 1 ? 'mr-0.5' : 'ml-0.5'}`}
+                >
+                  {imageUri ? (
+                    <Image source={{ uri: imageUri }} className="w-full h-full" resizeMode="cover" />
+                  ) : (
+                    <View className="flex-1 items-center justify-center">
+                      <ActivityIndicator size="small" color="#f97316" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <Modal 
+          visible={fullScreenImage !== null} 
+          transparent 
+          animationType="fade" 
+          onRequestClose={() => setFullScreenImage(null)}
+        >
+          <View className="flex-1 bg-black justify-center">
+            <TouchableOpacity 
+              className="absolute top-12 right-5 z-10 w-10 h-10 rounded-full bg-white/20 items-center justify-center" 
+              onPress={() => setFullScreenImage(null)}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                setCurrentImageIndex(index);
+              }}
+              contentOffset={{ x: currentImageIndex * SCREEN_WIDTH, y: 0 }}
+            >
+              {[0, 1, 2].map((index) => {
+                const uri = getImageUri(images[index] || {}, index);
+                return (
+                  <View 
+                    key={index} 
+                    style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} 
+                    className="justify-center items-center"
+                  >
+                    {uri && <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} resizeMode="contain" />}
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View className="absolute bottom-12 self-center bg-black/60 px-3 py-1.5 rounded-full">
+              <Text className="text-white text-xs">{currentImageIndex + 1} / 3</Text>
+            </View>
+          </View>
+        </Modal>
+      </>
+    );
+  }
+
+  // Four or more images - 2x2 grid
   return (
     <>
-      <View className="w-[250px] flex-row flex-wrap">
-        {images.slice(0, 4).map((att: any, index: number) => {
-          const imageSource = getImageSource(att, index);
-          const imageUri = getImageUri(att, index);
-          const hasError = imageLoadErrors[att._id];
+      <View style={{ width: GALLERY_WIDTH }} className="flex-row flex-wrap rounded-xl overflow-hidden">
+        {[0, 1, 2, 3].map((index) => {
+          const attachment = images[index] || {};
+          const imageUri = getImageUri(attachment, index);
+          const key = attachment._id || `local-${index}`;
+          const isTopLeft = index === 0;
+          const isTopRight = index === 1;
+          const isBottomLeft = index === 2;
+          const isBottomRight = index === 3;
 
           return (
             <TouchableOpacity
-              key={att._id || index}
-              onPress={() => {
-                if (!isSending && !hasError && imageUri) {
-                  setCurrentImageIndex(index);
-                  setFullScreenImage(imageUri);
-                }
+              key={key}
+              onPress={() => imageUri && (setCurrentImageIndex(index), setFullScreenImage(imageUri))}
+              activeOpacity={0.95}
+              style={{ 
+                width: (GALLERY_WIDTH - 2) / 2, 
+                height: (GALLERY_WIDTH - 2) / 2,
+                marginRight: isTopLeft || isBottomLeft ? 1 : 0,
+                marginLeft: isTopRight || isBottomRight ? 1 : 0,
+                marginBottom: isTopLeft || isTopRight ? 1 : 0,
+                marginTop: isBottomLeft || isBottomRight ? 1 : 0,
               }}
-              disabled={isSending || hasError || !imageUri}
-              className={`m-0.5 overflow-hidden bg-gray-200 ${
-                images.length === 2 ? 'w-[123px] h-[248px]' :
-                images.length === 3 && index === 0 ? 'w-[250px] h-[123px]' :
-                'w-[123px] h-[123px]'
-              }`}
+              className="bg-gray-100"
             >
-              {imageSource ? (
+              {imageUri ? (
                 <>
                   <Image 
-                    source={imageSource} 
+                    source={{ uri: imageUri }} 
                     className="w-full h-full" 
                     resizeMode="cover"
-                    onLoad={() => handleImageLoad(att._id)}
-                    onError={(e) => handleImageError(att._id, e.nativeEvent.error)}
+                    onLoad={() => handleImageLoad(key)}
+                    onError={() => handleImageError(key)}
                   />
                   {isSending && index === 0 && (
-                    <View className="absolute inset-0 bg-black/30 items-center justify-center">
-                      <ActivityIndicator size="small" color="white" />
+                    <View className="absolute inset-0 bg-black/20 items-center justify-center">
+                      <View className="bg-black/60 rounded-full p-2">
+                        <ActivityIndicator size="small" color="white" />
+                      </View>
                     </View>
                   )}
-                  {hasError && (
-                    <View className="absolute inset-0 bg-red-100 items-center justify-center">
-                      <Ionicons name="alert-circle" size={20} color="#ef4444" />
+                  {/* Show +N overlay on last image */}
+                  {index === 3 && itemCount > 4 && (
+                    <View className="absolute inset-0 bg-black/50 items-center justify-center">
+                      <Text className="text-white text-xl font-semibold">+{itemCount - 4}</Text>
                     </View>
                   )}
                 </>
               ) : (
-                <View className="absolute inset-0 items-center justify-center">
+                <View className="flex-1 items-center justify-center">
                   <ActivityIndicator size="small" color="#f97316" />
-                </View>
-              )}
-              {index === 3 && images.length > 4 && (
-                <View className="absolute inset-0 bg-black/50 items-center justify-center">
-                  <Text className="text-white text-2xl font-bold">
-                    +{images.length - 4}
-                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -225,7 +387,6 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
         })}
       </View>
 
-      {/* Full screen modal with gallery */}
       <Modal 
         visible={fullScreenImage !== null} 
         transparent 
@@ -234,10 +395,10 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
       >
         <View className="flex-1 bg-black justify-center">
           <TouchableOpacity 
-            className="absolute top-12 right-5 z-10 w-11 h-11 rounded-full bg-black/50 items-center justify-center" 
+            className="absolute top-12 right-5 z-10 w-10 h-10 rounded-full bg-white/20 items-center justify-center" 
             onPress={() => setFullScreenImage(null)}
           >
-            <Ionicons name="close" size={32} color="white" />
+            <Ionicons name="close" size={24} color="white" />
           </TouchableOpacity>
 
           <ScrollView
@@ -250,20 +411,16 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
             }}
             contentOffset={{ x: currentImageIndex * SCREEN_WIDTH, y: 0 }}
           >
-            {images.map((att: any, index: number) => {
-              const uri = getImageUri(att, index);
+            {Array.from({ length: itemCount }).map((_, index) => {
+              const uri = getImageUri(images[index] || {}, index);
               return (
                 <View 
-                  key={att._id || index} 
+                  key={index} 
                   style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} 
                   className="justify-center items-center"
                 >
                   {uri ? (
-                    <Image 
-                      source={{ uri }} 
-                      style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} 
-                      resizeMode="contain" 
-                    />
+                    <Image source={{ uri }} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }} resizeMode="contain" />
                   ) : (
                     <ActivityIndicator size="large" color="#f97316" />
                   )}
@@ -272,13 +429,9 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
             })}
           </ScrollView>
 
-          {images.length > 1 && (
-            <View className="absolute bottom-12 self-center bg-black/70 px-4 py-2 rounded-full">
-              <Text className="text-white text-sm font-semibold">
-                {currentImageIndex + 1} / {images.length}
-              </Text>
-            </View>
-          )}
+          <View className="absolute bottom-12 self-center bg-black/60 px-3 py-1.5 rounded-full">
+            <Text className="text-white text-xs">{currentImageIndex + 1} / {itemCount}</Text>
+          </View>
         </View>
       </Modal>
     </>

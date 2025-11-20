@@ -2,6 +2,7 @@ import { Friend } from "@/hooks/friend/useFriends";
 import { Ionicons } from "@expo/vector-icons";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useSocket } from "@/hooks/message/useSocket"; // ✨ NEW
 import MenuDropdown from "@/components/ui/MenuDropdown";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
@@ -26,6 +27,12 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
   const { t } = useLanguage();
   const { actualTheme } = useTheme();
   const isDark = actualTheme === 'dark';
+  
+  // ✨ NEW: Get online status from socket
+  const { isUserOnline } = useSocket();
+  
+  // ✨ Calculate real-time online status
+  const isOnline = isUserOnline(friend.clerkId);
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
@@ -45,6 +52,27 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
       return { uri: friend.avatar };
     }
     return require("@/assets/images/default-avatar.png");
+  };
+
+  // ✨ NEW: Get status text based on real-time online status
+  const getStatusText = () => {
+    if (isOnline) {
+      return t('publicProfile.online');
+    }
+    
+    if (friend.last_seen) {
+      const lastSeen = new Date(friend.last_seen);
+      const now = new Date();
+      const diffInHours = Math.floor(
+        (now.getTime() - lastSeen.getTime()) / (1000 * 60 * 60)
+      );
+
+      if (diffInHours < 1) return t('publicProfile.recentlyOnline');
+      if (diffInHours < 24) return t('publicProfile.hoursAgo', { hours: diffInHours });
+      return t('publicProfile.daysAgo', { days: Math.floor(diffInHours / 24) });
+    }
+    
+    return t('publicProfile.offline');
   };
 
   // Menu options for the dropdown
@@ -82,8 +110,9 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
             source={getAvatarSource()}
             className="w-12 h-12 rounded-full"
           />
-          {friend.is_online && (
-            <View className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800" />
+          {/* ✨ UPDATED: Show green dot based on socket online status */}
+          {isOnline && (
+            <View className={`absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 ${isDark ? 'border-gray-800' : 'border-white'}`} />
           )}
         </View>
 
@@ -91,14 +120,16 @@ export const FriendListItem: React.FC<FriendListItemProps> = ({
           <Text className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {friend.full_name}
           </Text>
-          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          
+          {/* ✨ UPDATED: Show real-time online status text */}
+          <Text className={`text-sm ${isOnline ? 'text-green-500' : isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {getStatusText()}
+          </Text>
+          
+          {/* ✨ Keep mutual friends count */}
+          <Text className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             {t('friends.labels.mutual', { count: friend.mutualFriendsCount })}
           </Text>
-          {friend.last_seen && (
-            <Text className="text-orange-500 text-xs">
-              {formatTimeAgo(new Date(friend.last_seen))}
-            </Text>
-          )}
         </View>
 
         {/* Replace the three dots icon with MenuDropdown */}

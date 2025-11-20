@@ -2,7 +2,7 @@ import Header from "@/components/shared/Header";
 import Sidebar from "@/components/shared/Sidebar";
 import Button from "@/components/ui/Button";
 import MenuDropdown from "@/components/ui/MenuDropdown";
-import { useFriendRequests, useBlockedUsers } from "@/hooks/friend/useFriends";
+import { useFriendRequests, useBlockedUsers, useFriendsList } from "@/hooks/friend/useFriends";
 import { usePublicProfile } from "@/hooks/friend/usePublicProfile";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -15,7 +15,6 @@ import {
   RefreshControl,
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
   Modal,
   TextInput,
@@ -91,60 +90,44 @@ const BlockReasonModal = ({
             returnKeyType="default"
           />
           
-          <View className="flex-row space-x-3">
-            <TouchableOpacity
-              onPress={onCancel}
-              disabled={isLoading}
-              className={`flex-1 rounded-lg py-3 ${
-                isLoading 
-                  ? isDark ? "bg-gray-700" : "bg-gray-100"
-                  : isDark ? "bg-gray-600" : "bg-gray-200"
-              }`}
-            >
-              <Text className={`text-center font-medium ${
-                isLoading 
-                  ? "text-gray-400" 
-                  : isDark ? "text-gray-200" : "text-gray-700"
-              }`}>
-                {t('cancel')}
-              </Text>
-            </TouchableOpacity>
+          <View className="flex-row gap-2">
+            <View className="flex-1">
+              <Button
+                title={t('cancel')}
+                onPress={onCancel}
+                variant="secondary"
+                disabled={isLoading}
+                size="small"
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
             
-            <TouchableOpacity
-              onPress={onSkip}
-              disabled={isLoading}
-              className={`flex-1 rounded-lg py-3 ${
-                isLoading 
-                  ? isDark ? "bg-gray-700" : "bg-gray-100"
-                  : isDark ? "bg-orange-900" : "bg-orange-100"
-              }`}
-            >
-              <Text className={`text-center font-medium ${
-                isLoading 
-                  ? "text-gray-400" 
-                  : isDark ? "text-orange-400" : "text-orange-600"
-              }`}>
-                {isLoading ? t('publicProfile.block.blocking') : t('publicProfile.block.skip')}
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-1">
+              <Button
+                title={isLoading ? t('publicProfile.block.blocking') : t('publicProfile.block.skip')}
+                onPress={onSkip}
+                variant="outline"
+                disabled={isLoading}
+                loading={isLoading}
+                size="small"
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
             
-            <TouchableOpacity
-              onPress={handleConfirm}
-              disabled={isLoading}
-              className={`flex-1 rounded-lg py-3 ${
-                isLoading 
-                  ? isDark ? "bg-gray-700" : "bg-gray-100"
-                  : "bg-red-500"
-              }`}
-            >
-              <Text className={`text-center font-medium ${
-                isLoading 
-                  ? "text-gray-400" 
-                  : "text-white"
-              }`}>
-                {isLoading ? t('publicProfile.block.blocking') : t('publicProfile.block.block')}
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-1">
+              <Button
+                title={isLoading ? t('publicProfile.block.blocking') : t('publicProfile.block.block')}
+                onPress={handleConfirm}
+                variant="primary"
+                disabled={isLoading}
+                loading={isLoading}
+                size="small"
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -163,16 +146,33 @@ const PublicProfileScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showBlockReasonModal, setShowBlockReasonModal] = useState(false);
   const [isBlocking, setIsBlocking] = useState(false);
+  
+  // Loading states cho từng action
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const { id } = useLocalSearchParams<{ id: string }>();
   
   const publicProfileHook = usePublicProfile();
   const friendRequestsHook = useFriendRequests();
   const blockedUsersHook = useBlockedUsers();
+  const friendsListHook = useFriendsList();
   
-  const { profile, loading, error, getUserProfile, clearError, clearProfile } = publicProfileHook;
-  const { sendFriendRequest, respondToRequest } = friendRequestsHook;
+  const { profile, loading, error, getUserProfile, clearError, clearProfile, updateProfileStatus } = publicProfileHook;
+  const { 
+    sendFriendRequest, 
+    respondToRequest, 
+    cancelRequest, 
+    sentRequests, 
+    requests,
+    loadFriendRequests 
+  } = friendRequestsHook;
   const { blockUser } = blockedUsersHook;
+  const { removeFriend } = friendsListHook;
+
+  // Load cả sent và received requests khi component mount
+  useEffect(() => {
+    loadFriendRequests("all");
+  }, [loadFriendRequests]);
 
   const getAvatarSource = useCallback(() => {
     if (profile?.avatar && profile.avatar.trim() !== "") {
@@ -206,35 +206,146 @@ const PublicProfileScreen = () => {
 
     setRefreshing(true);
     try {
-      await getUserProfile(id);
+      await Promise.all([
+        getUserProfile(id),
+        loadFriendRequests("all")
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [id, getUserProfile]);
+  }, [id, getUserProfile, loadFriendRequests]);
 
+  // Send friend request với optimistic update
   const handleSendFriendRequest = useCallback(async () => {
     if (!profile || !id) return;
 
+    // Optimistic update
+    setActionLoading('sendRequest');
+    updateProfileStatus('sent');
+
     const result = await sendFriendRequest(profile.id);
+    
+    setActionLoading(null);
+    
     if (result.success) {
-      Alert.alert(t('success'), t('publicProfile.friendRequest.success'));
-      await getUserProfile(id as string);
+      loadFriendRequests("all");
     } else {
+      // Rollback nếu thất bại
+      updateProfileStatus('none');
       Alert.alert(t('error'), result.error || t('publicProfile.friendRequest.failed'));
     }
-  }, [profile, id, sendFriendRequest, getUserProfile, t]);
+  }, [profile, id, sendFriendRequest, updateProfileStatus, loadFriendRequests, t]);
 
+  // Hủy lời mời kết bạn với optimistic update
+  const handleCancelFriendRequest = useCallback(async () => {
+    if (!profile || !id) return;
+
+    const sentRequest = sentRequests.find((req: any) => {
+      return req.recipient?.id === profile.id;
+    });
+
+    if (!sentRequest) {
+      Alert.alert(t('error'), t('publicProfile.cancelRequest.notFound'));
+      return;
+    }
+
+    const requestId = sentRequest.id;
+
+    // Optimistic update - thực hiện ngay không cần confirm
+    setActionLoading('cancelRequest');
+    updateProfileStatus('none');
+
+    const result = await cancelRequest(requestId);
+    
+    setActionLoading(null);
+    
+    if (result.success) {
+      loadFriendRequests("all");
+    } else {
+      // Rollback
+      updateProfileStatus('sent');
+      Alert.alert(t('error'), result.error || t('publicProfile.cancelRequest.failed'));
+    }
+  }, [profile, id, sentRequests, cancelRequest, updateProfileStatus, loadFriendRequests, t]);
+
+  // Chấp nhận lời mời với optimistic update
   const handleAcceptRequest = useCallback(async () => {
     if (!profile || !id) return;
 
-    const result = await respondToRequest("request-id", "accept");
+    const receivedRequest = requests.find(
+      (req) => req.requester.id === profile.id
+    );
+
+    if (!receivedRequest) {
+      Alert.alert(t('error'), t('publicProfile.friendRequest.notFound'));
+      return;
+    }
+
+    // Optimistic update
+    setActionLoading('acceptRequest');
+    updateProfileStatus('accepted');
+
+    const result = await respondToRequest(receivedRequest.id, "accept");
+    
+    setActionLoading(null);
+    
     if (result.success) {
-      Alert.alert(t('success'), t('publicProfile.friendRequest.accepted'));
-      await getUserProfile(id as string);
+      loadFriendRequests("all");
     } else {
+      // Rollback
+      updateProfileStatus('pending');
       Alert.alert(t('error'), result.error || t('publicProfile.friendRequest.acceptFailed'));
     }
-  }, [profile, id, respondToRequest, getUserProfile, t]);
+  }, [profile, id, requests, respondToRequest, updateProfileStatus, loadFriendRequests, t]);
+
+  // Từ chối lời mời với optimistic update
+  const handleDeclineRequest = useCallback(async () => {
+    if (!profile || !id) return;
+
+    const receivedRequest = requests.find(
+      (req) => req.requester.id === profile.id
+    );
+
+    if (!receivedRequest) {
+      Alert.alert(t('error'), t('publicProfile.friendRequest.notFound'));
+      return;
+    }
+
+    // Optimistic update - thực hiện ngay không cần confirm
+    setActionLoading('declineRequest');
+    updateProfileStatus('none');
+
+    const result = await respondToRequest(receivedRequest.id, "decline");
+    
+    setActionLoading(null);
+    
+    if (result.success) {
+      loadFriendRequests("all");
+    } else {
+      // Rollback
+      updateProfileStatus('pending');
+      Alert.alert(t('error'), result.error || t('publicProfile.declineRequest.failed'));
+    }
+  }, [profile, id, requests, respondToRequest, updateProfileStatus, loadFriendRequests, t]);
+
+  // Xóa bạn bè với optimistic update
+  const handleUnfriend = useCallback(async () => {
+    if (!profile || !id) return;
+
+    // Optimistic update - thực hiện ngay không cần confirm
+    setActionLoading('unfriend');
+    updateProfileStatus('none');
+
+    const result = await removeFriend(profile.id);
+    
+    setActionLoading(null);
+    
+    if (!result.success) {
+      // Rollback
+      updateProfileStatus('accepted');
+      Alert.alert(t('error'), result.error || t('publicProfile.unfriend.failed'));
+    }
+  }, [profile, id, removeFriend, updateProfileStatus, t]);
 
   const handleMessage = useCallback(() => {
     if (!profile) return;
@@ -243,104 +354,79 @@ const PublicProfileScreen = () => {
 
   const handleBlock = useCallback(async () => {
     if (!profile) return;
+    // Mở modal block reason ngay, không cần confirm trước
+    setShowBlockReasonModal(true);
+  }, [profile]);
 
-    Alert.alert(
-      t('publicProfile.block.confirmTitle'),
-      t('publicProfile.block.confirmMessage', { name: profile.full_name }),
-      [
-        {
-          text: t('cancel'),
-          style: "cancel"
-        },
-        {
-          text: t('publicProfile.block.block'),
-          style: "destructive",
-          onPress: () => {
-            setShowBlockReasonModal(true);
-          }
-        }
-      ]
-    );
-  }, [profile, t]);
-
+  // Block với optimistic update
   const handleBlockConfirm = useCallback(async (reason: string) => {
     if (!profile) return;
 
     setIsBlocking(true);
+    // Optimistic update
+    updateProfileStatus('blocked');
+    
     try {
       const result = await blockUser(profile.id, reason || undefined);
       
       if (result.success) {
         setShowBlockReasonModal(false);
-        
-        Alert.alert(
-          t('success'), 
-          result.message || t('publicProfile.block.success'),
-          [
-            {
-              text: t('ok'),
-              onPress: () => {
-                router.back();
-              }
-            }
-          ]
-        );
+        router.back();
       } else {
+        // Rollback
+        updateProfileStatus('none');
         Alert.alert(t('error'), result.error || t('publicProfile.block.failed'));
       }
     } catch (error) {
+      // Rollback
+      updateProfileStatus('none');
       console.error("Block error:", error);
       Alert.alert(t('error'), t('publicProfile.block.unexpectedError'));
     } finally {
       setIsBlocking(false);
     }
-  }, [profile, blockUser, t]);
+  }, [profile, blockUser, updateProfileStatus, t]);
 
   const handleBlockSkipReason = useCallback(async () => {
     if (!profile) return;
 
     setIsBlocking(true);
+    // Optimistic update
+    updateProfileStatus('blocked');
+    
     try {
       const result = await blockUser(profile.id);
       
       if (result.success) {
         setShowBlockReasonModal(false);
-        
-        Alert.alert(
-          t('success'), 
-          result.message || t('publicProfile.block.success'),
-          [
-            {
-              text: t('ok'),
-              onPress: () => {
-                router.back();
-              }
-            }
-          ]
-        );
+        router.back();
       } else {
+        // Rollback
+        updateProfileStatus('none');
         Alert.alert(t('error'), result.error || t('publicProfile.block.failed'));
       }
     } catch (error) {
+      // Rollback
+      updateProfileStatus('none');
       console.error("Block error:", error);
       Alert.alert(t('error'), t('publicProfile.block.unexpectedError'));
     } finally {
       setIsBlocking(false);
     }
-  }, [profile, blockUser, t]);
+  }, [profile, blockUser, updateProfileStatus, t]);
 
   const handleCancelBlock = useCallback(() => {
     setShowBlockReasonModal(false);
   }, []);
 
   const handleShare = useCallback(() => {
-    Alert.alert(t('publicProfile.title'), t('publicProfile.share.info'));
-  }, [t]);
+    // TODO: Implement share functionality
+  }, []);
 
   const handleReport = useCallback(() => {
     if (!profile) return;
-    Alert.alert(t('success'), t('publicProfile.report.success'));
-  }, [profile, t]);
+    // TODO: Implement report functionality
+  }, [profile]);
 
   const friendRequestMenuOptions = useMemo(() => {
     if (!profile || profile.friendshipStatus !== "pending") return [];
@@ -356,35 +442,44 @@ const PublicProfileScreen = () => {
         id: 'decline',
         title: t('publicProfile.actions.declineRequest'),
         icon: 'close-circle-outline' as keyof typeof Ionicons.glyphMap,
-        onPress: () => {
-          Alert.alert(t('publicProfile.title'), t('publicProfile.friendRequest.declineInfo'));
-        },
+        onPress: handleDeclineRequest,
         destructive: true,
       },
     ];
-  }, [profile, handleAcceptRequest, t]);
+  }, [profile, handleAcceptRequest, handleDeclineRequest, t]);
 
   const profileMenuOptions = useMemo(() => {
     if (!profile) return [];
     
-    const baseOptions = [
+    const options: any[] = [
       {
         id: 'share',
         title: t('publicProfile.actions.shareProfile'),
         icon: 'share-outline' as keyof typeof Ionicons.glyphMap,
         onPress: handleShare,
       },
-      {
-        id: 'report',
-        title: t('publicProfile.actions.reportUser'),
-        icon: 'flag-outline' as keyof typeof Ionicons.glyphMap,
-        onPress: handleReport,
-        destructive: false,
-      },
     ];
 
+    if (profile.friendshipStatus === "accepted") {
+      options.push({
+        id: 'unfriend',
+        title: t('publicProfile.actions.unfriend'),
+        icon: 'person-remove-outline' as keyof typeof Ionicons.glyphMap,
+        onPress: handleUnfriend,
+        destructive: true,
+      });
+    }
+
+    options.push({
+      id: 'report',
+      title: t('publicProfile.actions.reportUser'),
+      icon: 'flag-outline' as keyof typeof Ionicons.glyphMap,
+      onPress: handleReport,
+      destructive: false,
+    });
+
     if (profile.friendshipStatus !== "blocked") {
-      baseOptions.push({
+      options.push({
         id: 'block',
         title: t('publicProfile.actions.blockUser'),
         icon: 'ban-outline' as keyof typeof Ionicons.glyphMap,
@@ -393,13 +488,8 @@ const PublicProfileScreen = () => {
       });
     }
 
-    return baseOptions;
-  }, [profile, handleShare, handleReport, handleBlock, t]);
-
-  const formatDate = useCallback((date: Date | undefined) => {
-    if (!date) return "Unknown";
-    return new Date(date).toLocaleDateString();
-  }, []);
+    return options;
+  }, [profile, handleShare, handleReport, handleBlock, handleUnfriend, t]);
 
   const getStatusColor = useCallback(() => {
     if (!profile) return isDark ? "#9CA3AF" : "#6B7280";
@@ -459,93 +549,179 @@ const PublicProfileScreen = () => {
     return InfoRowComponent;
   }, [isDark]);
 
+  // ActionButtons với Button component
   const ActionButtons = useMemo(() => {
-    const ActionButtonsComponent = React.memo(() => {
-      if (!profile) return null;
+  const ActionButtonsComponent = React.memo(() => {
+    if (!profile) return null;
 
-      if (profile.friendshipStatus === "blocked") {
-        return (
-          <View className="px-4 mt-6">
-            <View className={`rounded-lg p-4 ${isDark ? 'bg-red-900' : 'bg-red-100'}`}>
-              <Text className={`text-center font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                {t('publicProfile.blocked.title')}
-              </Text>
-              <Text className={`text-center text-sm mt-1 ${isDark ? 'text-red-500' : 'text-red-500'}`}>
-                {t('publicProfile.blocked.message')}
-              </Text>
-            </View>
-          </View>
-        );
-      }
-
+    if (profile.friendshipStatus === "blocked") {
       return (
-        <View className="flex-row gap-3 px-4 mt-6">
-          {profile.friendshipStatus === "none" && (
-            <Button
-              title={t('publicProfile.actions.addFriend')}
-              onPress={handleSendFriendRequest}
-              variant="primary"
-              style={{ flex: 1 }}
-            />
-          )}
-
-          {profile.friendshipStatus === "sent" && (
-            <View className={`flex-1 rounded-lg p-3 ${isDark ? 'bg-orange-900' : 'bg-orange-100'}`}>
-              <Text className={`text-center font-medium ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>
-                {t('publicProfile.actions.requestSent')}
-              </Text>
-            </View>
-          )}
-
-          {profile.friendshipStatus === "pending" && (
-            <View className="flex-1">
-              <MenuDropdown
-                options={friendRequestMenuOptions}
-                triggerIcon="person-add"
-                triggerSize={18}
-                triggerColor={isDark ? "#10B981" : "#059669"}
-                style={{
-                  backgroundColor: isDark ? "#065F46" : "#D1FAE5",
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flex: 1,
-                }}
-              />
-            </View>
-          )}
-
-          {profile.friendshipStatus === "accepted" && (
-            <Button
-              title={t('publicProfile.actions.message')}
-              onPress={handleMessage}
-              variant="primary"
-              style={{ flex: 1 }}
-            />
-          )}
-
-          <MenuDropdown
-            options={profileMenuOptions}
-            triggerIcon="ellipsis-horizontal"
-            triggerSize={20}
-            triggerColor={isDark ? "#9CA3AF" : "#6B7280"}
-            style={{
-              backgroundColor: isDark ? "#374151" : "#F3F4F6",
-              paddingVertical: 8,
-              paddingHorizontal: 8,
-              borderRadius: 6,
-            }}
-          />
+        <View className="px-4 mt-6">
+          <View className={`rounded-lg p-4 ${isDark ? 'bg-red-900' : 'bg-red-100'}`}>
+            <Text className={`text-center font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+              {t('publicProfile.blocked.title')}
+            </Text>
+            <Text className={`text-center text-sm mt-1 ${isDark ? 'text-red-500' : 'text-red-500'}`}>
+              {t('publicProfile.blocked.message')}
+            </Text>
+          </View>
         </View>
       );
-    });
+    }
 
-    ActionButtonsComponent.displayName = 'ActionButtons';
-    return ActionButtonsComponent;
-  }, [profile, handleSendFriendRequest, friendRequestMenuOptions, handleMessage, profileMenuOptions, isDark, t]);
+    return (
+      <View className="px-4 mt-6">
+        {/* Chưa là bạn - Hiển thị nút Add Friend */}
+        {profile.friendshipStatus === "none" && (
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Button
+                title={t('publicProfile.actions.addFriend')}
+                onPress={handleSendFriendRequest}
+                variant="primary"
+                loading={actionLoading === 'sendRequest'}
+                disabled={actionLoading === 'sendRequest'}
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
+            
+            {/* Menu dropdown với các options */}
+            <MenuDropdown
+              options={profileMenuOptions}
+              triggerIcon="ellipsis-horizontal"
+              triggerSize={20}
+              triggerColor={isDark ? "#9CA3AF" : "#6B7280"}
+              style={{
+                backgroundColor: isDark ? "#374151" : "#F3F4F6",
+                paddingVertical: 8,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+              }}
+            />
+          </View>
+        )}
+
+        {/* Đã gửi lời mời - Hiển thị nút Cancel Request */}
+        {profile.friendshipStatus === "sent" && (
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Button
+                title={t('publicProfile.actions.cancelRequest')}
+                onPress={handleCancelFriendRequest}
+                variant="outline"
+                loading={actionLoading === 'cancelRequest'}
+                disabled={actionLoading === 'cancelRequest'}
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
+            
+            {/* Menu dropdown với các options */}
+            <MenuDropdown
+              options={profileMenuOptions}
+              triggerIcon="ellipsis-horizontal"
+              triggerSize={20}
+              triggerColor={isDark ? "#9CA3AF" : "#6B7280"}
+              style={{
+                backgroundColor: isDark ? "#374151" : "#F3F4F6",
+                paddingVertical: 8,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+              }}
+            />
+          </View>
+        )}
+
+        {/* Nhận được lời mời - Hiển thị nút Accept và Decline như FriendRequestCard */}
+        {profile.friendshipStatus === "pending" && (
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Button
+                title={t('publicProfile.actions.acceptRequest')}
+                onPress={handleAcceptRequest}
+                variant="primary"
+                loading={actionLoading === 'acceptRequest'}
+                disabled={actionLoading === 'acceptRequest' || actionLoading === 'declineRequest'}
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
+            
+            <View className="flex-1">
+              <Button
+                title={t('publicProfile.actions.declineRequest')}
+                onPress={handleDeclineRequest}
+                variant="secondary"
+                loading={actionLoading === 'declineRequest'}
+                disabled={actionLoading === 'acceptRequest' || actionLoading === 'declineRequest'}
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
+            
+            {/* Menu dropdown với các options */}
+            <MenuDropdown
+              options={profileMenuOptions}
+              triggerIcon="ellipsis-horizontal"
+              triggerSize={20}
+              triggerColor={isDark ? "#9CA3AF" : "#6B7280"}
+              style={{
+                backgroundColor: isDark ? "#374151" : "#F3F4F6",
+                paddingVertical: 8,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+              }}
+            />
+          </View>
+        )}
+
+        {/* Đã là bạn bè - Hiển thị nút Message */}
+        {profile.friendshipStatus === "accepted" && (
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <Button
+                title={t('publicProfile.actions.message')}
+                onPress={handleMessage}
+                variant="primary"
+                fullWidth
+                borderRadius={8}
+              />
+            </View>
+            
+            {/* Menu dropdown với các options */}
+            <MenuDropdown
+              options={profileMenuOptions}
+              triggerIcon="ellipsis-horizontal"
+              triggerSize={20}
+              triggerColor={isDark ? "#9CA3AF" : "#6B7280"}
+              style={{
+                backgroundColor: isDark ? "#374151" : "#F3F4F6",
+                paddingVertical: 8,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+              }}
+            />
+          </View>
+        )}
+      </View>
+    );
+  });
+
+  ActionButtonsComponent.displayName = 'ActionButtons';
+  return ActionButtonsComponent;
+}, [
+  profile, 
+  handleSendFriendRequest, 
+  handleCancelFriendRequest, 
+  handleAcceptRequest,
+  handleDeclineRequest,
+  handleMessage, 
+  profileMenuOptions, 
+  isDark, 
+  t, 
+  actionLoading
+]);
 
   if (loading && !profile) {
     return (
@@ -557,9 +733,13 @@ const PublicProfileScreen = () => {
           showBackButton={true}
         />
         <View className="flex-1 justify-center items-center">
-          <Text className={`text-lg ${isDark ? "text-white" : "text-black"}`}>
-            {t('publicProfile.loading')}
-          </Text>
+          <Button
+            title={t('publicProfile.loading')}
+            onPress={() => {}}
+            variant="text"
+            loading={true}
+            disabled={true}
+          />
         </View>
         <Sidebar
           isVisible={isSidebarVisible}

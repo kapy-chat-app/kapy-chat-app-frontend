@@ -1,4 +1,4 @@
-// components/page/message/MessageItem.tsx - COMPLETE UPDATE
+// components/page/message/MessageItem.tsx - COMPLETE REWRITE WITH FIXES
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
@@ -61,7 +61,9 @@ const MessageItem: React.FC<MessageItemProps> = ({
   const messageStatus = message.status || "sent";
   const isSending = messageStatus === "sending";
   const isFailed = messageStatus === "failed";
-  const hasDecryptionError = message.decryption_error;
+  
+  // ✅ FIX: Chỉ check decryption error cho TEXT messages
+  const hasDecryptionError = message.type === 'text' && message.decryption_error;
 
   const readBy = message.read_by?.filter((r: any) => r.user !== user?.id) || [];
   const hasBeenRead = readBy.length > 0;
@@ -69,7 +71,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
   // Check for attachment decryption errors
   const hasAttachmentDecryptionError = message.attachments?.some((att: any) => att.decryption_error) || false;
 
-  // ✅ OPTION 1: Nhấn giữ hiển thị menu đầy đủ (giữ nguyên hành vi cũ)
+  // ✅ Long press handler - Show full menu
   const handleLongPress = () => {
     if (!isSending && !showReadReceipts) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -238,7 +240,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
     );
   };
 
-  // Render GIF/Sticker
+  // ✅ Render GIF/Sticker - KHÔNG cần content bắt buộc
   const renderRichMedia = () => {
     if (!message.rich_media || (message.type !== "gif" && message.type !== "sticker")) {
       return null;
@@ -260,14 +262,15 @@ const MessageItem: React.FC<MessageItemProps> = ({
           }}
           resizeMode="cover"
         />
-        {rich_media.title && (
+        {/* ✅ Caption (optional) - chỉ hiển thị nếu có */}
+        {message.content && (
           <Text
             className={`text-xs mt-1 px-3 pb-2 ${
               isOwnMessage ? "text-gray-200" : isDark ? "text-gray-400" : "text-gray-600"
             }`}
             numberOfLines={1}
           >
-            {rich_media.title}
+            {message.content}
           </Text>
         )}
       </View>
@@ -290,7 +293,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
       }
     });
 
-    // ✨ Icon mapping (tĩnh - không animation)
+    // ✅ Icon mapping (static - no animation)
     const iconMap: { [key: string]: { icon: string; color: string } } = {
       heart: { icon: "heart", color: "#ef4444" },
       like: { icon: "thumbs-up", color: "#3b82f6" },
@@ -301,15 +304,15 @@ const MessageItem: React.FC<MessageItemProps> = ({
       dislike: { icon: "thumbs-down", color: "#6b7280" },
     };
 
-    // ✨ Handler để toggle reaction
+    // ✅ Handler to toggle reaction
     const handleReactionPress = (type: string, userReacted: boolean) => {
       if (isSending) return;
       
-      // ✨ Nếu user đã react → Remove reaction
+      // ✅ If user already reacted → Remove reaction
       if (userReacted) {
         onRemoveReaction?.(message._id);
       } else {
-        // ✨ Nếu chưa react → Add reaction
+        // ✅ If not reacted yet → Add reaction
         onReaction?.(message._id, type);
       }
     };
@@ -386,6 +389,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   : "bg-gray-100"
             } ${isSending && "opacity-70"} ${isHighlighted && "ring-2 ring-yellow-500"}`}
           >
+            {/* Reply indicator */}
             {message.reply_to && (
               <View
                 className={`border-l-2 pl-2 mx-3 mt-2 mb-2 ${
@@ -401,12 +405,12 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   className={`text-xs ${isOwnMessage ? "text-gray-200" : "text-gray-600"}`}
                   numberOfLines={1}
                 >
-                  {message.reply_to.content}
+                  {message.reply_to.content || `[${message.reply_to.type}]`}
                 </Text>
               </View>
             )}
 
-            {/* Render GIF/Sticker */}
+            {/* ✅ Render GIF/Sticker (không cần content bắt buộc) */}
             {(message.type === "gif" || message.type === "sticker") && renderRichMedia()}
 
             {/* Render attachment decryption error if present */}
@@ -432,7 +436,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
-            {/* Render media gallery */}
+            {/* ✅ Render media gallery (attachments - không cần content) */}
             {!hasAttachmentDecryptionError && message.attachments && message.attachments.length > 0 && (
               <MessageMediaGallery
                 message={message}
@@ -442,7 +446,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               />
             )}
 
-            {/* Render text content */}
+            {/* ✅ Render text content - CHỈ nếu có content */}
             {message.content && (
               <View>
                 <Text
@@ -457,6 +461,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   {message.content}
                 </Text>
 
+                {/* ✅ Decryption error - CHỈ cho TEXT messages */}
                 {hasDecryptionError && message.content.includes("🔒") && (
                   <TouchableOpacity
                     onPress={handleRetryDecryption}
@@ -470,6 +475,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
+            {/* Edited indicator */}
             {message.is_edited && !isSending && (
               <Text
                 className={`text-[10px] mt-0.5 px-3 pb-1.5 ${
@@ -494,7 +500,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
         </View>
       </View>
 
-      {/* Actions Menu - Hiển thị khi long press */}
+      {/* Actions Menu - Show when long press */}
       <MessageActionsMenu
         visible={showActions}
         onClose={() => setShowActions(false)}
@@ -509,7 +515,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
         }}
         onReact={() => {
           setShowActions(false);
-          // Hiển thị reaction picker khi chọn React từ menu
+          // Show reaction picker when React is selected from menu
           bubbleRef.current?.measureInWindow((x, y, width, height) => {
             setReactionPickerPosition({
               top: y - 70,
@@ -522,7 +528,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
         onDelete={handleDelete}
       />
 
-      {/* Reaction Picker - Hiển thị khi chọn React từ menu */}
+      {/* Reaction Picker - Show when React is selected from menu */}
       <ReactionPicker
         visible={showReactionPicker}
         onClose={() => setShowReactionPicker(false)}

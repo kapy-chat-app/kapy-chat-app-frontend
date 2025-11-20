@@ -283,21 +283,21 @@
   "friends": {
     "title": "Bạn bè",
     "searchPlaceholder": "Tìm kiếm bạn bè...",
-    "searching": "Đang tìm kiếm...",
+    "searching": "Đang tìm...",
     "noUsersFound": "Không tìm thấy người dùng",
     "requests": {
-      "title": "Yêu cầu kết bạn",
-      "all": "Tất cả yêu cầu",
-      "accepted": "Đã chấp nhận yêu cầu kết bạn!",
-      "acceptFailed": "Không thể chấp nhận yêu cầu",
-      "declineTitle": "Từ chối yêu cầu",
-      "declineMessage": "Bạn có chắc chắn muốn từ chối yêu cầu kết bạn này không?",
+      "title": "Lời mời kết bạn",
+      "all": "Tất cả lời mời",
+      "accepted": "Đã chấp nhận lời mời kết bạn!",
+      "acceptFailed": "Không thể chấp nhận lời mời",
+      "declineTitle": "Từ chối lời mời",
+      "declineMessage": "Bạn có chắc muốn từ chối lời mời kết bạn này?",
       "decline": "Từ chối",
-      "declineFailed": "Không thể từ chối yêu cầu"
+      "declineFailed": "Không thể từ chối lời mời"
     },
     "myFriends": "Bạn bè của tôi ({{count}})",
     "seeAll": "Xem tất cả",
-    "addFriend": "Thêm bạn bè",
+    "addFriend": "Kết bạn",
     "sent": "Đã gửi",
     "friends": "Bạn bè",
     "unknownError": "Lỗi không xác định",
@@ -310,7 +310,7 @@
     },
     "blocked": {
       "title": "Bỏ chặn người dùng",
-      "confirm": "Bạn có chắc chắn muốn bỏ chặn {{name}} không?",
+      "confirm": "Bạn có chắc muốn bỏ chặn {{name}}?",
       "cancel": "Hủy",
       "unblock": "Bỏ chặn",
       "on": "Đã chặn vào {{date}}",
@@ -323,14 +323,29 @@
     },
     "labels": {
       "mutual": "{{count}} bạn chung"
+    },
+    "unfriend": {
+      "title": "Hủy kết bạn",
+      "message": "Bạn có chắc muốn hủy kết bạn với {{name}}?",
+      "confirm": "Hủy kết bạn",
+      "success": "Đã hủy kết bạn với {{name}}",
+      "failed": "Không thể hủy kết bạn"
+    },
+    "block": {
+      "title": "Chặn người dùng",
+      "message": "Chặn {{name}}? Họ sẽ không thể liên hệ hoặc xem hồ sơ của bạn.",
+      "confirm": "Chặn",
+      "success": "Đã chặn {{name}}",
+      "failed": "Không thể chặn người dùng"
+    },
+    "notifications": {
+      "requestReceived": "{{name}} đã gửi lời mời kết bạn cho bạn",
+      "requestAccepted": "{{name}} đã chấp nhận lời mời kết bạn",
+      "requestDeclined": "{{name}} đã từ chối lời mời kết bạn",
+      "requestCancelled": "{{name}} đã hủy lời mời kết bạn",
+      "friendRemoved": "{{name}} đã hủy kết bạn với bạn",
+      "friendOnline": "{{name}} đang trực tuyến"
     }
-  },
-  "blockedUsers": {
-    "title": "Người dùng đã chặn",
-    "empty": "Không có người dùng bị chặn",
-    "emptyDescription": "Bạn chưa chặn ai",
-    "unblockSuccess": "Đã bỏ chặn người dùng thành công",
-    "unblockFailed": "Không thể bỏ chặn người dùng"
   },
   "publicProfile": {
     "title": "Hồ sơ",
@@ -340,7 +355,7 @@
     "tryAgain": "Thử lại",
     "information": "Thông tin",
     "location": "Vị trí",
-    "website": "Trang web",
+    "website": "Website",
     "status": "Trạng thái",
     "friends": "Bạn bè",
     "mutual": "Bạn chung",
@@ -355,44 +370,76 @@
     },
     "private": {
       "title": "Hồ sơ này ở chế độ riêng tư",
-      "message": "Gửi yêu cầu kết bạn để xem thêm chi tiết"
+      "message": "Gửi lời mời kết bạn để xem thêm chi tiết"
     },
     "actions": {
-      "addFriend": "Thêm bạn bè",
+      "addFriend": "Kết bạn",
       "message": "Nhắn tin",
-      "requestSent": "Đã gửi yêu cầu",
+      "requestSent": "Đã gửi lời mời",
+      "cancelRequest": "Hủy lời mời",
+      "unfriend": "Hủy kết bạn",
       "shareProfile": "Chia sẻ hồ sơ",
-      "reportUser": "Báo cáo người dùng",
-      "blockUser": "Chặn người dùng",
-      "acceptRequest": "Chấp nhận yêu cầu",
-      "declineRequest": "Từ chối yêu cầu"
+      "reportUser": "Báo cáo",
+      "blockUser": "Chặn",
+      "acceptRequest": "Chấp nhận",
+      "declineRequest": "Từ chối"
+    },
+    "cancelRequest": {
+      "title": "Hủy lời mời",
+      "message": "Bạn có chắc muốn hủy lời mời kết bạn này?",
+      "confirm": "Hủy lời mời",
+      "success": "Đã hủy lời mời kết bạn",
+      "failed": "Không thể hủy lời mời",
+      "notFound": "Không tìm thấy lời mời kết bạn"
+    },
+    "unfriend": {
+      "title": "Hủy kết bạn",
+      "message": "Bạn có chắc muốn hủy kết bạn với {{name}}?",
+      "confirm": "Hủy kết bạn",
+      "success": "Đã hủy kết bạn",
+      "failed": "Không thể hủy kết bạn"
+    },
+    "declineRequest": {
+      "title": "Từ chối lời mời",
+      "message": "Bạn có chắc muốn từ chối lời mời kết bạn này?",
+      "confirm": "Từ chối",
+      "success": "Đã từ chối lời mời",
+      "failed": "Không thể từ chối lời mời"
     },
     "block": {
       "confirmTitle": "Chặn người dùng",
-      "confirmMessage": "Bạn có chắc chắn muốn chặn {{name}} không? Họ sẽ không thể liên hệ với bạn hoặc xem hồ sơ của bạn.",
+      "confirmMessage": "Bạn có chắc muốn chặn {{name}}? Họ sẽ không thể liên hệ hoặc xem hồ sơ của bạn.",
       "reasonTitle": "Lý do chặn (Tùy chọn)",
       "reasonDescription": "Tại sao bạn chặn người dùng này? Điều này sẽ giúp chúng tôi cải thiện nền tảng.",
       "reasonPlaceholder": "Nhập lý do (tùy chọn)...",
       "blocking": "Đang chặn...",
       "skip": "Bỏ qua",
       "block": "Chặn",
-      "success": "Đã chặn người dùng thành công",
+      "success": "Đã chặn người dùng",
       "failed": "Không thể chặn người dùng",
-      "unexpectedError": "Đã xảy ra lỗi không mong muốn khi chặn người dùng"
+      "unexpectedError": "Đã xảy ra lỗi khi chặn người dùng"
     },
     "friendRequest": {
-      "success": "Đã gửi yêu cầu kết bạn thành công",
-      "failed": "Không thể gửi yêu cầu kết bạn",
-      "accepted": "Đã chấp nhận yêu cầu kết bạn",
-      "acceptFailed": "Không thể chấp nhận yêu cầu",
-      "declineInfo": "Chức năng từ chối chưa được triển khai"
+      "success": "Đã gửi lời mời kết bạn",
+      "failed": "Không thể gửi lời mời kết bạn",
+      "accepted": "Đã chấp nhận lời mời kết bạn",
+      "acceptFailed": "Không thể chấp nhận lời mời",
+      "declineInfo": "Tính năng từ chối chưa được triển khai",
+      "notFound": "Không tìm thấy lời mời kết bạn"
     },
     "share": {
-      "info": "Chức năng chia sẻ chưa được triển khai"
+      "info": "Tính năng chia sẻ chưa được triển khai"
     },
     "report": {
-      "success": "Đã báo cáo người dùng thành công"
+      "success": "Đã báo cáo người dùng"
     }
+  },
+  "blockedUsers": {
+    "title": "Người dùng đã chặn",
+    "empty": "Không có người dùng bị chặn",
+    "emptyDescription": "Bạn chưa chặn ai",
+    "unblockSuccess": "Đã bỏ chặn người dùng thành công",
+    "unblockFailed": "Không thể bỏ chặn người dùng"
   },
   "emotion": {
     "title": "Cảm xúc của tôi",
@@ -826,5 +873,15 @@
         "message": "Không thể tải phiên đăng nhập. Vui lòng thử lại."
       }
     }
+  },
+   "requests": {
+    "title": "Lời mời kết bạn",
+    "searchPlaceholder": "Tìm kiếm lời mời...",
+    "count": "{{count}} lời mời đang chờ",
+    "resultsCount": "Tìm thấy {{count}} kết quả",
+    "empty": "Không có lời mời kết bạn",
+    "emptyDescription": "Bạn không có lời mời kết bạn nào đang chờ",
+    "noResults": "Không tìm thấy lời mời",
+    "noResultsDescription": "Thử tìm kiếm với tên khác"
   }
 }

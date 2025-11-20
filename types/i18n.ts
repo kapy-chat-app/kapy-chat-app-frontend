@@ -239,6 +239,28 @@ export interface TranslationKeys {
     labels: {
       mutual: string;
     };
+    unfriend: {
+      title: string;
+      message: string;
+      confirm: string;
+      success: string;
+      failed: string;
+    };
+    block: {
+      title: string;
+      message: string;
+      confirm: string;
+      success: string;
+      failed: string;
+    };
+    notifications: {
+      requestReceived: string;
+      requestAccepted: string;
+      requestDeclined: string;
+      requestCancelled: string;
+      friendRemoved: string;
+      friendOnline: string;
+    };
   };
   blockedUsers: {
     title: string;
@@ -276,11 +298,35 @@ export interface TranslationKeys {
       addFriend: string;
       message: string;
       requestSent: string;
+      cancelRequest: string;
+      unfriend: string;
       shareProfile: string;
       reportUser: string;
       blockUser: string;
       acceptRequest: string;
       declineRequest: string;
+    };
+    cancelRequest: {
+      title: string;
+      message: string;
+      confirm: string;
+      success: string;
+      failed: string;
+      notFound: string;
+    };
+    unfriend: {
+      title: string;
+      message: string;
+      confirm: string;
+      success: string;
+      failed: string;
+    };
+    declineRequest: {
+      title: string;
+      message: string;
+      confirm: string;
+      success: string;
+      failed: string;
     };
     block: {
       confirmTitle: string;
@@ -301,6 +347,7 @@ export interface TranslationKeys {
       accepted: string;
       acceptFailed: string;
       declineInfo: string;
+      notFound: string;
     };
     share: {
       info: string;
@@ -835,6 +882,16 @@ export interface TranslationKeys {
       };
     };
   };
+  requests: {
+  title: string;
+  searchPlaceholder: string;
+  count: string;
+  resultsCount: string;
+  empty: string;
+  emptyDescription: string;
+  noResults: string;
+  noResultsDescription: string;
+};
 }
 
 // Recursive type to generate all nested paths

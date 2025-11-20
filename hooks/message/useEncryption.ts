@@ -1,11 +1,11 @@
-// hooks/message/useEncryption.ts - FIXED VERSION
-import { simpleEncryptionService } from "@/lib/encryption/EncryptionService";
+// hooks/message/useEncryption.ts - NATIVE CRYPTO VERSION
+import { nativeEncryptionService } from "@/lib/encryption/NativeEncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useState } from "react";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
-// ✅ Match server's expected format
+// Match server's expected format
 export interface EncryptionResult {
   encryptedContent: string;
   encryptionMetadata: {
@@ -13,6 +13,8 @@ export interface EncryptionResult {
     registration_id?: number;
     pre_key_id?: number;
     signed_pre_key_id?: number;
+    iv?: string;
+    authTag?: string;
   };
 }
 
@@ -22,7 +24,7 @@ export const useEncryption = () => {
   const [error, setError] = useState<string | null>(null);
   const { getToken, userId } = useAuth();
 
-  // ✅ Auto-initialize on mount
+  // Auto-initialize on mount
   useEffect(() => {
     if (userId) {
       initializeEncryption();
@@ -39,25 +41,30 @@ export const useEncryption = () => {
       setLoading(true);
       setError(null);
 
-      // Check if already initialized locally
-      const alreadyInitialized = await simpleEncryptionService.isInitialized();
-      if (alreadyInitialized) {
-        console.log("✅ E2EE already initialized locally");
-        setIsInitialized(true);
-        setLoading(false);
-        return;
-      }
-
-      console.log("🔐 Initializing E2EE for first time...");
-      const keys = await simpleEncryptionService.initializeKeys(userId);
+      // Initialize native encryption keys
+      const keys = await nativeEncryptionService.initializeKeys();
 
       const token = await getToken();
       if (!token) throw new Error("Authentication token not available");
 
-      await simpleEncryptionService.uploadKeysToServer(API_BASE_URL, token);
+      // Upload key to server
+      console.log("📤 Uploading key to server...");
+      const response = await fetch(`${API_BASE_URL}/api/keys/upload`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ publicKey: keys.publicKey }),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || "Failed to upload key");
+      }
 
       setIsInitialized(true);
-      console.log("✅ E2EE initialized successfully");
+      console.log("✅ E2EE initialized with Native Crypto");
     } catch (err: any) {
       console.error("❌ E2EE initialization failed:", err);
       setError(err.message);
@@ -67,66 +74,126 @@ export const useEncryption = () => {
     }
   }, [userId, getToken]);
 
-  // ✅ Encrypt với recipient's key
+  // Encrypt message - uses own key (sender's key)
   const encryptMessage = useCallback(
     async (recipientUserId: string, message: string): Promise<EncryptionResult> => {
       if (!isInitialized) {
         throw new Error("E2EE not initialized");
       }
 
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Authentication token not available");
+      try {
+        // Encrypt using native crypto
+        const result = await nativeEncryptionService.encryptMessage(message);
+
+        console.log('✅ Native encryption result:', {
+          hasEncryptedContent: !!result.encryptedContent,
+          hasIv: !!result.encryptionMetadata.iv,
+          hasAuthTag: !!result.encryptionMetadata.authTag,
+        });
+
+        return {
+          encryptedContent: result.encryptedContent,
+          encryptionMetadata: {
+            type: "WhisperMessage",
+            iv: result.encryptionMetadata.iv,
+            authTag: result.encryptionMetadata.authTag,
+          },
+        };
+      } catch (err: any) {
+        console.error("❌ Native encryption failed:", err);
+        throw err;
       }
-
-      // Get recipient's public key from server
-      const recipientPublicKey = await simpleEncryptionService.getRecipientPublicKey(
-        recipientUserId,
-        API_BASE_URL,
-        token
-      );
-
-      // Encrypt message
-      const result = await simpleEncryptionService.encryptMessage(
-        recipientPublicKey,
-        message
-      );
-
-      console.log('✅ Encryption result:', {
-        hasEncryptedContent: !!result.encryptedContent,
-        metadataType: result.encryptionMetadata.type,
-      });
-
-      return result;
     },
-    [isInitialized, getToken]
+    [isInitialized]
   );
 
-  // ✅ FIXED: Decrypt với SENDER's key
+  // Decrypt message - uses sender's key
   const decryptMessage = useCallback(
     async (senderId: string, encryptedContent: string): Promise<string> => {
       if (!isInitialized) {
         throw new Error("E2EE not initialized");
       }
 
-      const token = await getToken();
-      if (!token) {
-        throw new Error("Authentication token not available");
+      try {
+        const token = await getToken();
+        if (!token) {
+          throw new Error("Authentication token not available");
+        }
+
+        // Parse encrypted content to get iv and authTag
+        let iv: string;
+        let authTag: string;
+        let data: string;
+
+        try {
+          const parsed = JSON.parse(encryptedContent);
+          iv = parsed.iv;
+          authTag = parsed.authTag || parsed.data; // Support both formats
+          data = parsed.data || parsed.encryptedContent;
+          
+          // If old format (XOR encryption), data contains the encrypted content
+          if (!parsed.authTag && parsed.data) {
+            // This is old CryptoJS format, need to handle differently
+            console.log("⚠️ Detected old encryption format, attempting compatibility decrypt");
+            
+            // Get sender's public key
+            const response = await fetch(`${API_BASE_URL}/api/keys/${senderId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const result = await response.json();
+            if (!result.success) {
+              throw new Error(result.error || "Failed to get sender key");
+            }
+            
+            // For old format, we need to use the old decryption method
+            // This maintains backward compatibility
+            const { simpleEncryptionService } = await import("@/lib/encryption/EncryptionService");
+            return await simpleEncryptionService.decryptMessage(
+              encryptedContent,
+              senderId,
+              API_BASE_URL,
+              token
+            );
+          }
+        } catch (parseError) {
+          console.error("❌ Failed to parse encrypted content:", parseError);
+          throw new Error("Invalid encrypted content format");
+        }
+
+        // Get sender's public key from server
+        console.log("🔄 Fetching sender key for decryption:", senderId);
+        const response = await fetch(`${API_BASE_URL}/api/keys/${senderId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to get sender key");
+        }
+
+        const senderKeyBase64 = result.data.publicKey;
+
+        // Decrypt using native crypto
+        const decrypted = await nativeEncryptionService.decryptMessage(
+          data,
+          iv,
+          authTag,
+          senderKeyBase64
+        );
+
+        console.log("✅ Native decryption successful");
+        return decrypted;
+      } catch (err: any) {
+        console.error("❌ Native decryption failed:", err);
+        throw err;
       }
-      
-      // ✅ FIX: Pass senderUserId để lấy đúng key
-      return await simpleEncryptionService.decryptMessage(
-        encryptedContent,
-        senderId, // ✅ IMPORTANT: sender's userId
-        API_BASE_URL,
-        token
-      );
     },
     [isInitialized, getToken]
   );
 
   const clearEncryption = useCallback(async () => {
-    await simpleEncryptionService.clearKeys();
+    await nativeEncryptionService.clearKeys();
+    nativeEncryptionService.clearCache();
     setIsInitialized(false);
   }, []);
 
