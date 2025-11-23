@@ -507,6 +507,10 @@
       "location": "📍 位置",
       "message": "消息"
     },
+     "messagePrefix": {
+      "you": "你:",
+      "sender": "{{name}}:"
+    },
     "createModal": {
       "title": "新对话",
       "cancel": "取消",

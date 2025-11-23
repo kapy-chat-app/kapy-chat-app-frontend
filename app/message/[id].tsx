@@ -1,6 +1,7 @@
 // MessageScreen.tsx - UPDATED WITH E2EE (GIỮ NGUYÊN TẤT CẢ CODE CŨ)
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
+import SystemMessage from "@/components/page/message/SystemMessage";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -27,7 +28,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function MessageScreen() {
@@ -846,24 +846,42 @@ export default function MessageScreen() {
 
   // ✨ UPDATED: Pass thêm E2EE props
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
-    const isOwnMessage = item.sender?.clerkId === userId;
-    const isHighlighted = item._id === highlightedMessageId;
+  // ✨ DEBUG: Log FULL item to see what's actually in it
+  console.log('📋 FULL Message item:', JSON.stringify({
+    id: item._id,
+    content: item.content?.substring(0, 50),
+    sender: item.sender?.full_name,
+    metadata: item.metadata, // ⭐ Log FULL metadata object
+    hasMetadata: !!item.metadata,
+    metadataKeys: item.metadata ? Object.keys(item.metadata) : [],
+  }, null, 2));
 
-    return (
-      <MessageItem
-        message={item}
-        isOwnMessage={isOwnMessage}
-        onReply={handleReply}
-        onEdit={handleEditMessage}
-        onDelete={handleDeleteMessage}
-        onReaction={handleAddReaction}
-        onRemoveReaction={handleRemoveReaction}
-        isHighlighted={isHighlighted}
-        onRetryDecryption={handleRetryDecryption} // ✨ NEW
-        encryptionReady={encryptionReady} // ✨ NEW
-      />
-    );
-  };
+  // ✅ Check if it's a system message
+  if (item.metadata?.isSystemMessage === true) {
+    console.log('✅ Rendering SYSTEM message:', item.content);
+    return <SystemMessage message={item} />;
+  }
+
+  const isOwnMessage = item.sender?.clerkId === userId;
+  const isHighlighted = item._id === highlightedMessageId;
+
+  console.log('✅ Rendering USER message:', item.content?.substring(0, 30));
+  return (
+    <MessageItem
+      message={item}
+      isOwnMessage={isOwnMessage}
+      onReply={handleReply}
+      onEdit={handleEditMessage}
+      onDelete={handleDeleteMessage}
+      onReaction={handleAddReaction}
+      onRemoveReaction={handleRemoveReaction}
+      isHighlighted={isHighlighted}
+      onRetryDecryption={handleRetryDecryption}
+      encryptionReady={encryptionReady}
+    />
+  );
+};
+
 
   // GIỮ NGUYÊN
   const renderLoadingHeader = () => {

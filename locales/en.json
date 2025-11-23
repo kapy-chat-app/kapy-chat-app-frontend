@@ -561,6 +561,10 @@
       "location": "📍 Location",
       "message": "Message"
     },
+    "messagePrefix": {
+      "you": "You:",
+      "sender": "{{name}}:"
+    },
     "createModal": {
       "title": "New Conversation",
       "cancel": "Cancel",

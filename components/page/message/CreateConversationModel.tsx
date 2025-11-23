@@ -10,11 +10,13 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFriendsList, Friend } from '@/hooks/friend/useFriends';
 import { useAuth } from '@clerk/clerk-expo';
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useSocket } from "@/hooks/message/useSocket"; // ✅ ADDED
 import SearchInput from '@/components/ui/SearchInput';
 import Button from '@/components/ui/Button';
 
@@ -46,6 +48,16 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
   const { userId } = useAuth();
   
   const { friends, loading, error, loadFriends } = useFriendsList();
+  
+  // ✅ ADDED: Get online users from socket
+  const { isUserOnline, onlineUsers } = useSocket();
+
+  // ✅ ADDED: Log online users for debugging
+  useEffect(() => {
+    if (visible) {
+      console.log('👥 Modal opened - Online users:', onlineUsers.length);
+    }
+  }, [visible, onlineUsers]);
 
   useEffect(() => {
     if (visible) {
@@ -131,8 +143,12 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
     onClose();
   };
 
+  // ✅ UPDATED: renderContact with online status
   const renderContact = ({ item }: { item: FriendWithClerkId }) => {
     const isSelected = selectedUsers.find(u => u.id === item.id);
+    
+    // ✅ Check if user is online from socket
+    const isOnline = isUserOnline(item.clerkId);
     
     return (
       <TouchableOpacity
@@ -156,7 +172,8 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
             </View>
           )}
           
-          {item.is_online && (
+          {/* ✅ UPDATED: Use socket online status instead of database is_online */}
+          {isOnline && (
             <View className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 ${isDark ? 'border-black' : 'border-white'}`} />
           )}
         </View>
@@ -165,9 +182,20 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
           <Text className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
             {item.full_name}
           </Text>
-          <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            @{item.username}
-          </Text>
+          <View className="flex-row items-center gap-1">
+            <Text className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              @{item.username}
+            </Text>
+            {/* ✅ ADDED: Show online badge */}
+            {isOnline && (
+              <View className="flex-row items-center ml-2">
+                <View className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1" />
+                <Text className="text-xs text-green-500 font-medium">
+                  {t('message.online')}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
         
         {isSelected && (
@@ -177,36 +205,47 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
     );
   };
 
-  const renderSelectedUser = ({ item }: { item: FriendWithClerkId }) => (
-    <View className="mr-3 items-center">
-      <View className="relative">
-        {item.avatar ? (
-          <Image 
-            source={{ uri: item.avatar }} 
-            className="w-14 h-14 rounded-full"
-          />
-        ) : (
-          <View className="w-14 h-14 rounded-full bg-orange-500 items-center justify-center">
-            <Text className="text-white font-bold">
-              {item.full_name?.charAt(0).toUpperCase() || 'U'}
-            </Text>
-          </View>
-        )}
+  // ✅ UPDATED: renderSelectedUser with online status
+  const renderSelectedUser = ({ item }: { item: FriendWithClerkId }) => {
+    // ✅ Check if selected user is online
+    const isOnline = isUserOnline(item.clerkId);
+    
+    return (
+      <View className="mr-3 items-center">
+        <View className="relative">
+          {item.avatar ? (
+            <Image 
+              source={{ uri: item.avatar }} 
+              className="w-14 h-14 rounded-full"
+            />
+          ) : (
+            <View className="w-14 h-14 rounded-full bg-orange-500 items-center justify-center">
+              <Text className="text-white font-bold">
+                {item.full_name?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            </View>
+          )}
+          
+          {/* ✅ ADDED: Show online indicator on selected users */}
+          {isOnline && (
+            <View className={`absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 ${isDark ? 'border-black' : 'border-white'}`} />
+          )}
+          
+          <TouchableOpacity
+            onPress={() => handleUserToggle(item)}
+            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full items-center justify-center"
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={14} color="white" />
+          </TouchableOpacity>
+        </View>
         
-        <TouchableOpacity
-          onPress={() => handleUserToggle(item)}
-          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full items-center justify-center"
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close" size={14} color="white" />
-        </TouchableOpacity>
+        <Text className={`text-xs mt-1 max-w-[60px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`} numberOfLines={1}>
+          {item.full_name}
+        </Text>
       </View>
-      
-      <Text className={`text-xs mt-1 max-w-[60px] ${isDark ? 'text-gray-400' : 'text-gray-600'}`} numberOfLines={1}>
-        {item.full_name}
-      </Text>
-    </View>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <View className="flex-1 justify-center items-center py-12">
@@ -226,10 +265,16 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}>
+      <SafeAreaView 
+        className={`flex-1 ${isDark ? 'bg-black' : 'bg-white'}`}
+        edges={['top', 'bottom']}
+      >
+        {/* Header */}
         <View className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
           <TouchableOpacity onPress={handleClose} disabled={isCreating}>
-            <Text className="text-orange-500 text-base font-medium">{t('conversations.createModal.cancel')}</Text>
+            <Text className="text-orange-500 text-base font-medium">
+              {t('conversations.createModal.cancel')}
+            </Text>
           </TouchableOpacity>
           
           <Text className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>
@@ -248,6 +293,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
           </TouchableOpacity>
         </View>
 
+        {/* Selected Users */}
         {selectedUsers.length > 0 && (
           <View className={`px-4 py-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             <Text className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -259,10 +305,13 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
               showsHorizontalScrollIndicator={false}
               renderItem={renderSelectedUser}
               keyExtractor={(item) => item.id}
+              // ✅ ADDED: Re-render when online users change
+              extraData={onlineUsers}
             />
           </View>
         )}
 
+        {/* Group Info (if group) */}
         {conversationType === 'group' && (
           <View className={`px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
             <TextInput
@@ -292,6 +341,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
           </View>
         )}
 
+        {/* Search */}
         <View className="px-4 py-3">
           <SearchInput
             placeholder={t('conversations.createModal.searchPlaceholder')}
@@ -302,6 +352,7 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
           />
         </View>
 
+        {/* Content */}
         {loading ? (
           <View className="flex-1 justify-center items-center">
             <ActivityIndicator size="large" color="#FF8C42" />
@@ -330,12 +381,14 @@ const CreateConversationModal: React.FC<CreateConversationModalProps> = ({
             keyExtractor={(item) => item.id}
             className="flex-1"
             showsVerticalScrollIndicator={false}
+            // ✅ ADDED: Re-render when online users change
+            extraData={onlineUsers}
             ItemSeparatorComponent={() => (
               <View className={`h-px ml-16 ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`} />
             )}
           />
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };

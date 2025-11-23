@@ -98,6 +98,11 @@ export interface Message {
   is_edited: boolean;
   edited_at?: Date;
   read_by: MessageReadBy[];
+  metadata?: { // ✨ NEW
+    isSystemMessage?: boolean;
+    action?: string;
+    [key: string]: any;
+  };
   rich_media?: RichMediaDTO;
   created_at: Date;
   updated_at: Date;
@@ -185,6 +190,7 @@ const toCachedMessage = (msg: Message, conversationId: string): CachedMessage =>
     sender: msg.reply_to.sender,
     type: msg.reply_to.type,
   }) : undefined,
+  metadata_json: msg.metadata ? JSON.stringify(msg.metadata) : undefined, // ✨ NEW
   is_edited: msg.is_edited ? 1 : 0,
   created_at: new Date(msg.created_at).getTime(),
   updated_at: new Date(msg.updated_at).getTime(),
@@ -194,6 +200,7 @@ const toCachedMessage = (msg: Message, conversationId: string): CachedMessage =>
 const fromCachedMessage = (cached: CachedMessage): Message => {
   const attachments = JSON.parse(cached.attachments_json || '[]');
   const replyTo = cached.reply_to_json ? JSON.parse(cached.reply_to_json) : undefined;
+  const metadata = cached.metadata_json ? JSON.parse(cached.metadata_json) : undefined; // ✨ NEW
   
   return {
     _id: cached._id,
@@ -211,6 +218,7 @@ const fromCachedMessage = (cached: CachedMessage): Message => {
     reactions: JSON.parse(cached.reactions_json || '[]'),
     read_by: JSON.parse(cached.read_by_json || '[]'),
     reply_to: replyTo,
+    metadata: metadata, // ✨ NEW
     is_edited: cached.is_edited === 1,
     created_at: new Date(cached.created_at),
     updated_at: new Date(cached.updated_at),
@@ -466,208 +474,210 @@ export const useMessages = (
   // FETCH MESSAGES WITH CACHE
   // =============================================
   const fetchMessages = useCallback(
-    async (pageNum: number = 1, append: boolean = false) => {
-      if (!conversationId || loadingRef.current) return;
+  async (pageNum: number = 1, append: boolean = false) => {
+    if (!conversationId || loadingRef.current) return;
 
-      try {
-        loadingRef.current = true;
-        setError(null);
+    try {
+      loadingRef.current = true;
+      setError(null);
 
-        // =============================================
-        // STEP 1: Load từ cache ngay lập tức
-        // =============================================
-        if (pageNum === 1 && !append) {
-          console.log('📦 Loading messages from cache...');
-          
-          const cachedMessages = await messageCacheService.getMessages(
-            conversationId, 
-            MESSAGES_PER_PAGE
-          );
-
-          if (cachedMessages.length > 0) {
-            const msgs = cachedMessages.map(fromCachedMessage).reverse();
-            setMessages(msgs);
-            console.log(`✅ Loaded ${msgs.length} messages from cache (instant)`);
-            setLoading(false);
-          } else {
-            setLoading(true);
-            console.log('📭 No cached messages, fetching from server...');
-          }
-        } else {
-          setLoading(true);
-        }
-
-        // =============================================
-        // STEP 2: Fetch tin nhắn mới từ server
-        // =============================================
-        const token = await getToken();
-        const meta = await messageCacheService.getConversationMeta(conversationId);
+      // =============================================
+      // STEP 1: Load từ cache ngay lập tức
+      // =============================================
+      if (pageNum === 1 && !append) {
+        console.log('📦 Loading messages from cache...');
         
-        let url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`;
-        
-        // Nếu có cache và load page 1, chỉ fetch tin mới
-        if (meta && meta.last_sync_time > 0 && pageNum === 1 && !append) {
-          const lastSyncISO = new Date(meta.last_sync_time).toISOString();
-          url += `&after=${encodeURIComponent(lastSyncISO)}`;
-          console.log(`🔄 Fetching messages after: ${lastSyncISO}`);
-        }
-
-        const response = await fetch(url, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.success) {
-          throw new Error(result.error || "Failed to fetch messages");
-        }
-
-        const serverMessages = result.data.messages || [];
-        const pagination = result.data.pagination;
-
-        console.log(`📥 Fetched ${serverMessages.length} messages from server`);
-
-        // Không có tin mới và đã có cache
-        if (serverMessages.length === 0 && pageNum === 1 && !append) {
-          setHasMore(pagination?.hasNext || false);
-          console.log('✅ No new messages, using cache');
-          setLoading(false);
-          loadingRef.current = false;
-          return;
-        }
-
-        // =============================================
-        // STEP 3: Decrypt tin nhắn mới
-        // =============================================
-        console.log('🔓 Decrypting messages...');
-
-        const decryptedMessages = await Promise.all(
-          serverMessages.map(async (msg: Message) => {
-            try {
-              let decryptedContent = msg.content;
-
-              if (msg.type === "text" && msg.encrypted_content) {
-                if (encryptionInitialized) {
-                  try {
-                    decryptedContent = await decryptMessage(
-                      msg.sender.clerkId,
-                      msg.encrypted_content
-                    );
-                  } catch (decryptError) {
-                    decryptedContent = "[🔒 Decryption failed]";
-                    return {
-                      ...msg,
-                      content: decryptedContent,
-                      status: "failed" as MessageStatus,
-                      decryption_error: true,
-                    };
-                  }
-                } else {
-                  decryptedContent = "[🔒 Encrypted - Initializing...]";
-                }
-              } else if (msg.type !== "text") {
-                decryptedContent = msg.content;
-              } else if (msg.type === "text" && !msg.encrypted_content && !msg.content) {
-                decryptedContent = "[❌ No content]";
-              }
-
-              let decryptedAtts = msg.attachments;
-              if (msg.attachments && msg.attachments.length > 0) {
-                decryptedAtts = await decryptAttachments(
-                  msg.attachments,
-                  msg.sender.clerkId
-                );
-              }
-
-              return {
-                ...msg,
-                content: decryptedContent,
-                attachments: decryptedAtts,
-                status: "sent" as MessageStatus,
-                decryption_error: false,
-              };
-            } catch (error) {
-              console.error(`❌ Failed to process message ${msg._id}:`, error);
-              return {
-                ...msg,
-                content: msg.encrypted_content ? "[🔒 Decryption failed]" : msg.content,
-                status: "failed" as MessageStatus,
-                decryption_error: msg.type === "text" && !!msg.encrypted_content,
-              };
-            }
-          })
+        const cachedMessages = await messageCacheService.getMessages(
+          conversationId, 
+          MESSAGES_PER_PAGE
         );
 
-        // =============================================
-        // STEP 4: Lưu vào cache
-        // =============================================
-        if (decryptedMessages.length > 0) {
-          console.log('💾 Saving to cache...');
-          
-          const messagesToCache = decryptedMessages.map(msg => 
-            toCachedMessage(msg, conversationId)
-          );
-          await messageCacheService.saveMessages(messagesToCache);
-
-          // Update metadata
-          const lastMsg = decryptedMessages[decryptedMessages.length - 1];
-          await messageCacheService.updateConversationMeta({
-            conversation_id: conversationId,
-            last_sync_time: Date.now(),
-            total_cached: (meta?.total_cached || 0) + decryptedMessages.length,
-            last_message_id: lastMsg._id,
-          });
-
-          console.log('✅ Saved to cache');
-        }
-
-        // =============================================
-        // STEP 5: Update UI
-        // =============================================
-        if (pageNum === 1 && !append) {
-          // Load lại từ cache
-          const allCached = await messageCacheService.getMessages(
-            conversationId, 
-            MESSAGES_PER_PAGE
-          );
-          const allMessages = allCached.map(fromCachedMessage).reverse();
-          setMessages(allMessages);
-        } else if (append) {
-          setMessages(prev => [...decryptedMessages, ...prev]);
+        if (cachedMessages.length > 0) {
+          // ✅ FIXED: Không reverse - SQL đã sort DESC rồi
+          const msgs = cachedMessages.map(fromCachedMessage);
+          setMessages(msgs);
+          console.log(`✅ Loaded ${msgs.length} messages from cache (instant)`);
+          setLoading(false);
         } else {
-          setMessages(decryptedMessages);
+          setLoading(true);
+          console.log('📭 No cached messages, fetching from server...');
         }
+      } else {
+        setLoading(true);
+      }
 
+      // =============================================
+      // STEP 2: Fetch tin nhắn mới từ server
+      // =============================================
+      const token = await getToken();
+      const meta = await messageCacheService.getConversationMeta(conversationId);
+      
+      let url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`;
+      
+      // Nếu có cache và load page 1, chỉ fetch tin mới
+      if (meta && meta.last_sync_time > 0 && pageNum === 1 && !append) {
+        const lastSyncISO = new Date(meta.last_sync_time).toISOString();
+        url += `&after=${encodeURIComponent(lastSyncISO)}`;
+        console.log(`🔄 Fetching messages after: ${lastSyncISO}`);
+      }
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to fetch messages");
+      }
+
+      const serverMessages = result.data.messages || [];
+      const pagination = result.data.pagination;
+
+      console.log(`📥 Fetched ${serverMessages.length} messages from server`);
+
+      // Không có tin mới và đã có cache
+      if (serverMessages.length === 0 && pageNum === 1 && !append) {
         setHasMore(pagination?.hasNext || false);
-        console.log(`✅ Sync complete`);
-
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to fetch messages";
-        setError(errorMessage);
-        console.error("❌ Error fetching messages:", err);
-      } finally {
+        console.log('✅ No new messages, using cache');
         setLoading(false);
         loadingRef.current = false;
+        return;
       }
-    },
-    [
-      conversationId,
-      getToken,
-      API_BASE_URL,
-      MESSAGES_PER_PAGE,
-      decryptMessage,
-      decryptAttachments,
-      encryptionInitialized,
-    ]
-  );
+
+      // =============================================
+      // STEP 3: Decrypt tin nhắn mới
+      // =============================================
+      console.log('🔓 Decrypting messages...');
+
+      const decryptedMessages = await Promise.all(
+        serverMessages.map(async (msg: Message) => {
+          try {
+            let decryptedContent = msg.content;
+
+            if (msg.type === "text" && msg.encrypted_content) {
+              if (encryptionInitialized) {
+                try {
+                  decryptedContent = await decryptMessage(
+                    msg.sender.clerkId,
+                    msg.encrypted_content
+                  );
+                } catch (decryptError) {
+                  decryptedContent = "[🔒 Decryption failed]";
+                  return {
+                    ...msg,
+                    content: decryptedContent,
+                    status: "failed" as MessageStatus,
+                    decryption_error: true,
+                  };
+                }
+              } else {
+                decryptedContent = "[🔒 Encrypted - Initializing...]";
+              }
+            } else if (msg.type !== "text") {
+              decryptedContent = msg.content;
+            } else if (msg.type === "text" && !msg.encrypted_content && !msg.content) {
+              decryptedContent = "[❌ No content]";
+            }
+
+            let decryptedAtts = msg.attachments;
+            if (msg.attachments && msg.attachments.length > 0) {
+              decryptedAtts = await decryptAttachments(
+                msg.attachments,
+                msg.sender.clerkId
+              );
+            }
+
+            return {
+              ...msg,
+              content: decryptedContent,
+              attachments: decryptedAtts,
+              status: "sent" as MessageStatus,
+              decryption_error: false,
+            };
+          } catch (error) {
+            console.error(`❌ Failed to process message ${msg._id}:`, error);
+            return {
+              ...msg,
+              content: msg.encrypted_content ? "[🔒 Decryption failed]" : msg.content,
+              status: "failed" as MessageStatus,
+              decryption_error: msg.type === "text" && !!msg.encrypted_content,
+            };
+          }
+        })
+      );
+
+      // =============================================
+      // STEP 4: Lưu vào cache
+      // =============================================
+      if (decryptedMessages.length > 0) {
+        console.log('💾 Saving to cache...');
+        
+        const messagesToCache = decryptedMessages.map(msg => 
+          toCachedMessage(msg, conversationId)
+        );
+        await messageCacheService.saveMessages(messagesToCache);
+
+        // Update metadata
+        const lastMsg = decryptedMessages[decryptedMessages.length - 1];
+        await messageCacheService.updateConversationMeta({
+          conversation_id: conversationId,
+          last_sync_time: Date.now(),
+          total_cached: (meta?.total_cached || 0) + decryptedMessages.length,
+          last_message_id: lastMsg._id,
+        });
+
+        console.log('✅ Saved to cache');
+      }
+
+      // =============================================
+      // STEP 5: Update UI
+      // =============================================
+      if (pageNum === 1 && !append) {
+        // Load lại từ cache
+        const allCached = await messageCacheService.getMessages(
+          conversationId, 
+          MESSAGES_PER_PAGE
+        );
+        // ✅ FIXED: Không reverse
+        const allMessages = allCached.map(fromCachedMessage);
+        setMessages(allMessages);
+      } else if (append) {
+        setMessages(prev => [...decryptedMessages, ...prev]);
+      } else {
+        setMessages(decryptedMessages);
+      }
+
+      setHasMore(pagination?.hasNext || false);
+      console.log(`✅ Sync complete`);
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to fetch messages";
+      setError(errorMessage);
+      console.error("❌ Error fetching messages:", err);
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
+    }
+  },
+  [
+    conversationId,
+    getToken,
+    API_BASE_URL,
+    MESSAGES_PER_PAGE,
+    decryptMessage,
+    decryptAttachments,
+    encryptionInitialized,
+  ]
+);
 
   const createOptimisticMessage = useCallback(
     (data: CreateMessageData | FormData, localUris?: string[]): Message => {
