@@ -1,5 +1,4 @@
 // lib/cache/MessageCacheService.ts
-// Cache service for storing decrypted messages locally
 import * as SQLite from 'expo-sqlite';
 
 // =============================================
@@ -18,6 +17,7 @@ export interface CachedMessage {
   reactions_json: string;
   read_by_json: string;
   reply_to_json?: string;
+  metadata_json?: string; // ✨ NEW
   is_edited: number;
   created_at: number;
   updated_at: number;
@@ -60,6 +60,7 @@ class MessageCacheService {
           reactions_json TEXT,
           read_by_json TEXT,
           reply_to_json TEXT,
+          metadata_json TEXT,
           is_edited INTEGER DEFAULT 0,
           created_at INTEGER,
           updated_at INTEGER,
@@ -84,11 +85,36 @@ class MessageCacheService {
         );
       `);
 
+      // ✨ Migration: Add metadata_json column if it doesn't exist
+      await this.migrateDatabase();
+
       this.initialized = true;
       console.log('✅ MessageCacheService initialized');
     } catch (error) {
       console.error('❌ Failed to initialize MessageCacheService:', error);
       throw error;
+    }
+  }
+
+  // ✨ NEW: Migration function
+  private async migrateDatabase(): Promise<void> {
+    if (!this.db) return;
+
+    try {
+      // Check if metadata_json column exists
+      const tableInfo = await this.db.getAllAsync<{ name: string }>(
+        `PRAGMA table_info(messages)`
+      );
+      
+      const hasMetadataColumn = tableInfo.some(col => col.name === 'metadata_json');
+      
+      if (!hasMetadataColumn) {
+        console.log('🔄 Running migration: Adding metadata_json column...');
+        await this.db.execAsync(`ALTER TABLE messages ADD COLUMN metadata_json TEXT`);
+        console.log('✅ Migration complete: metadata_json column added');
+      }
+    } catch (error) {
+      console.error('❌ Migration failed:', error);
     }
   }
 
@@ -123,17 +149,30 @@ class MessageCacheService {
     if (messages.length === 0) return;
 
     try {
+      // ✨ UPDATED: Add metadata_json to statement (16 parameters now)
       const stmt = await this.db!.prepareAsync(`
-        INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       try {
         for (const msg of messages) {
           await stmt.executeAsync([
-            msg._id, msg.conversation_id, msg.sender_id, msg.sender_name,
-            msg.sender_avatar || null, msg.content, msg.type, msg.attachments_json,
-            msg.reactions_json, msg.read_by_json, msg.reply_to_json || null,
-            msg.is_edited, msg.created_at, msg.updated_at, msg.rich_media_json || null,
+            msg._id, 
+            msg.conversation_id, 
+            msg.sender_id, 
+            msg.sender_name,
+            msg.sender_avatar || null, 
+            msg.content, 
+            msg.type, 
+            msg.attachments_json,
+            msg.reactions_json, 
+            msg.read_by_json, 
+            msg.reply_to_json || null,
+            msg.metadata_json || null, // ✨ NEW
+            msg.is_edited, 
+            msg.created_at, 
+            msg.updated_at, 
+            msg.rich_media_json || null,
           ]);
         }
       } finally {

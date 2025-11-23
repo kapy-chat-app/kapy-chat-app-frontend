@@ -1,8 +1,13 @@
+// hooks/friend/useFriends.ts - COMPLETE FIXED VERSION
+import {
+  CachedFriend,
+  CachedFriendRequest,
+  friendsCacheService,
+} from "@/lib/cache/FriendCacheService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSocket } from "../message/useSocket";
 
-// Existing interfaces
 export interface User {
   id: string;
   username: string;
@@ -146,6 +151,11 @@ export const useFriendSearch = () => {
   ).current;
 
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const getTokenRef = useRef(getToken);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const searchUsers = useCallback(
     async (query: string, immediate = false): Promise<ApiResponse<User[]>> => {
@@ -175,7 +185,7 @@ export const useFriendSearch = () => {
       setError(null);
 
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) {
           const errorResponse = {
             success: false as const,
@@ -229,7 +239,7 @@ export const useFriendSearch = () => {
         setLoading(false);
       }
     },
-    [getToken, API_BASE_URL]
+    [API_BASE_URL]
   );
 
   const clearError = useCallback(() => setError(null), []);
@@ -255,7 +265,7 @@ export const useFriendSearch = () => {
 };
 
 // ============================================
-// FRIEND REQUESTS HOOK WITH SOCKET EVENTS
+// FRIEND REQUESTS HOOK WITH FULL CACHE
 // ============================================
 export const useFriendRequests = () => {
   const [requests, setRequests] = useState<FriendRequest[]>([]);
@@ -263,101 +273,154 @@ export const useFriendRequests = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestCount, setRequestCount] = useState(0);
-  const { getToken } = useAuth();  // This changes every render
+  const { getToken } = useAuth();
   const { socket } = useSocket();
 
   const API_BASE_URL = useRef(
     process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
   ).current;
 
-  // NEW: Use ref to track latest getToken without unstable dep
-  const getTokenRef = useRef<typeof getToken>(getToken);
+  const getTokenRef = useRef(getToken);
+  const hasLoadedRef = useRef(false);
+  const isFetchingRef = useRef(false);
+
   useEffect(() => {
     getTokenRef.current = getToken;
   }, [getToken]);
 
-  const hasLoadedRef = useRef(false);
-
- const loadFriendRequests = useCallback(
-  async (
-    type: "received" | "sent" | "all" = "received"
-  ): Promise<ApiResponse<FriendRequest[]>> => {
-    setLoading(true);
-    setError(null);
-
+  // Load from cache
+  const loadFromCache = useCallback(async () => {
     try {
-      const token = await getTokenRef.current();
-      if (!token) {
-        const errorResponse = {
-          success: false as const,
-          error: "Not authenticated",
-          data: null,
-        };
-        setError("Not authenticated");
-        return errorResponse;
+      console.log("📦 Loading friend requests from cache...");
+      const cached = await friendsCacheService.getFriendRequests();
+
+      if (cached.length > 0) {
+        const parsed: FriendRequest[] = cached.map((r) => ({
+          id: r.id,
+          requester: JSON.parse(r.requester_json),
+          created_at: new Date(r.created_at),
+        }));
+
+        setRequests(parsed);
+        setRequestCount(parsed.length);
+        console.log(`✅ Loaded ${parsed.length} requests from cache`);
+        return true;
       }
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/friends/request?type=${type}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-
-      console.log("📬 loadFriendRequests response:", result); // DEBUG
-
-      if (response.ok) {
-        // Handle received requests
-        if (type === "received" || type === "all") {
-          setRequests(result.requests || []);
-          setRequestCount(result.requests?.length || 0);
-        }
-        
-        // Handle sent requests - ĐÂY LÀ PHẦN QUAN TRỌNG
-        if (type === "sent") {
-          // Khi type === "sent", backend trả về trong trường requests
-          setSentRequests(result.requests || []);
-        } else if (type === "all") {
-          // Khi type === "all", backend trả về sentRequests riêng
-          setSentRequests(result.sentRequests || []);
-        }
-
-        return {
-          success: true,
-          error: null,
-          data: result.requests || [],
-        };
-      } else {
-        const errorMessage = result.error || "Failed to load friend requests";
-        setError(errorMessage);
-        return {
-          success: false,
-          error: errorMessage,
-          data: null,
-        };
-      }
-    } catch (err: any) {
-      const errorMessage = err.message || "Failed to load friend requests";
-      setError(errorMessage);
-      return {
-        success: false,
-        error: errorMessage,
-        data: null,
-      };
-    } finally {
-      setLoading(false);
+      return false;
+    } catch (error) {
+      console.error("❌ Failed to load requests from cache:", error);
+      return false;
     }
-  },
-  [API_BASE_URL]
-);
+  }, []);
 
-  // Apply same pattern to other functions (sendFriendRequest, respondToRequest, cancelRequest)
+  // Save to cache
+  const saveToCache = useCallback(async (requestsList: FriendRequest[]) => {
+    try {
+      const toCache: CachedFriendRequest[] = requestsList.map((r) => ({
+        id: r.id,
+        requester_json: JSON.stringify(r.requester),
+        created_at: r.created_at.getTime(),
+      }));
+
+      await friendsCacheService.saveFriendRequests(toCache);
+    } catch (error) {
+      console.error("Failed to save requests to cache:", error);
+    }
+  }, []);
+
+  // Network fetch
+  const fetchFromNetwork = useCallback(
+    async (type: "received" | "sent" | "all" = "received") => {
+      try {
+        console.log(`🌐 Fetching ${type} friend requests from network...`);
+        const token = await getTokenRef.current();
+
+        if (!token) {
+          throw new Error("Not authenticated");
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/friends/request?type=${type}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const result = await response.json();
+        console.log("📬 loadFriendRequests response:", result);
+
+        if (response.ok) {
+          if (type === "received" || type === "all") {
+            const receivedRequests = result.requests || [];
+            setRequests(receivedRequests);
+            setRequestCount(receivedRequests.length);
+
+            saveToCache(receivedRequests);
+          }
+
+          if (type === "sent") {
+            setSentRequests(result.requests || []);
+          } else if (type === "all") {
+            setSentRequests(result.sentRequests || []);
+          }
+
+          return {
+            success: true,
+            error: null,
+            data: result.requests || [],
+          };
+        } else {
+          throw new Error(result.error || "Failed to load friend requests");
+        }
+      } catch (err: any) {
+        throw err;
+      }
+    },
+    [API_BASE_URL, saveToCache]
+  );
+
+  // Load with cache support
+  const loadFriendRequests = useCallback(
+    async (
+      type: "received" | "sent" | "all" = "received",
+      useCache = true
+    ): Promise<ApiResponse<FriendRequest[]>> => {
+      if (isFetchingRef.current) {
+        console.log("⏳ Fetch already in progress, skipping...");
+        return { success: true, error: null, data: requests };
+      }
+
+      try {
+        isFetchingRef.current = true;
+        setLoading(true);
+        setError(null);
+
+        if (useCache && type === "received") {
+          const hasCache = await loadFromCache();
+          if (hasCache) {
+            setLoading(false);
+            fetchFromNetwork(type);
+            return { success: true, error: null, data: requests };
+          }
+        }
+
+        return await fetchFromNetwork(type);
+      } catch (err: any) {
+        const errorMessage = err.message || "Failed to load friend requests";
+        setError(errorMessage);
+        return { success: false, error: errorMessage, data: null };
+      } finally {
+        setLoading(false);
+        isFetchingRef.current = false;
+      }
+    },
+    [requests, loadFromCache, fetchFromNetwork]
+  );
+
   const sendFriendRequest = useCallback(
     async (userId: string): Promise<ApiResponse<null>> => {
       setLoading(true);
@@ -366,13 +429,7 @@ export const useFriendRequests = () => {
       try {
         const token = await getTokenRef.current();
         if (!token) {
-          const errorResponse = {
-            success: false as const,
-            error: "Not authenticated",
-            data: null,
-          };
-          setError("Not authenticated");
-          return errorResponse;
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(`${API_BASE_URL}/api/friends/request`, {
@@ -414,7 +471,7 @@ export const useFriendRequests = () => {
         setLoading(false);
       }
     },
-    [API_BASE_URL]  // Stable deps
+    [API_BASE_URL]
   );
 
   const respondToRequest = useCallback(
@@ -428,13 +485,7 @@ export const useFriendRequests = () => {
       try {
         const token = await getTokenRef.current();
         if (!token) {
-          const errorResponse = {
-            success: false as const,
-            error: "Not authenticated",
-            data: null,
-          };
-          setError("Not authenticated");
-          return errorResponse;
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(`${API_BASE_URL}/api/friends/request`, {
@@ -449,6 +500,12 @@ export const useFriendRequests = () => {
         const result = await response.json();
 
         if (response.ok) {
+          if (action === "accept" || action === "decline") {
+            await friendsCacheService.deleteFriendRequest(requestId);
+            setRequests((prev) => prev.filter((r) => r.id !== requestId));
+            setRequestCount((prev) => Math.max(0, prev - 1));
+          }
+
           return {
             success: true,
             error: null,
@@ -487,13 +544,7 @@ export const useFriendRequests = () => {
       try {
         const token = await getTokenRef.current();
         if (!token) {
-          const errorResponse = {
-            success: false as const,
-            error: "Not authenticated",
-            data: null,
-          };
-          setError("Not authenticated");
-          return errorResponse;
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(
@@ -510,6 +561,8 @@ export const useFriendRequests = () => {
         const result = await response.json();
 
         if (response.ok) {
+          setSentRequests((prev) => prev.filter((r) => r.id !== requestId));
+
           return {
             success: true,
             error: null,
@@ -540,14 +593,85 @@ export const useFriendRequests = () => {
     [API_BASE_URL]
   );
 
-  // ... (socket useEffect remains unchanged)
+  // Socket listeners
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleFriendRequestReceived = (data: FriendRequestReceivedEvent) => {
+      console.log("📬 New friend request received:", data);
+
+      const newRequest: FriendRequest = {
+        id: data.request_id,
+        requester: {
+          id: data.requester_id,
+          username: "",
+          full_name: data.requester_name,
+          avatar: data.requester_avatar,
+        },
+        created_at: new Date(data.timestamp),
+      };
+
+      setRequests((prev) => [newRequest, ...prev]);
+      setRequestCount((prev) => prev + 1);
+
+      friendsCacheService.saveFriendRequests([
+        {
+          id: newRequest.id,
+          requester_json: JSON.stringify(newRequest.requester),
+          created_at: newRequest.created_at.getTime(),
+        },
+      ]);
+
+      loadFriendRequests("received", false);
+    };
+
+    const handleFriendRequestAccepted = (data: FriendRequestAcceptedEvent) => {
+      console.log("✅ Friend request accepted:", data);
+
+      setRequests((prev) => prev.filter((r) => r.id !== data.request_id));
+      setRequestCount((prev) => Math.max(0, prev - 1));
+
+      friendsCacheService.deleteFriendRequest(data.request_id);
+
+      loadFriendRequests("received", false);
+    };
+
+    const handleFriendRequestDeclined = (data: FriendRequestDeclinedEvent) => {
+      console.log("❌ Friend request declined:", data);
+
+      setSentRequests((prev) => prev.filter((r) => r.id !== data.request_id));
+    };
+
+    const handleFriendRequestCancelled = (
+      data: FriendRequestCancelledEvent
+    ) => {
+      console.log("🚫 Friend request cancelled:", data);
+
+      setRequests((prev) => prev.filter((r) => r.id !== data.request_id));
+      setRequestCount((prev) => Math.max(0, prev - 1));
+
+      friendsCacheService.deleteFriendRequest(data.request_id);
+    };
+
+    socket.on("friendRequestReceived", handleFriendRequestReceived);
+    socket.on("friendRequestAccepted", handleFriendRequestAccepted);
+    socket.on("friendRequestDeclined", handleFriendRequestDeclined);
+    socket.on("friendRequestCancelled", handleFriendRequestCancelled);
+
+    return () => {
+      socket.off("friendRequestReceived", handleFriendRequestReceived);
+      socket.off("friendRequestAccepted", handleFriendRequestAccepted);
+      socket.off("friendRequestDeclined", handleFriendRequestDeclined);
+      socket.off("friendRequestCancelled", handleFriendRequestCancelled);
+    };
+  }, [socket, loadFriendRequests]);
 
   useEffect(() => {
     if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
-      loadFriendRequests();  // Defaults to "received"
+      loadFriendRequests("all");
     }
-  }, [loadFriendRequests]);  // Now stable!
+  }, [loadFriendRequests]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -580,7 +704,7 @@ export const useFriendRequests = () => {
 };
 
 // ============================================
-// FRIENDS LIST HOOK WITH SOCKET EVENTS
+// FRIENDS LIST HOOK WITH FULL CACHE
 // ============================================
 export const useFriendsList = () => {
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -595,31 +719,89 @@ export const useFriendsList = () => {
   ).current;
 
   const hasLoadedRef = useRef(false);
+  const isFetchingRef = useRef(false);
+  const getTokenRef = useRef(getToken);
 
-  const loadFriends = useCallback(
-    async (
-      page = 1,
-      search = "",
-      status: "online" | "all" = "all"
-    ): Promise<ApiResponse<{ friends: Friend[]; totalCount: number }>> => {
-      setLoading(true);
-      setError(null);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
+  // Load from cache
+  const loadFromCache = useCallback(async () => {
+    try {
+      console.log("📦 Loading friends from cache...");
+      const cached = await friendsCacheService.getFriends();
+
+      if (cached.length > 0) {
+        const parsed: Friend[] = cached.map((f) => ({
+          id: f.id,
+          clerkId: f.clerkId,
+          username: f.username,
+          full_name: f.full_name,
+          avatar: f.avatar,
+          is_online: f.is_online === 1,
+          last_seen: f.last_seen ? new Date(f.last_seen) : undefined,
+          mutualFriendsCount: f.mutualFriendsCount,
+          friendshipDate: new Date(f.friendshipDate),
+        }));
+
+        setFriends(parsed);
+        setTotalCount(parsed.length);
+        console.log(`✅ Loaded ${parsed.length} friends from cache`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("❌ Failed to load from cache:", error);
+      return false;
+    }
+  }, []);
+
+  // Save to cache
+  const saveToCache = useCallback(async (friendsList: Friend[]) => {
+  try {
+    const toCache: CachedFriend[] = friendsList.map((f) => {
+      // ✅ Safe conversion helpers
+      const getTimestamp = (date: Date | number | undefined): number | undefined => {
+        if (!date) return undefined;
+        if (typeof date === 'number') return date;
+        if (date instanceof Date) return date.getTime();
+        return undefined;
+      };
+
+      return {
+        id: f.id,
+        clerkId: f.clerkId,
+        username: f.username,
+        full_name: f.full_name,
+        avatar: f.avatar,
+        is_online: f.is_online ? 1 : 0,
+        last_seen: getTimestamp(f.last_seen),
+        mutualFriendsCount: f.mutualFriendsCount,
+        friendshipDate: getTimestamp(f.friendshipDate) || Date.now(), // Default to now if missing
+      };
+    });
+
+    await friendsCacheService.saveFriends(toCache);
+  } catch (error) {
+    console.error("Failed to save friends to cache:", error);
+  }
+}, []);
+
+  // Network fetch
+  const fetchFromNetwork = useCallback(
+    async (page = 1, search = "", status: "online" | "all" = "all") => {
       try {
-        const token = await getToken();
+        console.log("🌐 Fetching friends from network...");
+        const token = await getTokenRef.current();
+
         if (!token) {
-          const errorResponse = {
-            success: false as const,
-            error: "Not authenticated",
-            data: null,
-          };
-          setError("Not authenticated");
-          return errorResponse;
+          throw new Error("Not authenticated");
         }
 
         const params = new URLSearchParams({
           page: page.toString(),
-          limit: "20",
+          limit: "100",
           ...(search && { search }),
           ...(status !== "all" && { status }),
         });
@@ -635,109 +817,146 @@ export const useFriendsList = () => {
         const result = await response.json();
 
         if (response.ok) {
-          setFriends(result.friends || []);
+          const fetchedFriends = result.friends || [];
+          console.log(
+            `✅ Fetched ${fetchedFriends.length} friends from network`
+          );
+
+          setFriends(fetchedFriends);
           setTotalCount(result.totalCount || 0);
+
+          if (page === 1 && !search) {
+            saveToCache(fetchedFriends);
+          }
+
           return {
             success: true,
             error: null,
             data: {
-              friends: result.friends || [],
+              friends: fetchedFriends,
               totalCount: result.totalCount || 0,
             },
           };
         } else {
-          const errorMessage = result.error || "Failed to load friends";
-          setError(errorMessage);
-          return {
-            success: false,
-            error: errorMessage,
-            data: null,
-          };
+          throw new Error(result.error || "Failed to load friends");
         }
+      } catch (err: any) {
+        throw err;
+      }
+    },
+    [API_BASE_URL, saveToCache]
+  );
+
+  // Load with cache support
+  const loadFriends = useCallback(
+    async (
+      page = 1,
+      search = "",
+      status: "online" | "all" = "all",
+      useCache = true
+    ): Promise<ApiResponse<{ friends: Friend[]; totalCount: number }>> => {
+      if (isFetchingRef.current) {
+        console.log("⏳ Fetch already in progress, skipping...");
+        return { success: true, error: null, data: { friends, totalCount } };
+      }
+
+      try {
+        isFetchingRef.current = true;
+        setLoading(true);
+        setError(null);
+
+        if (useCache && page === 1 && !search) {
+          const hasCache = await loadFromCache();
+          if (hasCache) {
+            setLoading(false);
+            fetchFromNetwork(page, search, status);
+            return {
+              success: true,
+              error: null,
+              data: { friends, totalCount },
+            };
+          }
+        }
+
+        return await fetchFromNetwork(page, search, status);
       } catch (err: any) {
         const errorMessage = err.message || "Failed to load friends";
         setError(errorMessage);
-        return {
-          success: false,
-          error: errorMessage,
-          data: null,
-        };
+        return { success: false, error: errorMessage, data: null };
       } finally {
         setLoading(false);
+        isFetchingRef.current = false;
       }
     },
-    [getToken, API_BASE_URL]
+    [friends, totalCount, loadFromCache, fetchFromNetwork]
   );
 
-  // Socket event listeners
+  // Socket listeners
   useEffect(() => {
     if (!socket) return;
 
-    // Handle friend request accepted - add new friend
     const handleFriendRequestAccepted = (data: FriendRequestAcceptedEvent) => {
       console.log("✅ New friend added:", data);
-
-      // Reload friends list to get complete data
-      loadFriends();
+      loadFriends(1, "", "all", false);
     };
 
-    // Handle friend removed
     const handleFriendRemoved = (data: FriendRemovedEvent) => {
       console.log("👋 Friend removed:", data);
 
-      // Remove friend from list
-      setFriends((prev) => {
-        const removedId = data.removed_user_id || data.removed_by;
-        return prev.filter(
-          (friend) => friend.clerkId !== removedId && friend.id !== removedId
-        );
-      });
+      const removedId = data.removed_user_id || data.removed_by;
+
+      setFriends((prev) =>
+        prev.filter((f) => f.clerkId !== removedId && f.id !== removedId)
+      );
       setTotalCount((prev) => Math.max(0, prev - 1));
+
+      if (removedId) {
+        friendsCacheService.deleteFriend(removedId);
+      }
     };
 
-    // Handle friend blocked
     const handleFriendBlocked = (data: FriendBlockedEvent) => {
       console.log("🚫 Friend blocked:", data);
 
-      // Remove from friends list
       setFriends((prev) =>
         prev.filter(
-          (friend) =>
-            friend.clerkId !== data.blocked_user_id &&
-            friend.id !== data.blocked_user_id
+          (f) =>
+            f.clerkId !== data.blocked_user_id && f.id !== data.blocked_user_id
         )
       );
       setTotalCount((prev) => Math.max(0, prev - 1));
+
+      friendsCacheService.deleteFriend(data.blocked_user_id);
     };
 
-    // Handle friend unblocked
     const handleFriendUnblocked = (data: FriendUnblockedEvent) => {
       console.log("🔓 Friend unblocked:", data);
-
-      // Reload friends list
-      loadFriends();
+      loadFriends(1, "", "all", false);
     };
 
-    // Handle friend count update
     const handleFriendCountUpdated = (data: FriendCountUpdatedEvent) => {
       console.log("🔢 Friend count updated:", data.count);
       setTotalCount(data.count);
     };
 
-    // Handle friend online/offline status change
     const handleFriendStatusChanged = (data: FriendStatusChangedEvent) => {
       console.log(`👤 Friend ${data.friend_id} is now ${data.status}`);
 
+      const isOnline = data.status === "online";
+
       setFriends((prev) =>
-        prev.map((friend) =>
-          friend.clerkId === data.friend_id || friend.id === data.friend_id
-            ? { ...friend, is_online: data.status === "online" }
-            : friend
+        prev.map((f) =>
+          f.clerkId === data.friend_id || f.id === data.friend_id
+            ? { ...f, is_online: isOnline }
+            : f
         )
       );
+
+      friendsCacheService.updateFriend(data.friend_id, {
+        is_online: isOnline ? 1 : 0,
+      });
     };
 
-    // Register socket listeners
     socket.on("friendRequestAccepted", handleFriendRequestAccepted);
     socket.on("friendRemoved", handleFriendRemoved);
     socket.on("friendBlocked", handleFriendBlocked);
@@ -745,7 +964,6 @@ export const useFriendsList = () => {
     socket.on("friendCountUpdated", handleFriendCountUpdated);
     socket.on("friendStatusChanged", handleFriendStatusChanged);
 
-    // Cleanup
     return () => {
       socket.off("friendRequestAccepted", handleFriendRequestAccepted);
       socket.off("friendRemoved", handleFriendRemoved);
@@ -769,15 +987,9 @@ export const useFriendsList = () => {
       setError(null);
 
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) {
-          const errorResponse = {
-            success: false as const,
-            error: "Not authenticated",
-            data: null,
-          };
-          setError("Not authenticated");
-          return errorResponse;
+          throw new Error("Not authenticated");
         }
 
         const response = await fetch(
@@ -821,12 +1033,12 @@ export const useFriendsList = () => {
         setLoading(false);
       }
     },
-    [getToken, API_BASE_URL]
+    [API_BASE_URL]
   );
 
   const clearError = useCallback(() => setError(null), []);
 
-  const returnValue = useMemo(
+  return useMemo(
     () => ({
       friends,
       loading,
@@ -838,12 +1050,10 @@ export const useFriendsList = () => {
     }),
     [friends, loading, error, totalCount, loadFriends, removeFriend, clearError]
   );
-
-  return returnValue;
 };
 
 // ============================================
-// BLOCKED USERS HOOK WITH SOCKET EVENTS
+// BLOCKED USERS HOOK
 // ============================================
 export const useBlockedUsers = () => {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
@@ -857,6 +1067,12 @@ export const useBlockedUsers = () => {
     process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000"
   ).current;
 
+  const getTokenRef = useRef(getToken);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
   const loadBlockedUsers = useCallback(
     async (
       page = 1,
@@ -868,7 +1084,7 @@ export const useBlockedUsers = () => {
       setError(null);
 
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) {
           const errorResponse = {
             success: false as const,
@@ -937,37 +1153,29 @@ export const useBlockedUsers = () => {
         setLoading(false);
       }
     },
-    [getToken, API_BASE_URL]
+    [API_BASE_URL]
   );
 
-  // Socket event listeners
   useEffect(() => {
     if (!socket) return;
 
-    // Handle friend blocked - add to blocked list
     const handleFriendBlocked = (data: FriendBlockedEvent) => {
       console.log("🚫 User blocked:", data);
-
-      // Reload blocked users list to get complete data
       loadBlockedUsers(1, "");
     };
 
-    // Handle friend unblocked
     const handleFriendUnblocked = (data: FriendUnblockedEvent) => {
       console.log("🔓 User unblocked:", data);
 
-      // Remove from blocked list
       setBlockedUsers((prev) =>
         prev.filter((user) => user.id !== data.unblocked_user_id)
       );
       setTotalCount((prev) => Math.max(0, prev - 1));
     };
 
-    // Register socket listeners
     socket.on("friendBlocked", handleFriendBlocked);
     socket.on("friendUnblocked", handleFriendUnblocked);
 
-    // Cleanup
     return () => {
       socket.off("friendBlocked", handleFriendBlocked);
       socket.off("friendUnblocked", handleFriendUnblocked);
@@ -980,7 +1188,7 @@ export const useBlockedUsers = () => {
       setError(null);
 
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) {
           const errorResponse = {
             success: false as const,
@@ -1030,7 +1238,7 @@ export const useBlockedUsers = () => {
         setLoading(false);
       }
     },
-    [getToken, API_BASE_URL]
+    [API_BASE_URL]
   );
 
   const unblockUser = useCallback(
@@ -1039,7 +1247,7 @@ export const useBlockedUsers = () => {
       setError(null);
 
       try {
-        const token = await getToken();
+        const token = await getTokenRef.current();
         if (!token) {
           const errorResponse = {
             success: false as const,
@@ -1089,7 +1297,7 @@ export const useBlockedUsers = () => {
         setLoading(false);
       }
     },
-    [getToken, API_BASE_URL]
+    [API_BASE_URL]
   );
 
   const clearError = useCallback(() => setError(null), []);

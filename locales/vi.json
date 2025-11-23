@@ -561,6 +561,10 @@
       "location": "📍 Vị trí",
       "message": "Tin nhắn"
     },
+     "messagePrefix": {
+      "you": "Bạn:",
+      "sender": "{{name}}:"
+    },
     "createModal": {
       "title": "Cuộc trò chuyện mới",
       "cancel": "Hủy",

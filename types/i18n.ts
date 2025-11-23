@@ -475,6 +475,10 @@ export interface TranslationKeys {
       location: string;
       message: string;
     };
+      messagePrefix: {
+      you: string;   
+      sender: string;   
+    };
     createModal: {
       title: string;
       cancel: string;

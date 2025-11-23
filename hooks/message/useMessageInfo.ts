@@ -64,6 +64,25 @@ interface PaginationInfo {
   hasMore: boolean;
 }
 
+interface GroupHistoryItem {
+  _id: string;
+  sender: {
+    _id: string;
+    clerkId: string;
+    full_name: string;
+    username: string;
+    avatar?: string;
+  };
+  content: string;
+  metadata: {
+    isSystemMessage: boolean;
+    action: string;
+    [key: string]: any;
+  };
+  created_at: string;
+}
+
+
 // ============================================
 // HOOK: useConversationMedia
 // ============================================
@@ -283,7 +302,93 @@ export const useSearchMessages = (conversationId: string) => {
     reset,
   };
 };
+export const useGroupHistory = (conversationId: string) => {
+  const [history, setHistory] = useState<GroupHistoryItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
+  const { getToken } = useAuth();
+  const API_BASE_URL = useMemo(() => 
+    process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000', []
+  );
+
+  const loadHistory = useCallback(async (reset = false) => {
+    if (!conversationId) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const currentPage = reset ? 1 : page;
+      const token = await getToken();
+      const url = `${API_BASE_URL}/api/conversations/${conversationId}/history?page=${currentPage}&limit=50`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load group history');
+      }
+
+      const messages = result.data?.systemMessages || [];
+      const pagination = result.data?.pagination;
+
+      if (reset) {
+        setHistory(messages);
+        setPage(2);
+      } else {
+        setHistory((prev) => [...prev, ...messages]);
+        setPage((prev) => prev + 1);
+      }
+
+      setHasMore(pagination?.hasMore || false);
+
+      console.log(`✅ Loaded ${messages.length} group history items`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load group history';
+      setError(errorMessage);
+      console.error('Error loading group history:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [conversationId, page, API_BASE_URL, getToken]);
+
+  const loadMore = useCallback(() => {
+    if (hasMore && !loading) {
+      loadHistory(false);
+    }
+  }, [hasMore, loading, loadHistory]);
+
+  const refresh = useCallback(() => {
+    setHistory([]);
+    setPage(1);
+    setHasMore(false);
+    loadHistory(true);
+  }, [loadHistory]);
+
+  return {
+    history,
+    loading,
+    hasMore,
+    error,
+    loadHistory: () => loadHistory(true),
+    loadMore,
+    refresh,
+  };
+};
 // ============================================
 // HOOK: useGroupMembers
 // ============================================
