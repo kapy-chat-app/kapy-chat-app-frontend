@@ -1,106 +1,104 @@
-// components/page/message/EncryptionInitProvider.tsx - ULTRA SIMPLE TEST
+// components/page/message/EncryptionInitProvider.tsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { useEffect, useRef } from 'react';
+import { nativeEncryptionService } from '@/lib/encryption/NativeEncryptionService';
+import { ActivityIndicator, View, Text } from 'react-native';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
-export function EncryptionInitProvider({ children }: { children: React.ReactNode }) {
+interface EncryptionContextType {
+  isReady: boolean;
+  loading: boolean;
+  error: string | null;
+}
+
+const EncryptionContext = createContext<EncryptionContextType>({
+  isReady: false,
+  loading: true,
+  error: null,
+});
+
+export const useEncryptionContext = () => useContext(EncryptionContext);
+
+export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [isReady, setIsReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { userId, getToken, isSignedIn } = useAuth();
-  const hasRun = useRef(false);
 
   useEffect(() => {
-    const testUpload = async () => {
-      // Skip if already ran
-      if (hasRun.current) {
-        console.log('⏭️ Already ran, skipping...');
-        return;
+    if (isSignedIn && userId) {
+      initializeEncryption();
+    } else {
+      // Not signed in yet, wait
+      setLoading(false);
+    }
+  }, [isSignedIn, userId]);
+
+  const initializeEncryption = async () => {
+    try {
+      console.log('🔐 [App Init] Initializing E2EE...');
+      setLoading(true);
+      setError(null);
+
+      // Initialize native encryption keys
+      const keys = await nativeEncryptionService.initializeKeys();
+      console.log('✅ [App Init] Native keys initialized');
+
+      const token = await getToken();
+      if (!token) {
+        throw new Error('Authentication token not available');
       }
 
-      // Wait for auth
-      if (!isSignedIn || !userId) {
-        console.log('⏳ Waiting for auth...', { isSignedIn, userId });
-        return;
-      }
-
-      hasRun.current = true;
-      console.log('');
-      console.log('='.repeat(60));
-      console.log('🧪 STARTING UPLOAD TEST');
-      console.log('='.repeat(60));
-
-      try {
-        // 1. Get token
-        console.log('1️⃣ Getting token...');
-        const token = await getToken();
-        if (!token) {
-          console.error('❌ No token!');
-          return;
-        }
-        console.log('✅ Token:', token.substring(0, 30) + '...');
-
-        // 2. Prepare data
-        const testKey = 'TEST_KEY_' + Date.now();
-        console.log('2️⃣ Test key:', testKey);
-
-        // 3. Make request
-        const url = `${API_BASE_URL}/api/keys/upload`;
-        console.log('3️⃣ Calling:', url);
-        console.log('3️⃣ Method: POST');
-        console.log('3️⃣ Headers:', {
+      // Upload key to server (idempotent)
+      console.log('📤 [App Init] Uploading key to server...');
+      const response = await fetch(`${API_BASE_URL}/api/keys/upload`, {
+        method: 'POST',
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token.substring(0, 20) + '...'
-        });
-        console.log('3️⃣ Body:', JSON.stringify({ publicKey: testKey }));
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ publicKey: keys.publicKey }),
+      });
 
-        console.log('');
-        console.log('🚀 SENDING REQUEST NOW...');
-        console.log('');
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ 
-            publicKey: testKey 
-          }),
-        });
-
-        console.log('');
-        console.log('📡 RESPONSE RECEIVED:');
-        console.log('Status:', response.status);
-        console.log('StatusText:', response.statusText);
-        console.log('OK:', response.ok);
-        
-        const text = await response.text();
-        console.log('Raw body:', text);
-
-        try {
-          const json = JSON.parse(text);
-          console.log('Parsed JSON:', JSON.stringify(json, null, 2));
-        } catch (e) {
-          console.log('⚠️ Not JSON');
-        }
-
-        console.log('');
-        console.log('='.repeat(60));
-        console.log('✅ TEST COMPLETE');
-        console.log('='.repeat(60));
-        console.log('');
-
-      } catch (error: any) {
-        console.log('');
-        console.log('='.repeat(60));
-        console.error('❌ ERROR:', error.message);
-        console.error('Stack:', error.stack);
-        console.log('='.repeat(60));
-        console.log('');
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to upload key');
       }
-    };
 
-    testUpload();
-  }, [isSignedIn, userId, getToken]);
+      setIsReady(true);
+      console.log('✅ [App Init] E2EE ready globally');
+    } catch (err: any) {
+      console.error('❌ [App Init] E2EE initialization failed:', err);
+      setError(err.message);
+      setIsReady(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  return <>{children}</>;
-}
+  // Show loading only ONCE at app start
+  if (loading && isSignedIn) {
+    return (
+      <View className="flex-1 justify-center items-center bg-gray-50 dark:bg-gray-900">
+        <ActivityIndicator size="large" color="#f97316" />
+        <Text className="mt-4 text-gray-600 dark:text-gray-400 text-center px-8">
+          🔐 Initializing encryption...
+        </Text>
+      </View>
+    );
+  }
+
+  // Error state (non-blocking, app can still work)
+  if (error) {
+    console.warn('⚠️ [App Init] E2EE error (non-blocking):', error);
+  }
+
+  return (
+    <EncryptionContext.Provider value={{ isReady, loading, error }}>
+      {children}
+    </EncryptionContext.Provider>
+  );
+};

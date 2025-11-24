@@ -1,5 +1,5 @@
 /* eslint-disable react/no-unescaped-entities */
-// app/(root)/ai-chat.tsx
+// app/(root)/ai-chat.tsx - BACKEND AI VERSION
 import Header from "@/components/shared/Header";
 import { useChatbot } from "@/hooks/ai/useChatbot";
 import { useEmotion } from "@/hooks/ai/useEmotion";
@@ -18,6 +18,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -31,18 +32,6 @@ interface MessageBubbleProps {
   getEmotionEmoji: (emotion?: string) => string;
   getEmotionColor: (emotion?: string) => string;
   translateEmotion: (emotion?: string) => string;
-}
-
-interface TypingIndicatorProps {
-  isDark: boolean;
-}
-
-interface SuggestionItemProps {
-  suggestion: string;
-  index: number;
-  isDark: boolean;
-  emotionColor: string;
-  onPress: () => void;
 }
 
 // ============================================
@@ -245,72 +234,6 @@ const TypingIndicator = memo(function TypingIndicator({ isDark }: { isDark: bool
   );
 });
 
-const SuggestionItem = memo(function SuggestionItem({
-  suggestion,
-  index,
-  isDark,
-  emotionColor,
-  onPress,
-}: SuggestionItemProps) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        delay: index * 100,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [index]);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }],
-      }}
-    >
-      <TouchableOpacity
-        onPress={onPress}
-        className={`p-4 rounded-2xl border-l-4 ${
-          isDark
-            ? "bg-gray-800 border-gray-700"
-            : "bg-white border-gray-200"
-        }`}
-        style={{
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 1 },
-          shadowOpacity: 0.05,
-          shadowRadius: 2,
-          elevation: 1,
-          borderLeftColor: emotionColor,
-        }}
-      >
-        <View className="flex-row items-start">
-          <Text className="text-base mr-2">💡</Text>
-          <Text
-            className={`flex-1 text-sm leading-5 ${
-              isDark ? "text-gray-300" : "text-gray-700"
-            }`}
-          >
-            {suggestion}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
-
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -324,16 +247,79 @@ export default function AIChatbotScreen() {
   const flatListRef = useRef<FlatList>(null);
 
   const [inputText, setInputText] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [recommendations, setRecommendations] = useState<string[]>([]);
   const [currentEmotion, setCurrentEmotion] = useState<string>("");
   const [emotionConfidence, setEmotionConfidence] = useState<number>(0);
+  const [recommendations, setRecommendations] = useState<string[]>([]);
 
   const hasLoadedRecommendations = useRef(false);
-  const hasAutoSentRecommendations = useRef(false);
 
-  const { messages, sendMessage, loading, typing, error } = useChatbot();
+  const { 
+    messages, 
+    sendMessage, 
+    loadHistory,
+    clearConversation,
+    loading, 
+    typing, 
+    error,
+    conversationId,
+    conversationTitle 
+  } = useChatbot(params.conversationId as string);
+
   const { getRecommendations, loading: emotionLoading } = useEmotion();
+
+  // ✅ Load recommendations from backend
+  const loadRecommendations = useCallback(async () => {
+    try {
+      const data = await getRecommendations();
+      
+      if (data?.recommendations) {
+        setRecommendations(data.recommendations);
+        
+        if (data.based_on?.dominant_pattern) {
+          setCurrentEmotion(data.based_on.dominant_pattern);
+        }
+        if (data.based_on?.confidence) {
+          setEmotionConfidence(data.based_on.confidence);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+    }
+  }, [getRecommendations]);
+
+  // Load history if conversation ID exists
+  useEffect(() => {
+    if (params.conversationId) {
+      loadHistory(params.conversationId as string);
+    }
+  }, [params.conversationId]);
+
+  // Load recommendations on mount
+  useEffect(() => {
+    if (!hasLoadedRecommendations.current) {
+      hasLoadedRecommendations.current = true;
+      loadRecommendations();
+    }
+  }, [loadRecommendations]);
+
+  // Handle params
+  useEffect(() => {
+    if (params.emotion) {
+      setCurrentEmotion(params.emotion as string);
+    }
+    if (params.confidence) {
+      setEmotionConfidence(parseFloat(params.confidence as string));
+    }
+  }, [params.emotion, params.confidence]);
+
+  // Auto scroll
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages.length]);
 
   // ✅ MEMOIZED FUNCTIONS
   const getEmotionEmoji = useCallback((emotion?: string) => {
@@ -365,176 +351,55 @@ export default function AIChatbotScreen() {
     return t(`aiChat.emotions.${emotion}` as any) || emotion;
   }, [t]);
 
-  const loadRecommendationsInternal = useCallback(async () => {
-    const data = await getRecommendations();
-    
-    if (data?.recommendations) {
-      setRecommendations(data.recommendations);
-      
-      if (data.based_on?.dominant_pattern) {
-        setCurrentEmotion(data.based_on.dominant_pattern);
-      }
-      if (data.based_on?.confidence) {
-        setEmotionConfidence(data.based_on.confidence);
-      }
-
-      return data.recommendations;
-    }
-    return [];
-  }, [getRecommendations]);
-
-  const handleSend = useCallback(async (customMessage?: string) => {
-    const message = customMessage || inputText.trim();
+  const handleSend = useCallback(async () => {
+    const message = inputText.trim();
     if (!message || loading) return;
 
-    if (!customMessage) {
-      setInputText("");
-    }
-    setShowSuggestions(false);
-
-    sendMessage(message, true).then(response => {
-      if (response?.suggestions && response.suggestions.length > 0) {
-        setRecommendations(response.suggestions);
-        setShowSuggestions(true);
-      }
-
-      if (response?.emotion) {
-        setCurrentEmotion(response.emotion);
-        setEmotionConfidence(response.confidence || 0.5);
-      }
-    });
+    setInputText("");
+    await sendMessage(message, true);
   }, [inputText, loading, sendMessage]);
-
-  const handleSuggestionPress = useCallback((suggestion: string) => {
-    setInputText(suggestion);
-    setShowSuggestions(false);
-  }, []);
-
-  // Send welcome message with recommendations
-  const sendWelcomeWithRecommendations = useCallback(async (recs: string[]) => {
-    if (hasAutoSentRecommendations.current || recs.length === 0) return;
-    
-    hasAutoSentRecommendations.current = true;
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const welcomeMessage = `${t('aiChat.welcome.intro')}\n\n${recs.map((r, i) => `${i + 1}. ${r}`).join('\n\n')}\n\n${t('aiChat.welcome.question')}`;
-    
-    await handleSend(welcomeMessage);
-  }, [handleSend, t]);
-
-  // Load recommendations once on mount
-  useEffect(() => {
-    if (!hasLoadedRecommendations.current) {
-      hasLoadedRecommendations.current = true;
-      
-      loadRecommendationsInternal().then(recs => {
-        if (params.hasRecommendations === 'true' && recs.length > 0) {
-          sendWelcomeWithRecommendations(recs);
-        }
-      });
-    }
-  }, [loadRecommendationsInternal, params.hasRecommendations, sendWelcomeWithRecommendations]);
-
-  // Handle params
-  useEffect(() => {
-    if (params.emotion) {
-      setCurrentEmotion(params.emotion as string);
-    }
-    if (params.confidence) {
-      setEmotionConfidence(parseFloat(params.confidence as string));
-    }
-  }, [params.emotion, params.confidence]);
-
-  // Auto scroll
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages.length]);
 
   const handleRefreshRecommendations = useCallback(async () => {
     hasLoadedRecommendations.current = false;
-    await loadRecommendationsInternal();
+    await loadRecommendations();
     hasLoadedRecommendations.current = true;
-  }, [loadRecommendationsInternal]);
+  }, [loadRecommendations]);
 
-  // ✅ MEMOIZED RENDER FUNCTIONS
-  const renderMessage = useCallback(({ item, index }: { item: any; index: number }) => {
-    return (
-      <MessageBubble 
-        item={item} 
-        index={index} 
-        isDark={isDark}
-        getEmotionEmoji={getEmotionEmoji}
-        getEmotionColor={getEmotionColor}
-        translateEmotion={translateEmotion}
-      />
+  const handleNewChat = useCallback(() => {
+    Alert.alert(
+      t('aiChat.newChat.confirm.title') || 'New Chat',
+      t('aiChat.newChat.confirm.message') || 'Start a new conversation?',
+      [
+        { text: t('common.cancel') || 'Cancel', style: 'cancel' },
+        { 
+          text: t('common.confirm') || 'Confirm',
+          onPress: () => clearConversation()
+        },
+      ]
     );
-  }, [isDark, getEmotionEmoji, getEmotionColor, translateEmotion]);
+  }, [clearConversation, t]);
+
+  // ✅ RENDER FUNCTIONS
+  const renderMessage = useCallback(
+    ({ item, index }: { item: any; index: number }) => {
+      return (
+        <MessageBubble
+          item={item}
+          index={index}
+          isDark={isDark}
+          getEmotionEmoji={getEmotionEmoji}
+          getEmotionColor={getEmotionColor}
+          translateEmotion={translateEmotion}
+        />
+      );
+    },
+    [isDark, getEmotionEmoji, getEmotionColor, translateEmotion]
+  );
 
   const renderTypingIndicator = useCallback(() => {
     if (!typing) return null;
     return <TypingIndicator isDark={isDark} />;
   }, [typing, isDark]);
-
-  const renderSuggestions = useCallback(() => {
-    if (!showSuggestions || recommendations.length === 0) return null;
-
-    return (
-      <View
-        className={`px-4 pb-3 border-t ${
-          isDark ? "border-gray-800 bg-gray-900/50" : "border-gray-100 bg-gray-50/80"
-        }`}
-      >
-        <View className="flex-row items-center justify-between mb-3 pt-3">
-          <View className="flex-row items-center">
-            <Text className="text-xl mr-2">{getEmotionEmoji(currentEmotion)}</Text>
-            <View>
-              <Text
-                className={`text-sm font-semibold ${
-                  isDark ? "text-gray-300" : "text-gray-700"
-                }`}
-              >
-                {t('aiChat.suggestions.title')}
-              </Text>
-              {currentEmotion && (
-                <Text
-                  className="text-xs capitalize"
-                  style={{ color: getEmotionColor(currentEmotion) }}
-                >
-                  {translateEmotion(currentEmotion)} · {t('aiChat.empty.confidence', { percent: (emotionConfidence * 100).toFixed(0) })}
-                </Text>
-              )}
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={() => setShowSuggestions(false)}
-            className="p-1"
-          >
-            <Ionicons
-              name="close-circle"
-              size={22}
-              color={isDark ? "#9CA3AF" : "#6B7280"}
-            />
-          </TouchableOpacity>
-        </View>
-        <View className="gap-2">
-          {recommendations.map((suggestion, index) => (
-            <SuggestionItem
-              key={`suggestion-${index}`}
-              suggestion={suggestion}
-              index={index}
-              isDark={isDark}
-              emotionColor={getEmotionColor(currentEmotion)}
-              onPress={() => handleSuggestionPress(suggestion)}
-            />
-          ))}
-        </View>
-      </View>
-    );
-  }, [showSuggestions, recommendations, currentEmotion, emotionConfidence, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, handleSuggestionPress, t]);
 
   const renderEmptyState = useCallback(() => (
     <View className="flex-1 justify-center items-center px-8">
@@ -567,7 +432,7 @@ export default function AIChatbotScreen() {
               className="text-base font-semibold capitalize"
               style={{ color: getEmotionColor(currentEmotion) }}
             >
-              {t('aiChat.empty.emotionStatus', { emotion: translateEmotion(currentEmotion) })}
+              {translateEmotion(currentEmotion)}
             </Text>
             <Text className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
               {t('aiChat.empty.confidence', { percent: (emotionConfidence * 100).toFixed(0) })}
@@ -591,12 +456,12 @@ export default function AIChatbotScreen() {
               isDark ? "text-gray-400" : "text-gray-600"
             }`}
           >
-            {t('aiChat.suggestions.startWith')}
+            💡 {t('aiChat.suggestions.startWith')}
           </Text>
-          {recommendations.slice(0, 4).map((rec, index) => (
+          {recommendations.slice(0, 3).map((rec, index) => (
             <TouchableOpacity
               key={`empty-rec-${index}`}
-              onPress={() => handleSuggestionPress(rec)}
+              onPress={() => setInputText(rec)}
               className={`p-4 rounded-2xl mb-3 border-l-4 ${
                 isDark
                   ? "bg-orange-900/20 border-orange-800/30"
@@ -607,18 +472,18 @@ export default function AIChatbotScreen() {
               }}
             >
               <Text
-                className={`text-sm font-medium ${
+                className={`text-sm ${
                   isDark ? "text-orange-400" : "text-orange-600"
                 }`}
               >
-                💡 {rec}
+                {rec}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       )}
     </View>
-  ), [currentEmotion, emotionConfidence, recommendations, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, handleSuggestionPress, t]);
+  ), [currentEmotion, emotionConfidence, recommendations, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, t]);
 
   const inputHasText = useMemo(() => inputText.trim().length > 0, [inputText]);
 
@@ -634,6 +499,16 @@ export default function AIChatbotScreen() {
             {translateEmotion(currentEmotion)}
           </Text>
         </View>
+      )}
+      
+      {conversationId && (
+        <TouchableOpacity onPress={handleNewChat} className="p-2">
+          <Ionicons
+            name="add-circle-outline"
+            size={24}
+            color={isDark ? "#F97316" : "#FF8C42"}
+          />
+        </TouchableOpacity>
       )}
       
       <TouchableOpacity 
@@ -652,7 +527,7 @@ export default function AIChatbotScreen() {
         )}
       </TouchableOpacity>
     </View>
-  ), [currentEmotion, isDark, emotionLoading, getEmotionEmoji, getEmotionColor, translateEmotion, handleRefreshRecommendations]);
+  ), [currentEmotion, conversationId, emotionLoading, isDark, getEmotionEmoji, getEmotionColor, translateEmotion, handleRefreshRecommendations, handleNewChat]);
 
   return (
     <SafeAreaView
@@ -660,7 +535,7 @@ export default function AIChatbotScreen() {
       edges={["top"]}
     >
       <Header
-        title={t('aiChat.title')}
+        title={conversationTitle || t('aiChat.title')}
         onBackPress={() => router.back()}
         rightComponent={headerRightComponent}
       />
@@ -694,8 +569,6 @@ export default function AIChatbotScreen() {
           )}
         </View>
 
-        {renderSuggestions()}
-
         <View
           className={`border-t px-4 py-3 ${
             isDark
@@ -704,32 +577,6 @@ export default function AIChatbotScreen() {
           }`}
         >
           <View className="flex-row items-end gap-2">
-            <TouchableOpacity
-              onPress={() => setShowSuggestions(!showSuggestions)}
-              className={`p-2.5 rounded-full ${
-                showSuggestions
-                  ? "bg-orange-500/10"
-                  : isDark
-                  ? "bg-gray-800"
-                  : "bg-gray-100"
-              }`}
-            >
-              <View className="relative">
-                <Ionicons
-                  name="bulb-outline"
-                  size={22}
-                  color={showSuggestions ? "#F97316" : "#9CA3AF"}
-                />
-                {recommendations.length > 0 && (
-                  <View className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 items-center justify-center">
-                    <Text className="text-white text-[8px] font-bold">
-                      {recommendations.length}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-
             <View
               className={`flex-1 rounded-3xl px-5 py-3 min-h-[44px] max-h-[120px] justify-center ${
                 isDark
@@ -753,7 +600,7 @@ export default function AIChatbotScreen() {
             </View>
 
             <TouchableOpacity
-              onPress={() => handleSend()}
+              onPress={handleSend}
               disabled={!inputHasText || loading}
               className={`w-11 h-11 rounded-full items-center justify-center ${
                 inputHasText && !loading

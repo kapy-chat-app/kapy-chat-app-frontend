@@ -493,10 +493,15 @@ export const useMessages = (
         );
 
         if (cachedMessages.length > 0) {
-          // ✅ FIXED: Không reverse - SQL đã sort DESC rồi
-          const msgs = cachedMessages.map(fromCachedMessage);
+          // ✅ FIX: Reverse để có thứ tự đúng (cũ -> mới)
+          // Cache service trả về DESC (mới nhất trước)
+          // Nhưng UI cần ASC (cũ nhất trước)
+          const msgs = cachedMessages
+            .map(fromCachedMessage)
+            .reverse(); // ✅ CRITICAL: Reverse order
+          
           setMessages(msgs);
-          console.log(`✅ Loaded ${msgs.length} messages from cache (instant)`);
+          console.log(`✅ Loaded ${msgs.length} messages from cache (instant, reversed)`);
           setLoading(false);
         } else {
           setLoading(true);
@@ -639,25 +644,35 @@ export const useMessages = (
       }
 
       // =============================================
-      // STEP 5: Update UI
+      // STEP 5: Update UI - ✅ FIXED ORDER
       // =============================================
       if (pageNum === 1 && !append) {
-        // Load lại từ cache
+        // ✅ Load lại từ cache và reverse
         const allCached = await messageCacheService.getMessages(
           conversationId, 
           MESSAGES_PER_PAGE
         );
-        // ✅ FIXED: Không reverse
-        const allMessages = allCached.map(fromCachedMessage);
+        
+        // ✅ CRITICAL: Reverse để có thứ tự đúng
+        const allMessages = allCached
+          .map(fromCachedMessage)
+          .reverse(); // ✅ OLD -> NEW order
+        
         setMessages(allMessages);
+        console.log(`✅ Set ${allMessages.length} messages (reversed order)`);
       } else if (append) {
-        setMessages(prev => [...decryptedMessages, ...prev]);
+        // ✅ Khi load more (scroll up), prepend tin cũ hơn
+        // Server trả về DESC (mới -> cũ)
+        // Cần reverse để prepend đúng thứ tự
+        const reversedDecrypted = decryptedMessages.reverse();
+        setMessages(prev => [...reversedDecrypted, ...prev]);
+        console.log(`✅ Prepended ${reversedDecrypted.length} older messages`);
       } else {
         setMessages(decryptedMessages);
       }
 
       setHasMore(pagination?.hasNext || false);
-      console.log(`✅ Sync complete`);
+      console.log(`✅ Sync complete. Has more: ${pagination?.hasNext}`);
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to fetch messages";

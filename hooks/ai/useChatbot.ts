@@ -1,179 +1,220 @@
-
-// hooks/chatbot/useChatbot.ts
+// hooks/ai/useChatbot.ts - BACKEND AI VERSION
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useSocket } from '@/hooks/message/useSocket';
+import AIAPIService, { AIChatMessage } from '@/lib/ai/AiAPIService';
 import { useAuth } from '@clerk/clerk-expo';
-import axios from 'axios';
-import { useCallback, useEffect, useState } from 'react';
-import { useSocket } from '../message/useSocket';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
+  language?: 'vi' | 'en' | 'zh';
   emotion?: string;
-}
-
-export interface ChatResponse {
-  message: string;
-  emotion_detected?: string;
-  suggestions?: string[];
   timestamp: Date;
-  conversation_id: string;
 }
 
-export const useChatbot = () => {
-  const { getToken, userId } = useAuth();
+interface UseChatbotReturn {
+  messages: ChatMessage[];
+  sendMessage: (message: string, includeEmotion?: boolean) => Promise<any>;
+  loadHistory: (conversationId: string) => Promise<void>;
+  clearConversation: () => void;
+  loading: boolean;
+  typing: boolean;
+  error: string | null;
+  conversationId: string | null;
+  conversationTitle: string | null;
+}
+
+export const useChatbot = (initialConversationId?: string): UseChatbotReturn => {
+  const { getToken } = useAuth();
+  const { language } = useLanguage();
   const { socket } = useSocket();
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId || null
+  );
+  const [conversationTitle, setConversationTitle] = useState<string | null>(null);
 
-  // Listen to socket events
+  const isLoadingHistory = useRef(false);
+
+  // ============================================
+  // SOCKET LISTENERS
+  // ============================================
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('aiChatResponse', (data: ChatResponse) => {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.message,
-        timestamp: data.timestamp,
-        emotion: data.emotion_detected,
-      }]);
-      setTyping(false);
-      setLoading(false);
+    // AI typing indicator
+    socket.on('aiTyping', (data: any) => {
+      if (data.conversation_id === conversationId) {
+        setTyping(data.is_typing);
+      }
     });
 
-    socket.on('aiTyping', (data: { is_typing: boolean }) => {
-      setTyping(data.is_typing);
+    // AI response received
+    socket.on('aiChatResponse', (data: any) => {
+      if (data.conversation_id === conversationId) {
+        const aiMessage: ChatMessage = {
+          role: 'assistant',
+          content: data.message,
+          language: data.language,
+          timestamp: new Date(data.timestamp),
+        };
+
+        setMessages(prev => [...prev, aiMessage]);
+        setTyping(false);
+        setLoading(false);
+      }
     });
 
-    socket.on('aiChatError', (data: { error: string }) => {
+    // AI error
+    socket.on('aiChatError', (data: any) => {
       setError(data.error);
-      setLoading(false);
       setTyping(false);
+      setLoading(false);
     });
 
     return () => {
-      socket.off('aiChatResponse');
       socket.off('aiTyping');
+      socket.off('aiChatResponse');
       socket.off('aiChatError');
     };
-  }, [socket]);
+  }, [socket, conversationId]);
 
-  const sendMessage = useCallback(async (
-    message: string,
-    includeEmotionContext: boolean = true
-  ): Promise<ChatResponse | null> => {
-    try {
-      setLoading(true);
-      setError(null);
+  // ============================================
+  // SEND MESSAGE
+  // ============================================
+  const sendMessage = useCallback(
+    async (message: string, includeEmotion: boolean = true) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      // Add user message to local state immediately
-      const userMessage: ChatMessage = {
-        role: 'user',
-        content: message,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, userMessage]);
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
 
-      // Emit socket event
-      if (socket) {
-        socket.emit('aiChatMessage', {
-          user_id: userId,
+        // Add user message immediately
+        const userMessage: ChatMessage = {
+          role: 'user',
+          content: message,
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+
+        // Get current language
+        const currentLang =
+          language === 'vi' ? 'vi' : language === 'zh' ? 'zh' : 'en';
+
+        // Call API
+        const response = await AIAPIService.sendMessage(
+          token,
           message,
-          conversation_id: conversationId,
-          include_emotion: includeEmotionContext,
-        });
-      }
+          conversationId || undefined,
+          currentLang
+        );
 
-      const token = await getToken();
-      const response = await axios.post(
-        `${API_URL}/api/chatbot/message`,
-        {
-          message,
-          conversationId,
-          includeEmotionContext,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+        if (response.success && response.data) {
+          // Update conversation ID nếu là chat mới
+          if (!conversationId) {
+            setConversationId(response.data.conversation_id);
+          }
+
+          // Update title nếu có
+          if (response.data.title) {
+            setConversationTitle(response.data.title);
+          }
+
+          // Nếu không có socket, add response trực tiếp
+          if (!socket) {
+            const aiMessage: ChatMessage = {
+              role: 'assistant',
+              content: response.data.message,
+              language: response.data.language,
+              emotion: response.data.emotion_detected,
+              timestamp: new Date(response.data.timestamp),
+            };
+            setMessages(prev => [...prev, aiMessage]);
+          }
+
+          return {
+            message: response.data.message,
+            emotion: response.data.emotion_detected,
+            suggestions: [], // Backend không còn trả suggestions trong response
+          };
+        } else {
+          throw new Error(response.error || 'Failed to send message');
         }
-      );
-
-      if (response.data.success) {
-        const data = response.data.data;
-        
-        // Set conversation ID for future messages
-        if (!conversationId) {
-          setConversationId(data.conversation_id);
-        }
-
-        // Emit response ready
-        if (socket) {
-          socket.emit('aiResponseReady', {
-            user_id: userId,
-            conversation_id: data.conversation_id,
-            response: data.message,
-            emotion_detected: data.emotion_detected,
-            suggestions: data.suggestions,
-          });
-        }
-
-        return data;
-      } else {
-        setError(response.data.error);
+      } catch (err: any) {
+        const errorMessage = err.message || 'Failed to send message';
+        setError(errorMessage);
+        console.error('❌ Send message error:', err);
+        return null;
+      } finally {
         setLoading(false);
-        return null;
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to send message');
-      setLoading(false);
-      return null;
-    }
-  }, [getToken, socket, userId, conversationId]);
+    },
+    [getToken, language, conversationId, socket]
+  );
 
-  const loadHistory = useCallback(async (
-    convId: string,
-    page: number = 1
-  ) => {
-    try {
-      setLoading(true);
-      setError(null);
+  // ============================================
+  // LOAD HISTORY
+  // ============================================
+  const loadHistory = useCallback(
+    async (convId: string) => {
+      if (isLoadingHistory.current) return;
 
-      const token = await getToken();
-      const response = await axios.get(
-        `${API_URL}/api/chatbot/history?conversationId=${convId}&page=${page}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      try {
+        isLoadingHistory.current = true;
+        setLoading(true);
+        setError(null);
+
+        const token = await getToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await AIAPIService.getChatHistory(token, convId);
+
+        if (response.success && response.data) {
+          const historyMessages: ChatMessage[] = response.data.messages.map(
+            (msg: AIChatMessage) => ({
+              role: msg.role,
+              content: msg.content,
+              language: msg.language,
+              emotion: msg.emotion,
+              timestamp: new Date(msg.timestamp),
+            })
+          );
+
+          setMessages(historyMessages);
+          setConversationId(convId);
+          
+          if (response.data.title) {
+            setConversationTitle(response.data.title);
+          }
+        } else {
+          throw new Error(response.error || 'Failed to load history');
         }
-      );
-
-      if (response.data.success) {
-        setMessages(response.data.data.messages);
-        setConversationId(convId);
-        return response.data.data;
-      } else {
-        setError(response.data.error);
-        return null;
+      } catch (err: any) {
+        setError(err.message || 'Failed to load history');
+        console.error('❌ Load history error:', err);
+      } finally {
+        setLoading(false);
+        isLoadingHistory.current = false;
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load history');
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [getToken]);
+    },
+    [getToken]
+  );
 
+  // ============================================
+  // CLEAR CONVERSATION
+  // ============================================
   const clearConversation = useCallback(() => {
     setMessages([]);
     setConversationId(null);
+    setConversationTitle(null);
     setError(null);
   }, []);
 
@@ -186,5 +227,6 @@ export const useChatbot = () => {
     typing,
     error,
     conversationId,
+    conversationTitle,
   };
 };

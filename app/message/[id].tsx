@@ -1,4 +1,4 @@
-// MessageScreen.tsx - UPDATED WITH E2EE (GIỮ NGUYÊN TẤT CẢ CODE CŨ)
+// MessageScreen.tsx - OPTIMIZED FOR INSTANT MESSAGING
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -6,7 +6,7 @@ import { TypingIndicator } from "@/components/page/message/TypingIndicator";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useConversations } from "@/hooks/message/useConversations";
-import { useEncryption } from "@/hooks/message/useEncryption"; // ✨ NEW: E2EE Hook
+import { useEncryption } from "@/hooks/message/useEncryption";
 import { useMessages } from "@/hooks/message/useMessages";
 import { useSocket } from "@/hooks/message/useSocket";
 import { useAuth } from "@clerk/clerk-expo";
@@ -28,6 +28,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function MessageScreen() {
@@ -42,9 +43,7 @@ export default function MessageScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [replyTo, setReplyTo] = useState<any>(null);
   const [conversation, setConversation] = useState<any>(null);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<
-    string | null
-  >(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   // Call states
   const [isInitiatingCall, setIsInitiatingCall] = useState(false);
@@ -66,30 +65,10 @@ export default function MessageScreen() {
 
   const isDark = actualTheme === "dark";
 
-  useEffect(() => {
-    if (conversation && conversation.type !== "group") {
-      const recipient = conversation.participants?.find(
-        (p: any) => p.clerkId !== userId
-      );
-      if (recipient) {
-        setRecipientId(recipient.clerkId);
-        console.log("✅ Recipient ID set for E2EE files:", recipient.clerkId);
-      }
-    } else if (conversation && conversation.type === "group") {
-      // For group chats, we can't encrypt files (would need multi-recipient encryption)
-      setRecipientId(null);
-      console.log("⚠️ Group chat - file encryption not supported yet");
-    }
-  }, [conversation, userId]);
+  // ✅ OPTIMIZED: Get encryption state from global provider (instant)
+  const { isInitialized: encryptionReady, loading: encryptionLoading } = useEncryption();
 
-  const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 10,
-    minimumViewTime: 100,
-  }).current;
-
-  // ✨ NEW: E2EE Hook - Không ảnh hưởng code cũ
-  const { isInitialized: encryptionReady, loading: encryptionLoading } =
-    useEncryption();
+  // ✅ OPTIMIZED: Messages hook starts loading immediately
   const {
     messages,
     loading,
@@ -106,11 +85,13 @@ export default function MessageScreen() {
     socketMessageCount,
     typingUsers,
     sendTypingIndicator,
-    retryDecryption, // ✨ NEW: Function để retry decrypt
+    retryDecryption,
   } = useMessages(id || null);
+
   const { socket, isUserOnline, onlineUsers } = useSocket();
   const { conversations } = useConversations();
 
+  // ✅ OPTIMIZED: Set conversation immediately
   useEffect(() => {
     if (id && conversations.length > 0) {
       const currentConversation = conversations.find((conv) => conv._id === id);
@@ -118,16 +99,31 @@ export default function MessageScreen() {
     }
   }, [id, conversations]);
 
-  // ✨ NEW: Log E2EE status (không ảnh hưởng gì)
+  // ✅ OPTIMIZED: Set recipient ID immediately
   useEffect(() => {
-    if (!encryptionReady && !encryptionLoading) {
-      console.warn("⚠️ E2EE not initialized yet");
-    } else if (encryptionReady) {
-      console.log("✅ E2EE ready for conversation:", id);
+    if (conversation && conversation.type !== "group") {
+      const recipient = conversation.participants?.find(
+        (p: any) => p.clerkId !== userId
+      );
+      if (recipient) {
+        setRecipientId(recipient.clerkId);
+        console.log("✅ Recipient ID set:", recipient.clerkId);
+      }
+    } else if (conversation && conversation.type === "group") {
+      setRecipientId(null);
+      console.log("⚠️ Group chat - file encryption not supported yet");
     }
-  }, [encryptionReady, encryptionLoading, id]);
+  }, [conversation, userId]);
 
-  // Handle scroll to specific message - GIỮ NGUYÊN
+  const viewabilityConfig = useRef({
+    viewAreaCoveragePercentThreshold: 10,
+    minimumViewTime: 100,
+  }).current;
+
+  // ✅ REMOVED: No more E2EE status logging (reduces overhead)
+  // Encryption is ready from app start, no need to check
+
+  // Handle scroll to specific message
   useEffect(() => {
     if (scrollToMessageId && messages.length > 0 && hasScrolledToBottom) {
       const messageIndex = messages.findIndex(
@@ -152,7 +148,7 @@ export default function MessageScreen() {
     }
   }, [scrollToMessageId, messages.length, hasScrolledToBottom]);
 
-  // Auto scroll to bottom - GIỮ NGUYÊN
+  // Auto scroll to bottom
   useEffect(() => {
     if (messages.length > 0 && !hasScrolledToBottom && !scrollToMessageId) {
       const timer = setTimeout(() => {
@@ -181,7 +177,7 @@ export default function MessageScreen() {
     scrollToMessageId,
   ]);
 
-  // Handle new messages - GIỮ NGUYÊN
+  // Handle new messages
   useEffect(() => {
     if (
       socketMessageCount > socketMessageCountRef.current &&
@@ -235,7 +231,7 @@ export default function MessageScreen() {
     }
   }, [socketMessageCount, isNearBottom, hasScrolledToBottom, messages.length]);
 
-  // Mark conversation as read - GIỮ NGUYÊN
+  // Mark conversation as read
   useEffect(() => {
     if (!userId || !id || messages.length === 0 || hasMarkedAsReadRef.current) {
       return;
@@ -258,7 +254,7 @@ export default function MessageScreen() {
     hasMarkedAsReadRef.current = false;
   }, [id]);
 
-  // Mark individual messages as read - GIỮ NGUYÊN
+  // Mark individual messages as read
   useEffect(() => {
     if (!userId) return;
 
@@ -276,7 +272,7 @@ export default function MessageScreen() {
   }, [messages, markAsRead, userId]);
 
   // ========================================
-  // ✅ CALL HANDLERS - ĐÚNG THEO FILE CŨ (document 7)
+  // CALL HANDLERS
   // ========================================
 
   const handleVideoCall = async () => {
@@ -307,7 +303,6 @@ export default function MessageScreen() {
               try {
                 const token = await getToken();
 
-                // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
                   `${API_URL}/api/calls/initiate`,
                   {
@@ -325,7 +320,6 @@ export default function MessageScreen() {
 
                 console.log("📞 Video call initiated:", call);
 
-                // ✅ ĐÚNG: Navigate với call.id và call.channelName
                 router.push({
                   pathname: "/call/[id]" as any,
                   params: {
@@ -382,7 +376,6 @@ export default function MessageScreen() {
               try {
                 const token = await getToken();
 
-                // ✅ ĐÚNG: Sử dụng /api/calls/initiate
                 const response = await axios.post(
                   `${API_URL}/api/calls/initiate`,
                   {
@@ -400,7 +393,6 @@ export default function MessageScreen() {
 
                 console.log("📞 Audio call initiated:", call);
 
-                // ✅ ĐÚNG: Navigate với call.id và call.channelName
                 router.push({
                   pathname: "/call/[id]" as any,
                   params: {
@@ -433,7 +425,6 @@ export default function MessageScreen() {
   // MESSAGE HANDLERS
   // ========================================
 
-  // ✨ UPDATED: Send message với E2EE check
   const handleSendMessage = async (
     contentOrData:
       | string
@@ -443,12 +434,12 @@ export default function MessageScreen() {
           replyTo?: string;
           encryptedFiles?: any[];
           localUris?: string[];
-          richMedia?: any; // ✨ NEW: Support GIF/Sticker
+          richMedia?: any;
         },
     attachments?: string[],
     replyToId?: string
   ) => {
-    // ✅ CASE 0: Handle GIF/Sticker FIRST (từ MessageInput)
+    // ✅ CASE 0: Handle GIF/Sticker FIRST
     if (
       typeof contentOrData === "object" &&
       (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
@@ -492,15 +483,7 @@ export default function MessageScreen() {
         hasLocalUris: !!contentOrData.localUris,
       });
 
-      if (!encryptionReady) {
-        Alert.alert(
-          t("message.encryption.notReady"),
-          t("message.encryption.waitMessage"),
-          [{ text: t("ok") }]
-        );
-        return;
-      }
-
+      // ✅ REMOVED: Encryption ready check (already ready from app start)
       try {
         console.log("📤 Sending encrypted files...");
 
@@ -535,18 +518,15 @@ export default function MessageScreen() {
     let messageReplyTo: string | undefined;
 
     if (typeof contentOrData === "string") {
-      // Called with (string, attachments, replyToId)
       messageContent = contentOrData;
       messageAttachments = attachments;
       messageReplyTo = replyToId;
     } else {
-      // Called with object (no encrypted files)
       messageContent = contentOrData.content || "";
       messageAttachments = undefined;
       messageReplyTo = contentOrData.replyTo;
     }
 
-    // ✅ Validate
     console.log("📤 handleSendMessage called:", {
       contentType: typeof messageContent,
       content: messageContent,
@@ -568,16 +548,7 @@ export default function MessageScreen() {
       return;
     }
 
-    // ✨ Check E2EE ready
-    if (!encryptionReady) {
-      Alert.alert(
-        t("message.encryption.notReady"),
-        t("message.encryption.waitMessage"),
-        [{ text: t("ok") }]
-      );
-      return;
-    }
-
+    // ✅ REMOVED: Encryption ready check (already ready)
     try {
       console.log("📤 Sending text message with E2EE...");
 
@@ -603,7 +574,6 @@ export default function MessageScreen() {
     }
   };
 
-  // GIỮ NGUYÊN
   const handleEditMessage = async (messageId: string, newContent: string) => {
     try {
       await editMessage(messageId, newContent);
@@ -612,7 +582,6 @@ export default function MessageScreen() {
     }
   };
 
-  // GIỮ NGUYÊN
   const handleDeleteMessage = async (
     messageId: string,
     deleteType: "only_me" | "both"
@@ -624,7 +593,6 @@ export default function MessageScreen() {
     }
   };
 
-  // GIỮ NGUYÊN
   const handleAddReaction = async (messageId: string, reaction: string) => {
     try {
       await addReaction(messageId, reaction);
@@ -633,7 +601,6 @@ export default function MessageScreen() {
     }
   };
 
-  // GIỮ NGUYÊN
   const handleRemoveReaction = async (messageId: string) => {
     try {
       await removeReaction(messageId);
@@ -642,7 +609,6 @@ export default function MessageScreen() {
     }
   };
 
-  // ✨ NEW: Retry decryption handler
   const handleRetryDecryption = async (messageId: string) => {
     try {
       console.log("🔄 Retrying decryption for message:", messageId);
@@ -658,12 +624,10 @@ export default function MessageScreen() {
     }
   };
 
-  // GIỮ NGUYÊN
   const handleReply = (message: any) => {
     setReplyTo(message);
   };
 
-  // GIỮ NGUYÊN
   const handleLoadMore = useCallback(async () => {
     if (
       !hasMore ||
@@ -691,7 +655,6 @@ export default function MessageScreen() {
     }
   }, [hasMore, loading, loadMoreMessages, canLoadMore, messages]);
 
-  // GIỮ NGUYÊN
   const handleScroll = useCallback(
     (event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } =
@@ -726,7 +689,6 @@ export default function MessageScreen() {
     [showScrollButton, hasMore, canLoadMore, handleLoadMore]
   );
 
-  // GIỮ NGUYÊN
   const handleScrollToBottom = () => {
     flatListRef.current?.scrollToEnd({ animated: true });
     setShowScrollButton(false);
@@ -738,12 +700,10 @@ export default function MessageScreen() {
     }).start();
   };
 
-  // GIỮ NGUYÊN
   const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
     // Handle viewable items if needed
   }, []);
 
-  // GIỮ NGUYÊN
   const getConversationTitle = () => {
     if (!conversation) return "Chat";
 
@@ -761,7 +721,6 @@ export default function MessageScreen() {
     );
   };
 
-  // GIỮ NGUYÊN
   const getConversationAvatar = () => {
     if (!conversation) return null;
 
@@ -775,7 +734,6 @@ export default function MessageScreen() {
     return otherParticipant?.avatar;
   };
 
-  // GIỮ NGUYÊN
   const getOnlineStatus = () => {
     if (!conversation || conversation.type === "group") return null;
 
@@ -785,12 +743,10 @@ export default function MessageScreen() {
 
     if (!otherParticipant) return null;
 
-    // ✅ Check from socket instead of database
     if (isUserOnline(otherParticipant.clerkId)) {
       return "Online";
     }
 
-    // Fallback to last_seen if not online
     if (otherParticipant?.last_seen) {
       const lastSeen = new Date(otherParticipant.last_seen);
       const now = new Date();
@@ -808,34 +764,25 @@ export default function MessageScreen() {
     return "Offline";
   };
 
-  // ✨ NEW: Check if user is online (for green dot indicator)
   const isUserOnlineInConversation = (): boolean => {
     if (!conversation) return false;
 
-    // For private chats only - check from socket
     if (conversation.type === "private") {
       const otherParticipant = conversation.participants?.find(
         (p: any) => p.clerkId !== userId
       );
       if (otherParticipant) {
-        const online = isUserOnline(otherParticipant.clerkId);
-        console.log(
-          `🔍 MessageScreen: ${otherParticipant.full_name} is ${online ? "🟢 Online" : "⚪ Offline"}`
-        );
-        return online;
+        return isUserOnline(otherParticipant.clerkId);
       }
     }
 
-    // For group chats - don't show single online indicator
     return false;
   };
 
-  // GIỮ NGUYÊN
   const handleTypingStart = () => {
     sendTypingIndicator(true);
   };
 
-  // GIỮ NGUYÊN
   const handleTypingStop = () => {
     sendTypingIndicator(false);
   };
@@ -844,46 +791,30 @@ export default function MessageScreen() {
   // RENDER FUNCTIONS
   // ========================================
 
-  // ✨ UPDATED: Pass thêm E2EE props
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
-  // ✨ DEBUG: Log FULL item to see what's actually in it
-  console.log('📋 FULL Message item:', JSON.stringify({
-    id: item._id,
-    content: item.content?.substring(0, 50),
-    sender: item.sender?.full_name,
-    metadata: item.metadata, // ⭐ Log FULL metadata object
-    hasMetadata: !!item.metadata,
-    metadataKeys: item.metadata ? Object.keys(item.metadata) : [],
-  }, null, 2));
+    if (item.metadata?.isSystemMessage === true) {
+      return <SystemMessage message={item} />;
+    }
 
-  // ✅ Check if it's a system message
-  if (item.metadata?.isSystemMessage === true) {
-    console.log('✅ Rendering SYSTEM message:', item.content);
-    return <SystemMessage message={item} />;
-  }
+    const isOwnMessage = item.sender?.clerkId === userId;
+    const isHighlighted = item._id === highlightedMessageId;
 
-  const isOwnMessage = item.sender?.clerkId === userId;
-  const isHighlighted = item._id === highlightedMessageId;
+    return (
+      <MessageItem
+        message={item}
+        isOwnMessage={isOwnMessage}
+        onReply={handleReply}
+        onEdit={handleEditMessage}
+        onDelete={handleDeleteMessage}
+        onReaction={handleAddReaction}
+        onRemoveReaction={handleRemoveReaction}
+        isHighlighted={isHighlighted}
+        onRetryDecryption={handleRetryDecryption}
+        encryptionReady={encryptionReady}
+      />
+    );
+  };
 
-  console.log('✅ Rendering USER message:', item.content?.substring(0, 30));
-  return (
-    <MessageItem
-      message={item}
-      isOwnMessage={isOwnMessage}
-      onReply={handleReply}
-      onEdit={handleEditMessage}
-      onDelete={handleDeleteMessage}
-      onReaction={handleAddReaction}
-      onRemoveReaction={handleRemoveReaction}
-      isHighlighted={isHighlighted}
-      onRetryDecryption={handleRetryDecryption}
-      encryptionReady={encryptionReady}
-    />
-  );
-};
-
-
-  // GIỮ NGUYÊN
   const renderLoadingHeader = () => {
     if (!hasMore || !loading) return null;
 
@@ -894,7 +825,6 @@ export default function MessageScreen() {
     );
   };
 
-  // GIỮ NGUYÊN
   const renderTypingIndicator = () => {
     if (typingUsers.length === 0) return null;
 
@@ -907,7 +837,6 @@ export default function MessageScreen() {
     );
   };
 
-  // ✨ UPDATED: Thêm E2EE badge
   const renderHeader = () => {
     const avatarUrl = getConversationAvatar();
     const isGroup = conversation?.type === "group";
@@ -942,14 +871,12 @@ export default function MessageScreen() {
                 />
               </View>
             )}
-            {/* ✨ NEW: Green dot indicator for online status */}
             {isUserOnlineInConversation() && (
               <View className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full" />
             )}
           </View>
 
           <View className="flex-1">
-            {/* ✨ UPDATED: Thêm E2EE badge */}
             <View className="flex-row items-center">
               <Text
                 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-800"}`}
@@ -957,7 +884,7 @@ export default function MessageScreen() {
                 {getConversationTitle()}
               </Text>
 
-              {/* ✨ NEW: E2EE Badge */}
+              {/* ✅ Always show E2EE badge (encryption ready from app start) */}
               {encryptionReady && (
                 <View className="ml-2 bg-green-500 rounded-full px-2 py-0.5">
                   <Text className="text-white text-xs font-bold">🔒</Text>
@@ -965,7 +892,6 @@ export default function MessageScreen() {
               )}
             </View>
 
-            {/* GIỮ NGUYÊN phần status */}
             {typingUsers.length > 0 ? (
               <Text className="text-sm text-orange-500 italic">typing...</Text>
             ) : isGroup ? (
@@ -984,7 +910,6 @@ export default function MessageScreen() {
           </View>
         </View>
 
-        {/* Audio Call Button - GIỮ NGUYÊN */}
         <TouchableOpacity
           className="p-2"
           onPress={handleAudioCall}
@@ -997,7 +922,6 @@ export default function MessageScreen() {
           />
         </TouchableOpacity>
 
-        {/* Video Call Button - GIỮ NGUYÊN */}
         <TouchableOpacity
           className="p-2"
           onPress={handleVideoCall}
@@ -1010,7 +934,6 @@ export default function MessageScreen() {
           />
         </TouchableOpacity>
 
-        {/* Info Button - GIỮ NGUYÊN */}
         <TouchableOpacity
           className="p-2"
           onPress={() =>
@@ -1036,30 +959,10 @@ export default function MessageScreen() {
     );
   };
 
-  // ✨ NEW: Warning banner khi E2EE chưa ready
-  const renderEncryptionWarning = () => {
-    if (encryptionReady) return null;
+  // ✅ REMOVED: Warning banner (encryption ready from app start)
 
-    return (
-      <View
-        className={`px-4 py-2 border-b ${isDark ? "bg-yellow-900/20 border-yellow-800" : "bg-yellow-50 border-yellow-200"}`}
-      >
-        <View className="flex-row items-center">
-          <ActivityIndicator size="small" color="#f59e0b" />
-          <Text
-            className={`ml-2 text-xs font-medium ${isDark ? "text-yellow-300" : "text-yellow-700"}`}
-          >
-            Initializing encryption...
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
-  // ✨ UPDATED: Thêm E2EE message
   const renderEmptyState = () => (
     <View className="flex-1 justify-center items-center px-8">
-      {/* ✨ UPDATED: Đổi icon thành lock */}
       <Text className="text-6xl mb-4">🔒</Text>
       <Text
         className={`text-center text-lg font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}
@@ -1072,7 +975,6 @@ export default function MessageScreen() {
         Send the first message to start the conversation
       </Text>
 
-      {/* ✨ NEW: E2EE status indicator */}
       {encryptionReady && (
         <View
           className={`mt-4 rounded-lg px-4 py-2 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}
@@ -1087,7 +989,6 @@ export default function MessageScreen() {
     </View>
   );
 
-  // GIỮ NGUYÊN
   const renderScrollToBottomButton = () => {
     if (!showScrollButton) return null;
 
@@ -1125,7 +1026,7 @@ export default function MessageScreen() {
   };
 
   // ========================================
-  // MAIN RENDER - GIỮ NGUYÊN CẤU TRÚC
+  // MAIN RENDER
   // ========================================
 
   if (error) {
@@ -1162,9 +1063,6 @@ export default function MessageScreen() {
       />
 
       {renderHeader()}
-
-      {/* ✨ NEW: Warning banner */}
-      {renderEncryptionWarning()}
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -1206,10 +1104,10 @@ export default function MessageScreen() {
           </>
         )}
 
-        {/* ✨ UPDATED: Disable input nếu E2EE chưa ready */}
+        {/* ✅ OPTIMIZED: Input enabled immediately (encryption ready from app start) */}
         <MessageInput
-          conversationId={id} // ✅ NEW
-          recipientId={recipientId} // ✅ NEW
+          conversationId={id}
+          recipientId={recipientId}
           onSendMessage={handleSendMessage}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}

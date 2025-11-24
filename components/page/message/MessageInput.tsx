@@ -1,10 +1,10 @@
-// components/page/message/MessageInput.tsx (UPDATED - Simplified encryption)
+// components/page/message/MessageInput.tsx - OPTIMIZED SEND SPEED
 /* eslint-disable import/namespace */
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,10 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { GiphyPicker } from "./GiphyPicker";
 import type { RichMediaDTO } from "@/hooks/message/useGiphy";
+import { useOnDeviceAI } from "@/hooks/ai/useOnDeviceAI";
+import axios from "axios";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface AttachmentPreview {
   id: string;
@@ -41,6 +45,24 @@ interface MessageInputProps {
   onCancelReply?: () => void;
   onTyping?: (isTyping: boolean) => void;
   disabled?: boolean;
+}
+
+// ============================================
+// DEBOUNCE HELPER
+// ============================================
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
@@ -64,8 +86,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [totalFiles, setTotalFiles] = useState(0);
   
+  // Emotion analysis state
+  const [emotionAnalysis, setEmotionAnalysis] = useState<any>(null);
+  const [analyzingImage, setAnalyzingImage] = useState(false);
+  
   const { actualTheme } = useTheme();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const isDark = actualTheme === "dark";
   
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -80,6 +106,47 @@ const MessageInput: React.FC<MessageInputProps> = ({
   
   const { getToken } = useAuth();
 
+  // AI Hook
+  const {
+    isReady: aiReady,
+    loading: aiLoading,
+    analyzeTextMessage,
+    checkImageToxicity,
+  } = useOnDeviceAI();
+
+  // ============================================
+  // ✅ Analyze text while typing - INCREASED DEBOUNCE
+  // ============================================
+  const analyzeWhileTyping = useCallback(
+    debounce(async (text: string) => {
+      if (!aiReady || text.trim().length < 10) {
+        setEmotionAnalysis(null);
+        return;
+      }
+
+      try {
+        console.log('🔍 Analyzing text while typing...');
+        const analysis = await analyzeTextMessage(text);
+        setEmotionAnalysis(analysis);
+
+        // Show warning only if VERY toxic
+        if (analysis.isToxic && analysis.toxicityScore > 80) {
+          Alert.alert(
+            '⚠️ ' + t('message.ai.toxicWarning'),
+            t('message.ai.toxicMessage'),
+            [{ text: t('ok') }]
+          );
+        }
+      } catch (error) {
+        console.error('❌ Analysis error:', error);
+      }
+    }, 3000), // ✅ Increased from 1500ms to 3000ms
+    [aiReady, analyzeTextMessage, t]
+  );
+
+  // ============================================
+  // Handle typing
+  // ============================================
   const handleTyping = (text: string) => {
     setMessage(text);
 
@@ -100,6 +167,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onTyping(false);
       }
     }, 2000);
+
+    // Analyze while typing (debounced)
+    analyzeWhileTyping(text);
   };
 
   useEffect(() => {
@@ -113,6 +183,61 @@ const MessageInput: React.FC<MessageInputProps> = ({
     };
   }, [onTyping]);
 
+  // ============================================
+  // Check images for toxicity
+  // ============================================
+  const checkImagesBeforeSend = async (attachments: AttachmentPreview[]): Promise<boolean> => {
+    const images = attachments.filter(att => att.type === 'image');
+    
+    if (images.length === 0 || !aiReady) return true;
+
+    try {
+      console.log(`🖼️ Checking ${images.length} images for toxicity...`);
+      setAnalyzingImage(true);
+
+      for (const img of images) {
+        const response = await fetch(img.uri);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            const base64String = base64data.split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        const toxicityCheck = await checkImageToxicity(base64, img.mimeType || 'image/jpeg');
+
+        if (toxicityCheck.isToxic) {
+          Alert.alert(
+            '⚠️ ' + t('message.ai.imageToxicTitle'),
+            t('message.ai.imageToxicMessage', {
+              categories: toxicityCheck.categories.join(', ')
+            }),
+            [{ text: t('ok') }]
+          );
+          setAnalyzingImage(false);
+          return false;
+        }
+      }
+
+      console.log('✅ All images are safe');
+      setAnalyzingImage(false);
+      return true;
+    } catch (error) {
+      console.error('❌ Image check error:', error);
+      setAnalyzingImage(false);
+      return true;
+    }
+  };
+
+  // ============================================
+  // GIF/STICKER HANDLER
+  // ============================================
   const handleGiphySelect = async (richMedia: RichMediaDTO, type: "gif" | "sticker") => {
     console.log(`✨ Selected ${type}:`, richMedia.title);
 
@@ -140,11 +265,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  // ============================================
+  // ✅ OPTIMIZED: Handle send WITHOUT blocking analysis
+  // ============================================
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
     
-    if (isSendingRef.current || uploadingFiles) {
-      console.log("⏭️ Already sending, skipping...");
+    if (isSendingRef.current || uploadingFiles || analyzingImage) {
+      console.log("⏭️ Already processing, skipping...");
       return;
     }
 
@@ -161,12 +289,60 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const currentAttachments = [...attachments];
     const currentReplyTo = replyTo?._id;
 
+    // ✅ Check images for toxicity (still important)
+    const imagesAreSafe = await checkImagesBeforeSend(currentAttachments);
+    if (!imagesAreSafe) {
+      return;
+    }
+
+    // ✅ OPTIMIZED: Quick toxicity check only (no full ONNX analysis)
+    if (messageContent && aiReady) {
+      // Use rule-based check (instant, no ONNX)
+      const quickCheck = await (async () => {
+        try {
+          const analysis = await analyzeTextMessage(messageContent);
+          return analysis;
+        } catch {
+          return { isToxic: false, toxicityScore: 0 };
+        }
+      })();
+      
+      // Block only if EXTREMELY toxic (>85%)
+      if (quickCheck.isToxic && quickCheck.toxicityScore > 85) {
+        Alert.alert(
+          '🚫 ' + t('message.ai.cannotSend'),
+          t('message.ai.extremelyToxic'),
+          [{ text: t('ok') }]
+        );
+        return;
+      }
+      
+      // Warn but allow send if toxic 70-85%
+      if (quickCheck.isToxic && quickCheck.toxicityScore > 70) {
+        const shouldSend = await new Promise<boolean>(resolve => {
+          Alert.alert(
+            '⚠️ ' + t('message.ai.toxicWarning'),
+            t('message.ai.toxicConfirm'),
+            [
+              { text: t('cancel'), onPress: () => resolve(false), style: 'cancel' },
+              { text: t('message.ai.sendAnyway'), onPress: () => resolve(true), style: 'destructive' },
+            ]
+          );
+        });
+
+        if (!shouldSend) return;
+      }
+    }
+
+    // ✅ Clear UI IMMEDIATELY (don't wait for analysis)
     setMessage("");
     setAttachments([]);
+    setEmotionAnalysis(null);
     if (onCancelReply) {
       onCancelReply();
     }
 
+    // ✅ Send message WITHOUT waiting for full emotion analysis
     try {
       isSendingRef.current = true;
       const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
@@ -198,7 +374,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
               }
             );
 
-            // ✅ Now result always has same format (no more chunkedResult)
             encryptedFiles.push({
               encryptedBase64: result.encryptedBase64,
               originalFileName: att.name,
@@ -221,7 +396,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             
             Alert.alert(
               t('error'), 
-              `Không thể mã hóa ${att.name}: ${error.message || 'Unknown error'}`
+              `Cannot encrypt ${att.name}: ${error.message || 'Unknown error'}`
             );
             return;
           }
@@ -244,6 +419,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
         }
 
         isSendingRef.current = false;
+
+        // ✅ Background emotion analysis AFTER send
+        if (messageContent && aiReady && conversationId) {
+          saveEmotionInBackground(messageContent, conversationId);
+        }
+
         return;
       }
 
@@ -325,6 +506,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
       
       isSendingRef.current = false;
+
+      // ✅ Background emotion analysis AFTER send
+      if (messageContent && aiReady && conversationId) {
+        saveEmotionInBackground(messageContent, conversationId);
+      }
+
     } catch (error: any) {
       console.error("Send error:", error);
       setUploadingFiles(false);
@@ -332,6 +519,40 @@ const MessageInput: React.FC<MessageInputProps> = ({
       isSendingRef.current = false;
       Alert.alert(t('error'), error.message || t('message.failed'));
     }
+  };
+
+  // ✅ NEW: Background emotion save (non-blocking)
+  const saveEmotionInBackground = async (text: string, convId: string) => {
+    setTimeout(async () => {
+      try {
+        console.log('🔍 Background: Analyzing sent message...');
+        const analysis = await analyzeTextMessage(text);
+        
+        const token = await getToken();
+        await axios.post(
+          `${API_URL}/api/emotion/save`,
+          {
+            conversationId: convId,
+            textAnalyzed: text,
+            emotionScores: analysis.scores,
+            dominantEmotion: analysis.emotion,
+            confidenceScore: analysis.confidence,
+            context: 'message',
+            isToxic: analysis.isToxic,
+            toxicityScore: analysis.toxicityScore,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+        console.log('✅ Background: Emotion saved');
+      } catch (error) {
+        console.error('❌ Background: Failed to save emotion:', error);
+      }
+    }, 0);
   };
 
   const handleImagePicker = async () => {
@@ -604,22 +825,64 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const { phase, percentage } = encryptionProgress;
     
     if (totalFiles > 1) {
-      return `Đang mã hóa ${currentFileIndex}/${totalFiles}: ${percentage.toFixed(0)}%`;
+      return `${t('message.encryption.encrypting')} ${currentFileIndex}/${totalFiles}: ${percentage.toFixed(0)}%`;
     }
 
     switch (phase) {
       case 'reading':
-        return `Đang đọc file... ${percentage.toFixed(0)}%`;
+        return `${t('message.encryption.reading')} ${percentage.toFixed(0)}%`;
       case 'encrypting':
-        return `Đang mã hóa: ${percentage.toFixed(0)}%`;
+        return `${t('message.encryption.encrypting')}: ${percentage.toFixed(0)}%`;
       case 'finalizing':
-        return 'Hoàn tất...';
+        return t('message.encryption.finalizing');
       default:
         return `${percentage.toFixed(0)}%`;
     }
   };
 
-  const isSendDisabled = uploadingFiles || disabled || (!message.trim() && attachments.length === 0);
+  const renderEmotionIndicator = () => {
+    if (!emotionAnalysis || !message.trim()) return null;
+
+    const emotionEmojis = {
+      joy: '😊',
+      sadness: '😢',
+      anger: '😠',
+      fear: '😨',
+      surprise: '😮',
+      neutral: '😐',
+    };
+
+    const emotionColors = {
+      joy: '#10B981',
+      sadness: '#3B82F6',
+      anger: '#EF4444',
+      fear: '#8B5CF6',
+      surprise: '#F59E0B',
+      neutral: '#6B7280',
+    };
+
+    return (
+      <View style={styles.emotionIndicator}>
+        <Text style={{ fontSize: 16 }}>
+          {emotionEmojis[emotionAnalysis.emotion]}
+        </Text>
+        <Text 
+          style={[
+            styles.emotionText,
+            { color: emotionColors[emotionAnalysis.emotion] }
+          ]}
+        >
+          {t(`emotions.${emotionAnalysis.emotion}`)} 
+          {emotionAnalysis.isToxic && ' ⚠️'}
+        </Text>
+        <Text style={[styles.emotionConfidence, isDark && styles.textGray400]}>
+          {(emotionAnalysis.confidence * 100).toFixed(0)}%
+        </Text>
+      </View>
+    );
+  };
+
+  const isSendDisabled = uploadingFiles || analyzingImage || disabled || (!message.trim() && attachments.length === 0);
 
   return (
     <View
@@ -695,52 +958,65 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
+      {analyzingImage && (
+        <View style={styles.uploadingContainer}>
+          <View style={styles.progressHeader}>
+            <ActivityIndicator size="small" color="#f97316" />
+            <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
+              {t('message.ai.checkingImage')}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {renderEmotionIndicator()}
+
       <View style={styles.inputRow}>
         <TouchableOpacity 
           onPress={handleCamera} 
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
           <Ionicons 
             name="camera" 
             size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+            color={(uploadingFiles || disabled || analyzingImage) ? "#ccc" : (isDark ? "#fff" : "#666")} 
           />
         </TouchableOpacity>
 
         <TouchableOpacity 
           onPress={handleImagePicker} 
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
           <Ionicons 
             name="image" 
             size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+            color={(uploadingFiles || disabled || analyzingImage) ? "#ccc" : (isDark ? "#fff" : "#666")} 
           />
         </TouchableOpacity>
 
         <TouchableOpacity 
           onPress={handleFilePicker} 
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
           <Ionicons 
             name="attach" 
             size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+            color={(uploadingFiles || disabled || analyzingImage) ? "#ccc" : (isDark ? "#fff" : "#666")} 
           />
         </TouchableOpacity>
 
         <TouchableOpacity 
           onPress={() => setShowGiphyPicker(true)} 
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
           <Ionicons 
             name="happy-outline" 
             size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+            color={(uploadingFiles || disabled || analyzingImage) ? "#ccc" : (isDark ? "#fff" : "#666")} 
           />
         </TouchableOpacity>
 
@@ -751,7 +1027,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           placeholderTextColor={isDark ? "#999" : "#666"}
           multiline
           maxLength={5000}
-          editable={!uploadingFiles && !disabled}
+          editable={!uploadingFiles && !disabled && !analyzingImage}
           style={[
             styles.textInput,
             isDark ? styles.inputDark : styles.inputLight,
@@ -765,7 +1041,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               styles.actionButton,
               isRecording ? styles.bgRed : styles.bgOrange,
             ]}
-            disabled={uploadingFiles || disabled}
+            disabled={uploadingFiles || disabled || analyzingImage}
           >
             <Ionicons
               name={isRecording ? "stop" : "mic"}
@@ -783,7 +1059,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             ]}
             disabled={isSendDisabled}
           >
-            {uploadingFiles ? (
+            {uploadingFiles || analyzingImage ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
               <Ionicons name="send" size={20} color="white" />
@@ -956,6 +1232,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9ca3af',
     textAlign: 'center',
+  },
+  emotionIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  emotionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  emotionConfidence: {
+    fontSize: 11,
+    marginLeft: 6,
+    color: '#9ca3af',
   },
   inputRow: {
     flexDirection: "row",

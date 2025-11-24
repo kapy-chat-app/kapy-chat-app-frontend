@@ -280,7 +280,7 @@
     "ai": "AI",
     "setting": "设置"
   },
-   "friends": {
+  "friends": {
     "title": "好友",
     "searchPlaceholder": "搜索好友...",
     "searching": "搜索中...",
@@ -435,34 +435,78 @@
     }
   },
 
+  "emotions": {
+    "joy": "快乐",
+    "sadness": "悲伤",
+    "anger": "愤怒",
+    "fear": "恐惧",
+    "surprise": "惊讶",
+    "neutral": "中性"
+  },
+
+  "emotion": {
+    "title": "我的情绪",
+    "tabs": {
+      "history": "历史",
+      "stats": "统计"
+    },
+    "empty": "没有情绪数据",
+    "tryAgain": "重试",
+
+    "emotions": {
+      "joy": "喜悦",
+      "sadness": "悲伤",
+      "anger": "愤怒",
+      "fear": "恐惧",
+      "surprise": "惊讶",
+      "love": "爱",
+      "neutral": "中性"
+    },
+
+    "stats": {
+      "overview": "概览",
+      "analyses": "分析",
+      "dominantEmotion": "主导情绪",
+      "distribution": "情绪分布",
+      "averageScores": "平均分数",
+      "byContext": "按上下文",
+      "confidence": "{{percent}}% 置信度"
+    }
+  },
+
   "aiChat": {
-    "title": "AI助手",
-    "placeholder": "分享您的想法...",
-    "typing": "AI正在输入",
+    "title": "AI 助手",
+    "placeholder": "分享你的想法...",
+    "typing": "AI 正在输入",
+
     "suggestions": {
-      "title": "AI为您推荐",
+      "title": "AI 建议",
       "showSuggestions": "显示建议",
-      "startWith": "从以下话题开始：",
-      "count": "{{count}}条建议"
+      "startWith": "从主题开始:",
+      "count": "{{count}} 条建议"
     },
+
     "empty": {
-      "title": "AI健康助手",
-      "subtitle": "我在这里支持您的心理健康。\n分享您的感受！",
-      "emotionStatus": "您现在感到{{emotion}}",
-      "confidence": "{{percent}}%置信度"
+      "title": "AI 健康助手",
+      "subtitle": "我在这里支持你的心理健康。\n分享你的感受！",
+      "emotionStatus": "你感觉 {{emotion}}",
+      "confidence": "{{percent}}% 置信度"
     },
+
     "emotions": {
       "joy": "快乐",
       "sadness": "悲伤",
       "anger": "愤怒",
       "fear": "恐惧",
       "surprise": "惊讶",
-      "neutral": "平静"
+      "neutral": "中性"
     },
+
     "welcome": {
-      "intro": "根据您的情绪，我有一些建议：",
-      "question": "您想讨论什么？"
+      "intro": "根据你的情绪，我有一些建议:",
+      "question": "你想讨论什么？"
     },
+
     "refresh": "刷新",
     "send": "发送"
   },
@@ -507,7 +551,7 @@
       "location": "📍 位置",
       "message": "消息"
     },
-     "messagePrefix": {
+    "messagePrefix": {
       "you": "你:",
       "sender": "{{name}}:"
     },
@@ -546,6 +590,18 @@
     "hoursAgo": "{{hours}}小时前",
     "daysAgo": "{{days}}天前",
     "members": "{{count}}名成员",
+    "ai": {
+      "toxicWarning": "检测到不当内容",
+      "toxicMessage": "此消息可能包含冒犯性内容。请保持礼貌。",
+      "cannotSend": "无法发送",
+      "extremelyToxic": "此消息极其不当，无法发送。",
+      "toxicConfirm": "此消息可能具有冒犯性。您确定要发送吗？",
+      "sendAnyway": "仍然发送",
+      "imageToxicTitle": "不当图片",
+      "imageToxicMessage": "图片包含不当内容: {{categories}}",
+      "checkingImage": "正在检查图片内容...",
+      "cannotEncrypt": "无法加密"
+    },
     "encryption": {
       "initializing": "🔐 正在初始化加密...",
       "enabled": "✅ 已启用端到端加密",

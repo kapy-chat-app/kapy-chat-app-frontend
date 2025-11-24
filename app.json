@@ -43,7 +43,19 @@
       ],
       "expo-web-browser",
       "expo-localization",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-asset",
+      [
+        "onnxruntime-react-native",
+        {
+          "android": {
+            "minSdkVersion": 24
+          },
+          "ios": {
+            "deploymentTarget": "13.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

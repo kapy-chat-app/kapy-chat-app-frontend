@@ -1,11 +1,11 @@
-// hooks/message/useEncryption.ts - NATIVE CRYPTO VERSION
-import { nativeEncryptionService } from "@/lib/encryption/NativeEncryptionService";
-import { useAuth } from "@clerk/clerk-expo";
+// hooks/message/useEncryption.ts - USE GLOBAL STATE
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@clerk/clerk-expo";
+import { nativeEncryptionService } from "@/lib/encryption/NativeEncryptionService";
+import { useEncryptionContext } from "@/components/page/message/EncryptionInitProvider";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
-// Match server's expected format
 export interface EncryptionResult {
   encryptedContent: string;
   encryptionMetadata: {
@@ -19,36 +19,46 @@ export interface EncryptionResult {
 }
 
 export const useEncryption = () => {
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // ✅ USE GLOBAL STATE
+  const { isReady: globalReady, loading: globalLoading, error: globalError } = useEncryptionContext();
+  
+  const [isInitialized, setIsInitialized] = useState(globalReady);
+  const [loading, setLoading] = useState(globalLoading);
+  const [error, setError] = useState<string | null>(globalError);
+  
   const { getToken, userId } = useAuth();
 
-  // Auto-initialize on mount
+  // ✅ Sync with global state
   useEffect(() => {
-    if (userId) {
-      initializeEncryption();
-    }
-  }, [userId]);
+    setIsInitialized(globalReady);
+    setLoading(globalLoading);
+    setError(globalError);
+  }, [globalReady, globalLoading, globalError]);
 
+  // ✅ Log when ready
+  useEffect(() => {
+    if (globalReady) {
+      console.log('✅ [useEncryption] E2EE ready (from global state)');
+    }
+  }, [globalReady]);
+
+  // ✅ NO AUTO INIT - Already done globally
   const initializeEncryption = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
+    if (globalReady) {
+      console.log('✅ [useEncryption] Already initialized globally');
       return;
     }
 
+    console.warn('⚠️ [useEncryption] Global init not ready, force init...');
+    
     try {
       setLoading(true);
       setError(null);
 
-      // Initialize native encryption keys
       const keys = await nativeEncryptionService.initializeKeys();
-
       const token = await getToken();
       if (!token) throw new Error("Authentication token not available");
 
-      // Upload key to server
-      console.log("📤 Uploading key to server...");
       const response = await fetch(`${API_BASE_URL}/api/keys/upload`, {
         method: "POST",
         headers: {
@@ -64,17 +74,16 @@ export const useEncryption = () => {
       }
 
       setIsInitialized(true);
-      console.log("✅ E2EE initialized with Native Crypto");
+      console.log("✅ [useEncryption] Force init complete");
     } catch (err: any) {
-      console.error("❌ E2EE initialization failed:", err);
+      console.error("❌ [useEncryption] Force init failed:", err);
       setError(err.message);
       setIsInitialized(false);
     } finally {
       setLoading(false);
     }
-  }, [userId, getToken]);
+  }, [globalReady, userId, getToken]);
 
-  // Encrypt message - uses own key (sender's key)
   const encryptMessage = useCallback(
     async (recipientUserId: string, message: string): Promise<EncryptionResult> => {
       if (!isInitialized) {
@@ -82,7 +91,6 @@ export const useEncryption = () => {
       }
 
       try {
-        // Encrypt using native crypto
         const result = await nativeEncryptionService.encryptMessage(message);
 
         console.log('✅ Native encryption result:', {
@@ -107,7 +115,6 @@ export const useEncryption = () => {
     [isInitialized]
   );
 
-  // Decrypt message - uses sender's key
   const decryptMessage = useCallback(
     async (senderId: string, encryptedContent: string): Promise<string> => {
       if (!isInitialized) {
@@ -120,7 +127,6 @@ export const useEncryption = () => {
           throw new Error("Authentication token not available");
         }
 
-        // Parse encrypted content to get iv and authTag
         let iv: string;
         let authTag: string;
         let data: string;
@@ -128,15 +134,12 @@ export const useEncryption = () => {
         try {
           const parsed = JSON.parse(encryptedContent);
           iv = parsed.iv;
-          authTag = parsed.authTag || parsed.data; // Support both formats
+          authTag = parsed.authTag || parsed.data;
           data = parsed.data || parsed.encryptedContent;
           
-          // If old format (XOR encryption), data contains the encrypted content
           if (!parsed.authTag && parsed.data) {
-            // This is old CryptoJS format, need to handle differently
             console.log("⚠️ Detected old encryption format, attempting compatibility decrypt");
             
-            // Get sender's public key
             const response = await fetch(`${API_BASE_URL}/api/keys/${senderId}`, {
               headers: { Authorization: `Bearer ${token}` },
             });
@@ -145,8 +148,6 @@ export const useEncryption = () => {
               throw new Error(result.error || "Failed to get sender key");
             }
             
-            // For old format, we need to use the old decryption method
-            // This maintains backward compatibility
             const { simpleEncryptionService } = await import("@/lib/encryption/EncryptionService");
             return await simpleEncryptionService.decryptMessage(
               encryptedContent,
@@ -160,7 +161,6 @@ export const useEncryption = () => {
           throw new Error("Invalid encrypted content format");
         }
 
-        // Get sender's public key from server
         console.log("🔄 Fetching sender key for decryption:", senderId);
         const response = await fetch(`${API_BASE_URL}/api/keys/${senderId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -173,7 +173,6 @@ export const useEncryption = () => {
 
         const senderKeyBase64 = result.data.publicKey;
 
-        // Decrypt using native crypto
         const decrypted = await nativeEncryptionService.decryptMessage(
           data,
           iv,

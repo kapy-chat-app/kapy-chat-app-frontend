@@ -80,7 +80,19 @@ export default function ConversationsScreen() {
   // Socket listeners for recommendations
   useEffect(() => {
     if (!socket) return;
+    socket.on("emotionAlert", (data: any) => {
+      console.log("🚨 Emotion alert from backend AI:", data);
 
+      handleNewRecommendations(
+        [
+          data.recommendation,
+          data.supportMessage,
+          data.actionSuggestion,
+        ].filter(Boolean),
+        data.emotion,
+        data.intensity
+      );
+    });
     socket.on("sendRecommendations", (data: any) => {
       handleNewRecommendations(
         data.recommendations,
@@ -117,6 +129,7 @@ export default function ConversationsScreen() {
     });
 
     return () => {
+      socket.off("emotionAlert");
       socket.off("sendRecommendations");
       socket.off("emotionAnalysisComplete");
       socket.off("emotionAnalyzedWithRecommendations");

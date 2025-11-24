@@ -441,6 +441,14 @@
     "unblockSuccess": "Đã bỏ chặn người dùng thành công",
     "unblockFailed": "Không thể bỏ chặn người dùng"
   },
+  "emotions": {
+    "joy": "Vui vẻ",
+    "sadness": "Buồn",
+    "anger": "Giận dữ",
+    "fear": "Sợ hãi",
+    "surprise": "Ngạc nhiên",
+    "neutral": "Bình thường"
+  },
   "emotion": {
     "title": "Cảm xúc của tôi",
     "tabs": {
@@ -448,27 +456,8 @@
       "stats": "Thống kê"
     },
     "empty": "Chưa có dữ liệu cảm xúc",
-    "delete": {
-      "confirmTitle": "Xác nhận xóa",
-      "confirmMessage": "Bạn có chắc chắn muốn xóa phân tích cảm xúc này?",
-      "success": "Đã xóa phân tích cảm xúc",
-      "failed": "Không thể xóa"
-    },
     "tryAgain": "Thử lại",
-    "filter": {
-      "title": "Bộ lọc",
-      "context": "Ngữ cảnh",
-      "timeRange": "Khoảng thời gian",
-      "clear": "Xóa bộ lọc",
-      "apply": "Áp dụng",
-      "days": "{{count}} ngày"
-    },
-    "contexts": {
-      "message": "Tin nhắn",
-      "voice_note": "Ghi âm",
-      "call": "Cuộc gọi",
-      "general": "Chung"
-    },
+    
     "emotions": {
       "joy": "Vui vẻ",
       "sadness": "Buồn bã",
@@ -476,8 +465,9 @@
       "fear": "Sợ hãi",
       "surprise": "Ngạc nhiên",
       "love": "Yêu thương",
-      "neutral": "Trung lập"
+      "neutral": "Bình thường"
     },
+    
     "stats": {
       "overview": "Tổng quan",
       "analyses": "Phân tích",
@@ -485,38 +475,43 @@
       "distribution": "Phân bố cảm xúc",
       "averageScores": "Điểm trung bình",
       "byContext": "Theo ngữ cảnh",
-      "confidence": "{{percent}}% độ tin cậy"
+      "confidence": "Độ tin cậy {{percent}}%"
     }
   },
-
+  
   "aiChat": {
     "title": "Trợ lý AI",
-    "placeholder": "Chia sẻ suy nghĩ của bạn...",
-    "typing": "AI đang trả lời",
+    "placeholder": "Chia sẻ cảm xúc của bạn...",
+    "typing": "AI đang soạn tin",
+    
     "suggestions": {
       "title": "Gợi ý AI cho bạn",
       "showSuggestions": "Hiện gợi ý",
-      "startWith": "Bắt đầu với các chủ đề:",
+      "startWith": "Bắt đầu với chủ đề:",
       "count": "{{count}} gợi ý"
     },
+    
     "empty": {
-      "title": "Trợ Lý Sức Khỏe AI",
-      "subtitle": "Tôi ở đây để hỗ trợ sức khỏe tinh thần của bạn.\nHãy chia sẻ cảm xúc của bạn!",
-      "emotionStatus": "Bạn đang {{emotion}}",
-      "confidence": "{{percent}}% độ tin cậy"
+      "title": "Trợ lý Sức khỏe AI",
+      "subtitle": "Tôi ở đây để hỗ trợ tinh thần của bạn.\nHãy chia sẻ cảm xúc!",
+      "emotionStatus": "Bạn đang cảm thấy {{emotion}}",
+      "confidence": "Độ tin cậy {{percent}}%"
     },
+    
     "emotions": {
       "joy": "vui vẻ",
-      "sadness": "buồn bã",
+      "sadness": "buồn",
       "anger": "giận dữ",
       "fear": "sợ hãi",
       "surprise": "ngạc nhiên",
       "neutral": "bình thường"
     },
+    
     "welcome": {
       "intro": "Dựa trên cảm xúc của bạn, tôi có một số gợi ý:",
-      "question": "Bạn muốn trao đổi về điều gì?"
+      "question": "Bạn muốn thảo luận điều gì?"
     },
+    
     "refresh": "Làm mới",
     "send": "Gửi"
   },
@@ -600,6 +595,18 @@
     "hoursAgo": "{{hours}} giờ trước",
     "daysAgo": "{{days}} ngày trước",
     "members": "{{count}} thành viên",
+     "ai": {
+      "toxicWarning": "Phát hiện nội dung không phù hợp",
+      "toxicMessage": "Tin nhắn này có thể chứa nội dung xúc phạm. Hãy lịch sự hơn nhé.",
+      "cannotSend": "Không thể gửi",
+      "extremelyToxic": "Tin nhắn này cực kỳ không phù hợp và không thể gửi.",
+      "toxicConfirm": "Tin nhắn này có thể xúc phạm người khác. Bạn có chắc muốn gửi?",
+      "sendAnyway": "Vẫn gửi",
+      "imageToxicTitle": "Hình ảnh không phù hợp",
+      "imageToxicMessage": "Hình ảnh chứa nội dung không phù hợp: {{categories}}",
+      "checkingImage": "Đang kiểm tra nội dung hình ảnh...",
+      "cannotEncrypt": "Không thể mã hóa"
+    },
     "encryption": {
       "initializing": "🔐 Đang khởi tạo mã hóa...",
       "enabled": "✅ Đã bật mã hóa đầu cuối",
