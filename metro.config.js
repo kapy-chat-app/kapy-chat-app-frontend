@@ -4,11 +4,10 @@ const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname);
 
-// Cho phép ONNX và lazy loading
-config.resolver.sourceExts.push('cjs');
-config.resolver.assetExts.push('onnx');
+// Thêm .tflite vào assetExts
+config.resolver.assetExts.push('tflite');
 
-// Bật inline requires để lazy load ONNX
+// Bật inline requires
 config.transformer = {
   ...config.transformer,
   getTransformOptions: async () => ({

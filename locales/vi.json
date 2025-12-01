@@ -457,7 +457,7 @@
     },
     "empty": "Chưa có dữ liệu cảm xúc",
     "tryAgain": "Thử lại",
-    
+
     "emotions": {
       "joy": "Vui vẻ",
       "sadness": "Buồn bã",
@@ -467,7 +467,7 @@
       "love": "Yêu thương",
       "neutral": "Bình thường"
     },
-    
+
     "stats": {
       "overview": "Tổng quan",
       "analyses": "Phân tích",
@@ -478,26 +478,26 @@
       "confidence": "Độ tin cậy {{percent}}%"
     }
   },
-  
+
   "aiChat": {
     "title": "Trợ lý AI",
     "placeholder": "Chia sẻ cảm xúc của bạn...",
     "typing": "AI đang soạn tin",
-    
+
     "suggestions": {
       "title": "Gợi ý AI cho bạn",
       "showSuggestions": "Hiện gợi ý",
       "startWith": "Bắt đầu với chủ đề:",
       "count": "{{count}} gợi ý"
     },
-    
+
     "empty": {
       "title": "Trợ lý Sức khỏe AI",
       "subtitle": "Tôi ở đây để hỗ trợ tinh thần của bạn.\nHãy chia sẻ cảm xúc!",
       "emotionStatus": "Bạn đang cảm thấy {{emotion}}",
       "confidence": "Độ tin cậy {{percent}}%"
     },
-    
+
     "emotions": {
       "joy": "vui vẻ",
       "sadness": "buồn",
@@ -506,12 +506,12 @@
       "surprise": "ngạc nhiên",
       "neutral": "bình thường"
     },
-    
+
     "welcome": {
       "intro": "Dựa trên cảm xúc của bạn, tôi có một số gợi ý:",
       "question": "Bạn muốn thảo luận điều gì?"
     },
-    
+
     "refresh": "Làm mới",
     "send": "Gửi"
   },
@@ -556,7 +556,7 @@
       "location": "📍 Vị trí",
       "message": "Tin nhắn"
     },
-     "messagePrefix": {
+    "messagePrefix": {
       "you": "Bạn:",
       "sender": "{{name}}:"
     },
@@ -595,7 +595,7 @@
     "hoursAgo": "{{hours}} giờ trước",
     "daysAgo": "{{days}} ngày trước",
     "members": "{{count}} thành viên",
-     "ai": {
+    "ai": {
       "toxicWarning": "Phát hiện nội dung không phù hợp",
       "toxicMessage": "Tin nhắn này có thể chứa nội dung xúc phạm. Hãy lịch sự hơn nhé.",
       "cannotSend": "Không thể gửi",
@@ -885,7 +885,7 @@
       }
     }
   },
-   "requests": {
+  "requests": {
     "title": "Lời mời kết bạn",
     "searchPlaceholder": "Tìm kiếm lời mời...",
     "count": "{{count}} lời mời đang chờ",
@@ -894,5 +894,49 @@
     "emptyDescription": "Bạn không có lời mời kết bạn nào đang chờ",
     "noResults": "Không tìm thấy lời mời",
     "noResultsDescription": "Thử tìm kiếm với tên khác"
+  },
+  "encryption": {
+    "initializing": "Đang khởi tạo mã hóa...",
+    "backup": {
+      "title": "Bảo Mật Tin Nhắn",
+      "description": "Tạo mật khẩu sao lưu để khôi phục tin nhắn mã hóa của bạn trên thiết bị khác hoặc khi cài đặt lại ứng dụng.",
+      "passwordLabel": "Mật Khẩu Sao Lưu",
+      "passwordPlaceholder": "Tạo mật khẩu mạnh (tối thiểu 8 ký tự)",
+      "confirmPasswordLabel": "Xác Nhận Mật Khẩu",
+      "confirmPasswordPlaceholder": "Nhập lại mật khẩu",
+      "requirements": "Yêu Cầu Mật Khẩu:",
+      "minLength": "Ít nhất 8 ký tự",
+      "hint": "Sử dụng mật khẩu mà bạn không quên. Bạn sẽ cần nó để khôi phục tin nhắn.",
+      "creating": "Đang Tạo Sao Lưu...",
+      "createButton": "Tạo Sao Lưu An Toàn",
+      "skipButton": "Bỏ Qua (Không Khuyến Nghị)",
+      "skipWarning": "Không có sao lưu, bạn sẽ mất tất cả tin nhắn nếu cài đặt lại ứng dụng hoặc đổi thiết bị.",
+      "passwordTooShort": "Mật khẩu phải có ít nhất 8 ký tự",
+      "passwordMismatch": "Mật khẩu không khớp",
+      "recommendTitle": "Sao Lưu Khóa Của Bạn",
+      "recommendMessage": "Chúng tôi khuyên bạn nên tạo mật khẩu sao lưu để bảo vệ khóa mã hóa của bạn. Điều này sẽ cho phép bạn khôi phục tin nhắn nếu mất thiết bị.",
+      "createNow": "Tạo Ngay",
+      "later": "Để Sau",
+      "createForExistingTitle": "Tạo Sao Lưu",
+      "createForExistingDescription": "Tạo mật khẩu sao lưu để bảo vệ khóa mã hóa hiện tại của bạn",
+      "alreadyExists": "Bạn đã có sao lưu rồi",
+      "created": "Tạo sao lưu thành công"
+    },
+    "restore": {
+      "title": "Khôi Phục Tin Nhắn",
+      "description": "Nhập mật khẩu sao lưu để khôi phục tin nhắn mã hóa của bạn và tiếp tục cuộc trò chuyện.",
+      "passwordLabel": "Mật Khẩu Sao Lưu",
+      "passwordPlaceholder": "Nhập mật khẩu sao lưu của bạn",
+      "info": "Đây là mật khẩu bạn đã tạo khi thiết lập mã hóa lần đầu. Nếu bạn quên, bạn sẽ cần bắt đầu lại từ đầu.",
+      "restoring": "Đang Khôi Phục Tin Nhắn...",
+      "restoreButton": "Khôi Phục Tin Nhắn",
+      "startFreshButton": "Bắt Đầu Mới (Mất Tin Nhắn Cũ)",
+      "startFreshTitle": "Bắt Đầu Mới?",
+      "startFreshWarning": "Điều này sẽ tạo khóa mã hóa mới. Bạn sẽ không thể đọc tin nhắn cũ. Bạn có chắc không?",
+      "startFreshConfirm": "Bắt Đầu Mới",
+      "passwordRequired": "Vui lòng nhập mật khẩu sao lưu của bạn",
+      "invalidPassword": "Mật khẩu không đúng hoặc dữ liệu sao lưu bị hỏng. Vui lòng thử lại.",
+      "success": "Tin nhắn của bạn đã được khôi phục thành công!"
+    }
   }
 }

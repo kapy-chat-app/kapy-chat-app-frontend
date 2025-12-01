@@ -895,5 +895,49 @@
     "emptyDescription": "You don't have any pending friend requests",
     "noResults": "No requests found",
     "noResultsDescription": "Try searching with a different name"
+  },
+  "encryption": {
+    "initializing": "Initializing encryption...",
+    "backup": {
+      "title": "Secure Your Messages",
+      "description": "Create a backup password to recover your encrypted messages on other devices or if you reinstall the app.",
+      "passwordLabel": "Backup Password",
+      "passwordPlaceholder": "Create a strong password (min 8 characters)",
+      "confirmPasswordLabel": "Confirm Password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "requirements": "Password Requirements:",
+      "minLength": "At least 8 characters",
+      "hint": "Use a password you won't forget. You'll need it to restore messages.",
+      "creating": "Creating Backup...",
+      "createButton": "Create Secure Backup",
+      "skipButton": "Skip for Now (Not Recommended)",
+      "skipWarning": "Without a backup, you'll lose all messages if you reinstall the app or switch devices.",
+      "passwordTooShort": "Password must be at least 8 characters long",
+      "passwordMismatch": "Passwords do not match",
+      "recommendTitle": "Backup Your Keys",
+      "recommendMessage": "We recommend creating a backup password to protect your encryption keys. This will allow you to recover your messages if you lose your device.",
+      "createNow": "Create Now",
+      "later": "Later",
+      "createForExistingTitle": "Create Backup",
+      "createForExistingDescription": "Create a backup password to protect your existing encryption keys",
+      "alreadyExists": "You already have a backup",
+      "created": "Backup created successfully"
+    },
+    "restore": {
+      "title": "Restore Your Messages",
+      "description": "Enter your backup password to restore your encrypted messages and continue your conversations.",
+      "passwordLabel": "Backup Password",
+      "passwordPlaceholder": "Enter your backup password",
+      "info": "This is the password you created when you first set up encryption. If you've forgotten it, you'll need to start fresh.",
+      "restoring": "Restoring Messages...",
+      "restoreButton": "Restore My Messages",
+      "startFreshButton": "Start Fresh (Lose Old Messages)",
+      "startFreshTitle": "Start Fresh?",
+      "startFreshWarning": "This will create new encryption keys. You won't be able to read your old messages. Are you sure?",
+      "startFreshConfirm": "Start Fresh",
+      "passwordRequired": "Please enter your backup password",
+      "invalidPassword": "Invalid password or corrupted backup data. Please try again.",
+      "success": "Your messages have been restored successfully!"
+    }
   }
 }

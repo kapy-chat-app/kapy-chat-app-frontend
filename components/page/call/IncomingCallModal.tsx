@@ -1,4 +1,4 @@
-// components/IncomingCallModal.tsx - Group Call Support
+// components/IncomingCallModal.tsx - WITH NAVIGATION FIX
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
@@ -9,9 +9,9 @@ import {
   StyleSheet,
   Animated,
   Vibration,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
 
 interface IncomingCallProps {
@@ -29,8 +29,8 @@ interface IncomingCallProps {
     conversation_avatar?: string;
     participants_count?: number;
   } | null;
-  onAnswer: (callId: string) => void;
-  onReject: (callId: string) => void;
+  onAnswer: (callId: string) => Promise<any>;
+  onReject: (callId: string) => Promise<void>;
 }
 
 export default function IncomingCallModal({
@@ -40,44 +40,21 @@ export default function IncomingCallModal({
   onReject,
 }: IncomingCallProps) {
   const router = useRouter();
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
   const pulseAnim = useState(new Animated.Value(1))[0];
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     if (visible && callData) {
-      playRingtone();
       startVibration();
       startPulseAnimation();
     } else {
-      stopRingtone();
       stopVibration();
     }
 
     return () => {
-      stopRingtone();
       stopVibration();
     };
   }, [visible, callData]);
-
-  const playRingtone = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/sounds/ringtone.mp3'),
-        { shouldPlay: true, isLooping: true }
-      );
-      setSound(sound);
-    } catch (error) {
-      console.error('Error playing ringtone:', error);
-    }
-  };
-
-  const stopRingtone = async () => {
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
-    }
-  };
 
   const startVibration = () => {
     const pattern = [0, 1000, 500, 1000];
@@ -105,12 +82,19 @@ export default function IncomingCallModal({
     ).start();
   };
 
-  const handleAnswer = () => {
-    if (callData) {
-      stopRingtone();
+  const handleAnswer = async () => {
+    if (!callData || isProcessing) return;
+
+    try {
+      console.log('📞 Answer button pressed:', callData.call_id);
+      setIsProcessing(true);
       stopVibration();
-      onAnswer(callData.call_id);
-      
+
+      // Call answer API
+      await onAnswer(callData.call_id);
+      console.log('✅ onAnswer completed, navigating to call screen...');
+
+      // Navigate to call screen
       router.push({
         pathname: '/call/[id]' as any,
         params: {
@@ -118,16 +102,31 @@ export default function IncomingCallModal({
           channelName: callData.channel_name,
           conversationId: callData.conversation_id,
           callType: callData.call_type,
+          conversationType: callData.conversation_type || 'private',
         },
       });
+
+      console.log('✅ Navigation called');
+    } catch (error) {
+      console.error('❌ Error in handleAnswer:', error);
+      setIsProcessing(false);
     }
   };
 
-  const handleReject = () => {
-    if (callData) {
-      stopRingtone();
+  const handleReject = async () => {
+    if (!callData || isProcessing) return;
+
+    try {
+      console.log('📞 Reject button pressed:', callData.call_id);
+      setIsProcessing(true);
       stopVibration();
-      onReject(callData.call_id);
+
+      await onReject(callData.call_id);
+      console.log('✅ Call rejected');
+    } catch (error) {
+      console.error('❌ Error in handleReject:', error);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -135,7 +134,6 @@ export default function IncomingCallModal({
 
   const isGroupCall = callData.conversation_type === 'group';
   
-  // Determine what to display
   const displayAvatar = isGroupCall 
     ? callData.conversation_avatar 
     : callData.caller_avatar;
@@ -153,7 +151,6 @@ export default function IncomingCallModal({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-          {/* Avatar */}
           <Animated.View 
             style={[
               styles.avatarContainer,
@@ -175,7 +172,6 @@ export default function IncomingCallModal({
               </View>
             )}
             
-            {/* Group Call Badge */}
             {isGroupCall && (
               <View style={styles.groupBadge}>
                 <Ionicons name="people" size={16} color="#fff" />
@@ -188,12 +184,9 @@ export default function IncomingCallModal({
             )}
           </Animated.View>
 
-          {/* Call Info */}
           <View style={styles.infoContainer}>
-            {/* Group name or caller name */}
             <Text style={styles.primaryName}>{displayName}</Text>
             
-            {/* For group calls, show caller name below */}
             {isGroupCall && (
               <View style={styles.callerInfoContainer}>
                 <Ionicons name="person-circle-outline" size={18} color="#9ca3af" />
@@ -202,7 +195,6 @@ export default function IncomingCallModal({
             )}
           </View>
 
-          {/* Call Type */}
           <View style={styles.callTypeContainer}>
             <Ionicons
               name={callData.call_type === 'video' ? 'videocam' : 'call'}
@@ -214,7 +206,6 @@ export default function IncomingCallModal({
             </Text>
           </View>
 
-          {/* Additional Info for Group Calls */}
           {isGroupCall && callData.participants_count && callData.participants_count > 0 && (
             <View style={styles.participantsInfoContainer}>
               <Ionicons name="people-outline" size={16} color="#9ca3af" />
@@ -224,20 +215,19 @@ export default function IncomingCallModal({
             </View>
           )}
 
-          {/* Action Buttons */}
           <View style={styles.buttonContainer}>
-            {/* Reject Button */}
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
               onPress={handleReject}
+              disabled={isProcessing}
             >
               <Ionicons name="close" size={32} color="#fff" />
             </TouchableOpacity>
 
-            {/* Answer Button */}
             <TouchableOpacity
               style={[styles.actionButton, styles.answerButton]}
               onPress={handleAnswer}
+              disabled={isProcessing}
             >
               <Ionicons name="call" size={32} color="#fff" />
             </TouchableOpacity>
@@ -247,6 +237,14 @@ export default function IncomingCallModal({
             <Text style={styles.label}>Decline</Text>
             <Text style={styles.label}>{isGroupCall ? 'Join' : 'Answer'}</Text>
           </View>
+
+          {/* Loading overlay */}
+          {isProcessing && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#f97316" />
+              <Text style={styles.loadingText}>Joining...</Text>
+            </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -389,5 +387,22 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     width: 70,
     textAlign: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  loadingText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
   },
 });

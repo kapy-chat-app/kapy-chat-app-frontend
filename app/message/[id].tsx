@@ -1,4 +1,4 @@
-// MessageScreen.tsx - OPTIMIZED FOR INSTANT MESSAGING
+// MessageScreen.tsx - OPTIMIZED FOR INSTANT MESSAGING WITH ACTIVE TRACKING
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -63,6 +63,9 @@ export default function MessageScreen() {
   const hasMarkedAsReadRef = useRef(false);
   const [recipientId, setRecipientId] = useState<string | null>(null);
 
+  // ⭐ NEW: Activity tracking ref
+  const activityIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const isDark = actualTheme === "dark";
 
   // ✅ OPTIMIZED: Get encryption state from global provider (instant)
@@ -88,7 +91,7 @@ export default function MessageScreen() {
     retryDecryption,
   } = useMessages(id || null);
 
-  const { socket, isUserOnline, onlineUsers } = useSocket();
+  const { socket,isConnected, isUserOnline, onlineUsers } = useSocket();
   const { conversations } = useConversations();
 
   // ✅ OPTIMIZED: Set conversation immediately
@@ -115,13 +118,76 @@ export default function MessageScreen() {
     }
   }, [conversation, userId]);
 
+  // ==========================================
+  // ⭐ NEW: ACTIVE CONVERSATION TRACKING
+  // ==========================================
+
+  /**
+   * Notify server when entering/leaving conversation
+   */
+  useEffect(() => {
+  if (!socket || !id || !userId || !isConnected) {
+    console.log('⏳ Waiting for socket...', { 
+      hasSocket: !!socket, 
+      id, 
+      userId, 
+      isConnected 
+    });
+    return;
+  }
+
+  console.log(`👁️ Entering conversation ${id} (socket connected: ${socket.id})`);
+
+  // ✅ Socket is connected, safe to emit
+  socket.emit("enterConversation", {
+    user_id: userId,
+    conversation_id: id,
+  });
+
+  // ✅ Send periodic activity updates
+  activityIntervalRef.current = setInterval(() => {
+    if (socket.connected) {  // ✅ Check before each ping
+      socket.emit("conversationActivity", {
+        user_id: userId,
+        conversation_id: id,
+      });
+      console.log(`🔄 Activity ping for conversation ${id}`);
+    }
+  }, 15000);
+
+  // ✅ Cleanup
+  return () => {
+    console.log(`👋 Leaving conversation ${id}`);
+    
+    if (activityIntervalRef.current) {
+      clearInterval(activityIntervalRef.current);
+    }
+
+    if (socket && socket.connected) {
+      socket.emit("leaveConversation", {
+        user_id: userId,
+        conversation_id: id,
+      });
+    }
+  };
+}, [socket, id, userId, isConnected]);
+
+  /**
+   * ⭐ NEW: Send activity signal on user interactions
+   */
+  const handleUserActivity = useCallback(() => {
+    if (socket && id && userId) {
+      socket.emit("conversationActivity", {
+        user_id: userId,
+        conversation_id: id,
+      });
+    }
+  }, [socket, id, userId]);
+
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 10,
     minimumViewTime: 100,
   }).current;
-
-  // ✅ REMOVED: No more E2EE status logging (reduces overhead)
-  // Encryption is ready from app start, no need to check
 
   // Handle scroll to specific message
   useEffect(() => {
@@ -439,6 +505,9 @@ export default function MessageScreen() {
     attachments?: string[],
     replyToId?: string
   ) => {
+    // ⭐ Send activity signal
+    handleUserActivity();
+
     // ✅ CASE 0: Handle GIF/Sticker FIRST
     if (
       typeof contentOrData === "object" &&
@@ -483,7 +552,6 @@ export default function MessageScreen() {
         hasLocalUris: !!contentOrData.localUris,
       });
 
-      // ✅ REMOVED: Encryption ready check (already ready from app start)
       try {
         console.log("📤 Sending encrypted files...");
 
@@ -548,7 +616,6 @@ export default function MessageScreen() {
       return;
     }
 
-    // ✅ REMOVED: Encryption ready check (already ready)
     try {
       console.log("📤 Sending text message with E2EE...");
 
@@ -657,6 +724,9 @@ export default function MessageScreen() {
 
   const handleScroll = useCallback(
     (event: any) => {
+      // ⭐ Send activity signal on scroll
+      handleUserActivity();
+
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
       const scrollPosition = contentOffset.y;
@@ -686,7 +756,7 @@ export default function MessageScreen() {
         handleLoadMore();
       }
     },
-    [showScrollButton, hasMore, canLoadMore, handleLoadMore]
+    [showScrollButton, hasMore, canLoadMore, handleLoadMore, handleUserActivity]
   );
 
   const handleScrollToBottom = () => {
@@ -780,6 +850,7 @@ export default function MessageScreen() {
   };
 
   const handleTypingStart = () => {
+    handleUserActivity(); // ⭐ Send activity signal
     sendTypingIndicator(true);
   };
 
@@ -792,6 +863,14 @@ export default function MessageScreen() {
   // ========================================
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => {
+    
+      console.log("🎨 Rendering message:", {
+    id: item._id,
+    type: item.type,
+    isSystemMessage: item.metadata?.isSystemMessage,
+    action: item.metadata?.action,
+    call_status: item.metadata?.call_status,
+  });
     if (item.metadata?.isSystemMessage === true) {
       return <SystemMessage message={item} />;
     }
@@ -958,8 +1037,6 @@ export default function MessageScreen() {
       </View>
     );
   };
-
-  // ✅ REMOVED: Warning banner (encryption ready from app start)
 
   const renderEmptyState = () => (
     <View className="flex-1 justify-center items-center px-8">

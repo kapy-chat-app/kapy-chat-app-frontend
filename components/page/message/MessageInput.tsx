@@ -118,31 +118,31 @@ const MessageInput: React.FC<MessageInputProps> = ({
   // ✅ Analyze text while typing - INCREASED DEBOUNCE
   // ============================================
   const analyzeWhileTyping = useCallback(
-    debounce(async (text: string) => {
-      if (!aiReady || text.trim().length < 10) {
-        setEmotionAnalysis(null);
-        return;
-      }
+  debounce(async (text: string) => {
+    if (!aiReady || text.trim().length < 10) {
+      setEmotionAnalysis(null);
+      return;
+    }
 
-      try {
-        console.log('🔍 Analyzing text while typing...');
-        const analysis = await analyzeTextMessage(text);
-        setEmotionAnalysis(analysis);
+    try {
+      console.log('🔍 [LightAI] Analyzing text while typing...');
+      const analysis = await analyzeTextMessage(text);
+      setEmotionAnalysis(analysis);
 
-        // Show warning only if VERY toxic
-        if (analysis.isToxic && analysis.toxicityScore > 80) {
-          Alert.alert(
-            '⚠️ ' + t('message.ai.toxicWarning'),
-            t('message.ai.toxicMessage'),
-            [{ text: t('ok') }]
-          );
-        }
-      } catch (error) {
-        console.error('❌ Analysis error:', error);
+      // ✅ Chỉ warn nếu RẤT toxic (>80%)
+      if (analysis.isToxic && analysis.toxicityScore > 80) {
+        Alert.alert(
+          '⚠️ ' + t('message.ai.toxicWarning'),
+          t('message.ai.toxicMessage'),
+          [{ text: t('ok') }]
+        );
       }
-    }, 3000), // ✅ Increased from 1500ms to 3000ms
-    [aiReady, analyzeTextMessage, t]
-  );
+    } catch (error) {
+      console.error('❌ Analysis error:', error);
+    }
+  }, 2000), // ✅ Debounce 2s (LightweightAI nhanh hơn nên có thể giảm)
+  [aiReady, analyzeTextMessage, t]
+);
 
   // ============================================
   // Handle typing
@@ -187,53 +187,54 @@ const MessageInput: React.FC<MessageInputProps> = ({
   // Check images for toxicity
   // ============================================
   const checkImagesBeforeSend = async (attachments: AttachmentPreview[]): Promise<boolean> => {
-    const images = attachments.filter(att => att.type === 'image');
-    
-    if (images.length === 0 || !aiReady) return true;
+  const images = attachments.filter(att => att.type === 'image');
+  
+  if (images.length === 0 || !aiReady) return true;
 
-    try {
-      console.log(`🖼️ Checking ${images.length} images for toxicity...`);
-      setAnalyzingImage(true);
+  try {
+    console.log(`🖼️ [LightAI] Checking ${images.length} images...`);
+    setAnalyzingImage(true);
 
-      for (const img of images) {
-        const response = await fetch(img.uri);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onloadend = () => {
-            const base64data = reader.result as string;
-            const base64String = base64data.split(',')[1];
-            resolve(base64String);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+    for (const img of images) {
+      const response = await fetch(img.uri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          const base64String = base64data.split(',')[1];
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
 
-        const toxicityCheck = await checkImageToxicity(base64, img.mimeType || 'image/jpeg');
+      const toxicityCheck = await checkImageToxicity(base64, img.mimeType || 'image/jpeg');
 
-        if (toxicityCheck.isToxic) {
-          Alert.alert(
-            '⚠️ ' + t('message.ai.imageToxicTitle'),
-            t('message.ai.imageToxicMessage', {
-              categories: toxicityCheck.categories.join(', ')
-            }),
-            [{ text: t('ok') }]
-          );
-          setAnalyzingImage(false);
-          return false;
-        }
+      // ✅ LightweightAI basic check (có thể customize threshold)
+      if (toxicityCheck.isToxic) {
+        Alert.alert(
+          '⚠️ ' + t('message.ai.imageToxicTitle'),
+          t('message.ai.imageToxicMessage', {
+            categories: toxicityCheck.categories.join(', ')
+          }),
+          [{ text: t('ok') }]
+        );
+        setAnalyzingImage(false);
+        return false;
       }
-
-      console.log('✅ All images are safe');
-      setAnalyzingImage(false);
-      return true;
-    } catch (error) {
-      console.error('❌ Image check error:', error);
-      setAnalyzingImage(false);
-      return true;
     }
-  };
+
+    console.log('✅ [LightAI] All images are safe');
+    setAnalyzingImage(false);
+    return true;
+  } catch (error) {
+    console.error('❌ Image check error:', error);
+    setAnalyzingImage(false);
+    return true; // Fail-safe: allow send
+  }
+};
 
   // ============================================
   // GIF/STICKER HANDLER

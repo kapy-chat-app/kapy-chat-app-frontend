@@ -242,7 +242,7 @@ export const useMessages = (
   const [socketMessageCount, setSocketMessageCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
 
-  const { socket, emit, on, off } = useSocket();
+  const { socket, emit, on, off, isConnected, isUserOnline, onlineUsers } = useSocket();
   const { user } = useUser();
   const { getToken } = useAuth();
   const {
@@ -428,32 +428,36 @@ export const useMessages = (
   );
 
   useEffect(() => {
-    if (socket && conversationId) {
-      const joinRoom = () => {
-        if (socket.connected) {
-          emit("joinConversation", conversationId);
-          console.log(`📥 Joined conversation: ${conversationId}`);
-        } else {
-          const checkConnection = setInterval(() => {
-            if (socket.connected) {
-              emit("joinConversation", conversationId);
-              clearInterval(checkConnection);
-            }
-          }, 100);
-          setTimeout(() => clearInterval(checkConnection), 3000);
-        }
-      };
+  if (!socket || !conversationId || !user?.id || !isConnected) {
+    console.log('⏳ Waiting for socket connection...', { 
+      hasSocket: !!socket, 
+      hasConversationId: !!conversationId,
+      hasUserId: !!user?.id,
+      isConnected 
+    });
+    return;
+  }
 
-      joinRoom();
+  console.log('✅ Socket connected, joining conversation...');
 
-      return () => {
-        if (socket.connected) {
-          emit("leaveConversation", conversationId);
-        }
-        setTypingUsers([]);
-      };
+  // ✅ Socket is connected, safe to emit
+  socket.emit("joinConversation", {
+    user_id: user.id,
+    conversation_id: conversationId,
+  });
+  console.log(`📥 Joined conversation: ${conversationId}`);
+
+  return () => {
+    if (socket && socket.connected) {
+      socket.emit("leaveConversation", {
+        user_id: user.id,
+        conversation_id: conversationId,
+      });
+      console.log(`👋 Left conversation: ${conversationId}`);
     }
-  }, [socket, conversationId, emit]);
+    setTypingUsers([]);
+  };
+}, [socket, conversationId, user?.id, isConnected]);
 
   const sendTypingIndicator = useCallback(
     (isTyping: boolean) => {
@@ -1349,83 +1353,124 @@ export const useMessages = (
     if (!socket || !conversationId) return;
 
     const handleNewMessage = async (data: any) => {
-      if (data.conversation_id !== conversationId) return;
-      if (!data.message) return;
+  console.log("🔔 [SOCKET] NEW MESSAGE RECEIVED:", {
+    conversation_id: data.conversation_id,
+    sender_id: data.sender_id,
+    message_type: data.message?.type,
+    is_system: data.message?.metadata?.isSystemMessage,
+    action: data.message?.metadata?.action,
+  });
 
-      let newMessage = data.message;
+  if (data.conversation_id !== conversationId) {
+    console.log("❌ [SOCKET] Wrong conversation, skipping");
+    return;
+  }
+  if (!data.message) {
+    console.log("❌ [SOCKET] No message in data, skipping");
+    return;
+  }
 
-      // Own message
-      if (data.sender_id === user?.id) {
-        setMessages((prev) => {
-          const optimisticIndex = prev.findIndex(
-            (msg) => msg.tempId && msg.status === "sending"
-          );
+  let newMessage = data.message;
 
-          if (optimisticIndex !== -1) {
-            const updated = [...prev];
-            updated[optimisticIndex] = {
-              ...newMessage,
-              content: prev[optimisticIndex].content,
-              status: "sent" as MessageStatus,
-              localUri: prev[optimisticIndex].localUri,
-            };
-            return updated;
-          }
-          return prev;
-        });
-        return;
+  // ⭐ NEW: Skip processing for system messages - use as-is
+  if (newMessage.metadata?.isSystemMessage === true) {
+    console.log("✅ [SOCKET] System message detected, adding directly");
+    
+    setMessages((prev) => {
+      const exists = prev.some((msg) => msg._id === newMessage._id);
+      if (!exists) {
+        console.log("✅ [SOCKET] Adding system message to state");
+        setSocketMessageCount((prevCount) => prevCount + 1);
+        
+        // Save to cache
+        const cached = toCachedMessage(newMessage, conversationId);
+        messageCacheService.saveMessages([cached]);
+        
+        return [...prev, newMessage];
       }
+      console.log("⚠️ [SOCKET] System message already exists");
+      return prev;
+    });
+    return; // ⭐ CRITICAL: Exit early for system messages
+  }
 
-      // Decrypt message from others
-      try {
-        if (newMessage.type === "text" && newMessage.encrypted_content) {
-          if (encryptionInitialized) {
-            const decrypted = await decryptMessage(data.sender_id, newMessage.encrypted_content);
-            newMessage = { ...newMessage, content: decrypted };
-          } else {
-            newMessage = { ...newMessage, content: "[🔒 Encrypted - Initializing...]" };
-          }
-        } else if (
-          newMessage.type === "text" &&
-          !newMessage.encrypted_content &&
-          !newMessage.content
-        ) {
-          newMessage = { ...newMessage, content: "[❌ No content]" };
-        }
+  // Own message
+  if (data.sender_id === user?.id) {
+    setMessages((prev) => {
+      const optimisticIndex = prev.findIndex(
+        (msg) => msg.tempId && msg.status === "sending"
+      );
 
-        if (newMessage.attachments && newMessage.attachments.length > 0 && encryptionInitialized) {
-          const decryptedAtts = await decryptAttachments(newMessage.attachments, data.sender_id);
-          newMessage = { ...newMessage, attachments: decryptedAtts };
-        }
-
-        newMessage = { ...newMessage, status: "sent" as MessageStatus, decryption_error: false };
-      } catch (error) {
-        newMessage = {
+      if (optimisticIndex !== -1) {
+        const updated = [...prev];
+        updated[optimisticIndex] = {
           ...newMessage,
-          content:
-            newMessage.type === "text" && newMessage.encrypted_content
-              ? "[🔒 Decryption failed]"
-              : newMessage.content,
-          status: "failed" as MessageStatus,
-          decryption_error: newMessage.type === "text" && !!newMessage.encrypted_content,
+          content: prev[optimisticIndex].content,
+          status: "sent" as MessageStatus,
+          localUri: prev[optimisticIndex].localUri,
         };
+        return updated;
       }
+      return prev;
+    });
+    return;
+  }
 
-      // Add to messages
-      setMessages((prev) => {
-        const exists = prev.some((msg) => msg._id === newMessage._id);
-        if (!exists) {
-          setSocketMessageCount((prevCount) => prevCount + 1);
-          
-          // Save to cache
-          const cached = toCachedMessage(newMessage, conversationId);
-          messageCacheService.saveMessages([cached]);
-          
-          return [...prev, newMessage];
-        }
-        return prev;
-      });
+  // Decrypt message from others (NON-SYSTEM messages only)
+  console.log("🔓 [SOCKET] Decrypting regular message...");
+  try {
+    if (newMessage.type === "text" && newMessage.encrypted_content) {
+      if (encryptionInitialized) {
+        const decrypted = await decryptMessage(data.sender_id, newMessage.encrypted_content);
+        newMessage = { ...newMessage, content: decrypted };
+      } else {
+        newMessage = { ...newMessage, content: "[🔒 Encrypted - Initializing...]" };
+      }
+    } else if (
+      newMessage.type === "text" &&
+      !newMessage.encrypted_content &&
+      !newMessage.content
+    ) {
+      newMessage = { ...newMessage, content: "[❌ No content]" };
+    }
+
+    if (newMessage.attachments && newMessage.attachments.length > 0 && encryptionInitialized) {
+      const decryptedAtts = await decryptAttachments(newMessage.attachments, data.sender_id);
+      newMessage = { ...newMessage, attachments: decryptedAtts };
+    }
+
+    newMessage = { ...newMessage, status: "sent" as MessageStatus, decryption_error: false };
+  } catch (error) {
+    console.error("❌ [SOCKET] Decryption failed:", error);
+    newMessage = {
+      ...newMessage,
+      content:
+        newMessage.type === "text" && newMessage.encrypted_content
+          ? "[🔒 Decryption failed]"
+          : newMessage.content,
+      status: "failed" as MessageStatus,
+      decryption_error: newMessage.type === "text" && !!newMessage.encrypted_content,
     };
+  }
+
+  // Add to messages
+  setMessages((prev) => {
+    const exists = prev.some((msg) => msg._id === newMessage._id);
+    if (!exists) {
+      console.log("✅ [SOCKET] Adding decrypted message to state");
+      setSocketMessageCount((prevCount) => prevCount + 1);
+      
+      // Save to cache
+      const cached = toCachedMessage(newMessage, conversationId);
+      messageCacheService.saveMessages([cached]);
+      
+      return [...prev, newMessage];
+    }
+    console.log("⚠️ [SOCKET] Message already exists");
+    return prev;
+  });
+};
+
 
     const handleUpdateMessage = (data: any) => {
       setMessages((prev) =>

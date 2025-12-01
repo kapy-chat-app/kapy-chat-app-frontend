@@ -1,5 +1,6 @@
-// app/call/[id].tsx - FIXED: Remote Video Stream Display Issues
-import {useCallRecording} from "@/hooks/call/useCallRecording";
+// app/call/[id].tsx - UPDATED WITH REALTIME EMOTION CAPTURE
+import { useCallEmotionCapture } from "@/hooks/call/useCallEmotionCapture";
+import { useCallRecording } from "@/hooks/call/useCallRecording";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
@@ -25,10 +26,10 @@ import {
   ClientRoleType,
   createAgoraRtcEngine,
   IRtcEngine,
-  RtcSurfaceView,
-  VideoSourceType,
   RenderModeType,
+  RtcSurfaceView,
   VideoMirrorModeType,
+  VideoSourceType,
 } from "react-native-agora";
 import { SafeAreaView } from "react-native-safe-area-context";
 import io, { Socket } from "socket.io-client";
@@ -47,6 +48,9 @@ interface Participant {
   isScreenSharing?: boolean;
   isMuted?: boolean;
   isVideoOff?: boolean;
+  // ⭐ NEW: Realtime emotion data
+  currentEmotion?: string;
+  emotionConfidence?: number;
 }
 
 export default function VideoCallScreen() {
@@ -71,7 +75,7 @@ export default function VideoCallScreen() {
   const socketRef = useRef<Socket | null>(null);
   const isEndingRef = useRef(false);
   const cameraRef = useRef<any>(null);
-  const remoteVideoSetupRef = useRef<Set<number>>(new Set()); // Track setup attempts
+  const remoteVideoSetupRef = useRef<Set<number>>(new Set());
 
   // Call states
   const [joined, setJoined] = useState(false);
@@ -89,6 +93,11 @@ export default function VideoCallScreen() {
   const [myUid, setMyUid] = useState<number>(0);
   const [isEmotionAnalyzing, setIsEmotionAnalyzing] = useState(false);
 
+  // ⭐ NEW: Emotion states
+  const [myCurrentEmotion, setMyCurrentEmotion] = useState<string | null>(null);
+  const [myEmotionConfidence, setMyEmotionConfidence] = useState<number>(0);
+  const [emotionCaptureEnabled, setEmotionCaptureEnabled] = useState(true);
+
   // Call ending overlay states
   const [showEndingOverlay, setShowEndingOverlay] = useState(false);
   const [endingMessage, setEndingMessage] = useState("");
@@ -96,7 +105,14 @@ export default function VideoCallScreen() {
 
   const isGroupCall = conversationType === "group";
 
-  // ⭐ RECORDING HOOK - Engine will be passed to functions when called
+  // ⭐ EMOTION CAPTURE HOOK - Captures every 10s
+  const { isCapturing } = useCallEmotionCapture({
+    callId: callId || "",
+    enabled: false,
+    intervalSeconds: 10, // Capture every 10 seconds
+  });
+
+  // ⭐ RECORDING HOOK
   const {
     recordingState,
     startRecording,
@@ -112,8 +128,7 @@ export default function VideoCallScreen() {
       console.log("📝 Recording complete, preparing for emotion analysis...");
 
       let videoFrameUri = data.videoUri;
-      
-      // Try to capture video frame if in video call
+
       if (callType === "video") {
         videoFrameUri = await captureVideoFrame();
       }
@@ -126,7 +141,6 @@ export default function VideoCallScreen() {
           data.duration
         );
 
-        // Show emotion analysis result
         if (result?.emotion) {
           Alert.alert(
             "Emotion Analysis Complete",
@@ -152,10 +166,10 @@ export default function VideoCallScreen() {
     },
   });
 
-  // ⭐ HANDLE RECORDING TOGGLE - Pass engine when calling
+  // ⭐ HANDLE RECORDING TOGGLE
   const handleRecordingToggle = async () => {
     const engine = agoraEngineRef.current;
-    
+
     if (!engine) {
       Alert.alert("Error", "Call not initialized yet");
       return;
@@ -170,6 +184,20 @@ export default function VideoCallScreen() {
     } catch (error) {
       console.error("❌ Recording toggle failed:", error);
     }
+  };
+
+  // ⭐ NEW: Toggle emotion capture
+  const toggleEmotionCapture = () => {
+    setEmotionCaptureEnabled(!emotionCaptureEnabled);
+
+    Alert.alert(
+      emotionCaptureEnabled
+        ? "Emotion Capture Disabled"
+        : "Emotion Capture Enabled",
+      emotionCaptureEnabled
+        ? "Your emotions will no longer be analyzed during this call"
+        : "Your emotions will be analyzed every 10 seconds"
+    );
   };
 
   // Request Permissions
@@ -234,8 +262,7 @@ export default function VideoCallScreen() {
 
     try {
       const engine = agoraEngineRef.current;
-      
-      // ⭐ Stop recording if active
+
       if (recordingState.isRecording && engine) {
         await stopRecording(engine);
       }
@@ -266,16 +293,14 @@ export default function VideoCallScreen() {
     }
   };
 
-  // ⭐ CRITICAL FIX: Setup remote video - DO NOT use setupRemoteVideo()
-  // Just unmute the remote video stream and let RtcSurfaceView handle rendering
+  // Setup remote video stream
   const setupRemoteVideoStream = async (remoteUid: number) => {
     const engine = agoraEngineRef.current;
-    
+
     if (!engine || callType !== "video") {
       return;
     }
 
-    // Check if already setup
     if (remoteVideoSetupRef.current.has(remoteUid)) {
       console.log("⚠️ Remote video already setup for uid:", remoteUid);
       return;
@@ -283,15 +308,9 @@ export default function VideoCallScreen() {
 
     try {
       console.log(`🔧 Setting up remote video for uid: ${remoteUid}`);
-
-      // ⭐ KEY FIX: Only unmute the stream - DO NOT call setupRemoteVideo
-      // The RtcSurfaceView component will handle the actual rendering
       engine.muteRemoteVideoStream(remoteUid, false);
       console.log("✅ Remote video stream unmuted for uid:", remoteUid);
-
-      // Mark as setup
       remoteVideoSetupRef.current.add(remoteUid);
-
     } catch (error) {
       console.error("❌ Failed to setup remote video:", error);
     }
@@ -313,7 +332,6 @@ export default function VideoCallScreen() {
 
       const personalRoom = `user:${userId}`;
       socket.emit("join", personalRoom);
-
       socket.emit("joinCallRoom", { callId, conversationId });
     });
 
@@ -332,7 +350,6 @@ export default function VideoCallScreen() {
     socket.on("userLeftCall", (data: { userId: string; uid: number }) => {
       console.log("👤 User left call:", data);
 
-      // Remove from setup tracking
       remoteVideoSetupRef.current.delete(data.uid);
 
       if (!isGroupCall && participants.length === 1) {
@@ -411,6 +428,55 @@ export default function VideoCallScreen() {
       }
     });
 
+    // ⭐ NEW: Listen for realtime emotion updates
+    socket.on(
+      "callEmotionUpdate",
+      (data: {
+        call_id: string;
+        user_id: string;
+        user_mongo_id: string;
+        emotion: string;
+        confidence: number;
+        emotion_scores: any;
+        timestamp: string;
+      }) => {
+        if (data.call_id !== callId) return;
+
+        console.log("🎭 Received emotion update:", data);
+
+        // Update own emotion
+        if (data.user_id === userId) {
+          setMyCurrentEmotion(data.emotion);
+          setMyEmotionConfidence(data.confidence);
+        }
+
+        // Update participant emotion
+        setParticipants((prev) =>
+          prev.map((p) =>
+            p.userId === data.user_id
+              ? {
+                  ...p,
+                  currentEmotion: data.emotion,
+                  emotionConfidence: data.confidence,
+                }
+              : p
+          )
+        );
+
+        // Update main participant if needed
+        setMainParticipant((prev) => {
+          if (prev?.userId === data.user_id) {
+            return {
+              ...prev,
+              currentEmotion: data.emotion,
+              emotionConfidence: data.confidence,
+            };
+          }
+          return prev;
+        });
+      }
+    );
+
     socket.on("callEnded", (data: any) => {
       console.log("📞 Call ended event received:", data);
 
@@ -441,7 +507,6 @@ export default function VideoCallScreen() {
       }
     });
 
-    // ⭐ EMOTION ANALYSIS SOCKET LISTENERS
     socket.on("requestCallRecording", async (data: any) => {
       if (data.call_id === callId) {
         console.log("📨 Server requested call recording for emotion analysis");
@@ -456,8 +521,7 @@ export default function VideoCallScreen() {
 
         if (recordingData) {
           let videoFrameUri = recordingData.videoUri;
-          
-          // Try to capture video frame if in video call
+
           if (callType === "video") {
             videoFrameUri = await captureVideoFrame();
           }
@@ -569,7 +633,6 @@ export default function VideoCallScreen() {
             console.log("✅ Join channel success:", connection.channelId);
             setJoined(true);
 
-            // ⭐ START RECORDING - Pass engine reference
             startRecording(engine).catch((err) =>
               console.error("Failed to start recording:", err)
             );
@@ -585,8 +648,10 @@ export default function VideoCallScreen() {
               userName: participantInfo?.userName || `User ${remoteUid}`,
               userAvatar: participantInfo?.userAvatar,
               isMuted: false,
-              isVideoOff: false, // ⭐ IMPORTANT: Default to false, will update via event handler
+              isVideoOff: false,
               isScreenSharing: false,
+              currentEmotion: undefined,
+              emotionConfidence: undefined,
             };
 
             console.log("✅ New participant created:", newParticipant);
@@ -600,7 +665,6 @@ export default function VideoCallScreen() {
               return [...prev, newParticipant];
             });
 
-            // ⭐ Set as main participant if no one is selected
             setMainParticipant((currentMain) => {
               if (!currentMain) {
                 console.log("🎯 Setting as MAIN participant (was null)");
@@ -610,9 +674,7 @@ export default function VideoCallScreen() {
               return currentMain;
             });
 
-            // ⭐ FIXED: Setup remote video with improved function
             if (callType === "video") {
-              // Add small delay to ensure user is fully joined
               setTimeout(() => {
                 setupRemoteVideoStream(remoteUid);
               }, 500);
@@ -626,7 +688,6 @@ export default function VideoCallScreen() {
               reason
             );
 
-            // Clean up tracking
             remoteVideoSetupRef.current.delete(remoteUid);
 
             if (!isGroupCall) {
@@ -655,21 +716,21 @@ export default function VideoCallScreen() {
               elapsed,
             });
 
-            // ⭐ FIXED: Handle video state changes properly
-            // state: 0=Stopped, 1=Starting, 2=Decoding, 3=Frozen, 4=Failed
             if (state === 2) {
-              // Decoding = video is playing
-              console.log("✅ Remote video is now decoding for uid:", remoteUid);
-              
-              // If not setup yet, try to setup
-              if (!remoteVideoSetupRef.current.has(remoteUid) && callType === "video") {
+              console.log(
+                "✅ Remote video is now decoding for uid:",
+                remoteUid
+              );
+
+              if (
+                !remoteVideoSetupRef.current.has(remoteUid) &&
+                callType === "video"
+              ) {
                 setupRemoteVideoStream(remoteUid);
               }
             } else if (state === 0) {
-              // Stopped
               console.log("⚠️ Remote video stopped for uid:", remoteUid);
             } else if (state === 4) {
-              // Failed - try to re-setup
               console.log("❌ Remote video failed for uid:", remoteUid);
               remoteVideoSetupRef.current.delete(remoteUid);
               setTimeout(() => {
@@ -677,20 +738,21 @@ export default function VideoCallScreen() {
               }, 1000);
             }
 
-            // ⭐ CRITICAL FIX: Only set isVideoOff if truly stopped, not during starting/decoding
             const isVideoOff = state === 0;
-            
-            console.log(`📹 Setting isVideoOff=${isVideoOff} for uid:${remoteUid}, state:${state}`);
-            
+
+            console.log(
+              `📹 Setting isVideoOff=${isVideoOff} for uid:${remoteUid}, state:${state}`
+            );
+
             setParticipants((prev) =>
-              prev.map((p) =>
-                p.uid === remoteUid ? { ...p, isVideoOff } : p
-              )
+              prev.map((p) => (p.uid === remoteUid ? { ...p, isVideoOff } : p))
             );
 
             setMainParticipant((prev) => {
               if (prev?.uid === remoteUid) {
-                console.log(`📹 Updating mainParticipant isVideoOff=${isVideoOff}`);
+                console.log(
+                  `📹 Updating mainParticipant isVideoOff=${isVideoOff}`
+                );
                 return { ...prev, isVideoOff };
               }
               return prev;
@@ -710,11 +772,9 @@ export default function VideoCallScreen() {
             });
 
             const isMuted = state === 0 || state === 4;
-            
+
             setParticipants((prev) =>
-              prev.map((p) =>
-                p.uid === remoteUid ? { ...p, isMuted } : p
-              )
+              prev.map((p) => (p.uid === remoteUid ? { ...p, isMuted } : p))
             );
 
             setMainParticipant((prev) => {
@@ -724,7 +784,6 @@ export default function VideoCallScreen() {
               return prev;
             });
           },
-          // ⭐ FIXED: Monitor video subscription state
           onVideoSubscribeStateChanged: (
             channelId,
             uid,
@@ -738,25 +797,23 @@ export default function VideoCallScreen() {
               newState,
               elapsed: elapseSinceLastState,
             });
-            
+
             if (newState === 3) {
-              // Successfully subscribed
               console.log("✅ Successfully subscribed to remote video:", uid);
             } else if (newState === 1) {
-              // Not subscribed
               console.log("⚠️ Not subscribed to remote video:", uid);
-              // Try to setup if not already
-              if (!remoteVideoSetupRef.current.has(uid) && callType === "video") {
+              if (
+                !remoteVideoSetupRef.current.has(uid) &&
+                callType === "video"
+              ) {
                 setTimeout(() => {
                   setupRemoteVideoStream(uid);
                 }, 500);
               }
             } else if (newState === 2) {
-              // Subscribing
               console.log("🔄 Subscribing to remote video:", uid);
             }
           },
-          // ⭐ Monitor remote video stats
           onRemoteVideoStats: (connection, stats) => {
             if (stats.receivedBitrate > 0) {
               console.log("📊 Remote video stats:", {
@@ -769,8 +826,13 @@ export default function VideoCallScreen() {
               });
             }
           },
-          // ⭐ FIXED: Add first remote video decoded callback
-          onFirstRemoteVideoDecoded: (connection, remoteUid, width, height, elapsed) => {
+          onFirstRemoteVideoDecoded: (
+            connection,
+            remoteUid,
+            width,
+            height,
+            elapsed
+          ) => {
             console.log("🎬 First remote video frame decoded:", {
               remoteUid,
               width,
@@ -780,7 +842,6 @@ export default function VideoCallScreen() {
           },
         });
 
-        // ⭐ FIXED: Set video encoder configuration for better quality
         if (callType === "video") {
           await engine.setVideoEncoderConfiguration({
             dimensions: {
@@ -806,16 +867,14 @@ export default function VideoCallScreen() {
         await engine.setEnableSpeakerphone(true);
         await engine.setAudioProfile(1, 1);
 
-        // ⭐ FIXED: Join with proper media options
         await engine.joinChannel(token, channelName, uid, {
           clientRoleType: ClientRoleType.ClientRoleBroadcaster,
           publishMicrophoneTrack: true,
           publishCameraTrack: callType === "video",
           autoSubscribeAudio: true,
-          autoSubscribeVideo: true, // Always auto-subscribe
+          autoSubscribeVideo: true,
         });
 
-        // ⭐ FIXED: Update channel media options explicitly
         if (callType === "video") {
           await engine.updateChannelMediaOptions({
             publishCameraTrack: true,
@@ -849,7 +908,6 @@ export default function VideoCallScreen() {
           engine.release();
         }
       }
-      // Clear tracking
       remoteVideoSetupRef.current.clear();
     };
   }, [channelName, callType]);
@@ -880,6 +938,22 @@ export default function VideoCallScreen() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  // ⭐ NEW: Get emotion emoji
+  const getEmotionEmoji = (emotion?: string): string => {
+    if (!emotion) return "";
+
+    const emojiMap: Record<string, string> = {
+      joy: "😊",
+      sadness: "😢",
+      anger: "😠",
+      fear: "😨",
+      surprise: "😮",
+      neutral: "😐",
+    };
+
+    return emojiMap[emotion.toLowerCase()] || "🙂";
   };
 
   // Start Screen Share
@@ -1026,11 +1100,7 @@ export default function VideoCallScreen() {
   };
 
   // Render participant thumbnail
-  const renderParticipantThumbnail = ({
-    item,
-  }: {
-    item: Participant;
-  }) => {
+  const renderParticipantThumbnail = ({ item }: { item: Participant }) => {
     const isSelected = mainParticipant?.uid === item.uid;
 
     return (
@@ -1060,6 +1130,15 @@ export default function VideoCallScreen() {
             }}
             zOrderMediaOverlay={false}
           />
+        )}
+
+        {/* ⭐ NEW: Emotion indicator */}
+        {item.currentEmotion && (
+          <View style={styles.emotionBadge}>
+            <Text style={styles.emotionEmoji}>
+              {getEmotionEmoji(item.currentEmotion)}
+            </Text>
+          </View>
         )}
 
         {item.isMuted && (
@@ -1093,49 +1172,36 @@ export default function VideoCallScreen() {
         {/* Main video area */}
         {mainParticipant ? (
           <View style={styles.mainVideoContainer}>
-            {/* ⭐ DEBUG INFO - Remove this in production */}
-            {__DEV__ && (
-              <View style={{
-                position: 'absolute',
-                top: 100,
-                left: 10,
-                backgroundColor: 'rgba(0,0,0,0.7)',
-                padding: 10,
-                borderRadius: 8,
-                zIndex: 999,
-              }}>
-                <Text style={{ color: '#fff', fontSize: 10 }}>
-                  Main UID: {mainParticipant.uid}
+            {/* ⭐ NEW: Main participant emotion */}
+            {mainParticipant.currentEmotion && (
+              <View style={styles.mainEmotionIndicator}>
+                <Text style={styles.mainEmotionEmoji}>
+                  {getEmotionEmoji(mainParticipant.currentEmotion)}
                 </Text>
-                <Text style={{ color: '#fff', fontSize: 10 }}>
-                  isVideoOff: {mainParticipant.isVideoOff ? 'TRUE ❌' : 'FALSE ✅'}
-                </Text>
-                <Text style={{ color: '#fff', fontSize: 10 }}>
-                  isScreenSharing: {mainParticipant.isScreenSharing ? 'YES' : 'NO'}
-                </Text>
-                <Text style={{ color: '#fff', fontSize: 10 }}>
-                  Name: {mainParticipant.userName}
+                <Text style={styles.mainEmotionText}>
+                  {mainParticipant.currentEmotion} (
+                  {(mainParticipant.emotionConfidence! * 100).toFixed(0)}%)
                 </Text>
               </View>
             )}
-            
+
             {callType === "audio" || mainParticipant.isVideoOff ? (
               <View style={styles.audioModeContainer}>
                 <Ionicons name="person" size={80} color="#9ca3af" />
                 <Text style={styles.audioStatusText}>
                   {mainParticipant.userName}
                 </Text>
-                <Text style={[styles.audioStatusText, { fontSize: 14, marginTop: 8 }]}>
+                <Text
+                  style={[
+                    styles.audioStatusText,
+                    { fontSize: 14, marginTop: 8 },
+                  ]}
+                >
                   {mainParticipant.isVideoOff ? "Video is off" : "Audio only"}
                 </Text>
               </View>
             ) : (
               <>
-                {console.log('🎬 Rendering main RtcSurfaceView:', {
-                  uid: mainParticipant.uid,
-                  sourceType: mainParticipant.isScreenSharing ? 'Screen' : 'Remote',
-                  isVideoOff: mainParticipant.isVideoOff,
-                })}
                 <RtcSurfaceView
                   style={styles.mainVideo}
                   canvas={{
@@ -1162,8 +1228,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* Local video preview - REMOVED, now shown in thumbnails */}
-
         {/* Audio-only mode */}
         {callType === "audio" && (
           <View style={styles.audioModeContainer}>
@@ -1174,23 +1238,27 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* Participants thumbnails - Show all EXCEPT mainParticipant */}
+        {/* Participants thumbnails */}
         {participants.length > 0 && (
           <View style={styles.thumbnailsWrapper}>
             <FlatList
               data={[
-                // Add local user as first thumbnail (if not in audio-only and video is on)
-                ...(callType === "video" && !isVideoOff ? [{
-                  uid: myUid,
-                  userId: userId || '',
-                  userName: 'You',
-                  isMuted: isMuted,
-                  isVideoOff: isVideoOff,
-                  isScreenSharing: isScreenSharing,
-                  isLocal: true,
-                }] : []),
-                // Add other participants except mainParticipant
-                ...participants.filter(p => p.uid !== mainParticipant?.uid)
+                ...(callType === "video" && !isVideoOff
+                  ? [
+                      {
+                        uid: myUid,
+                        userId: userId || "",
+                        userName: "You",
+                        isMuted: isMuted,
+                        isVideoOff: isVideoOff,
+                        isScreenSharing: isScreenSharing,
+                        isLocal: true,
+                        currentEmotion: myCurrentEmotion || undefined,
+                        emotionConfidence: myEmotionConfidence,
+                      },
+                    ]
+                  : []),
+                ...participants.filter((p) => p.uid !== mainParticipant?.uid),
               ]}
               renderItem={({ item }) => {
                 const isSelected = mainParticipant?.uid === item.uid;
@@ -1218,16 +1286,27 @@ export default function VideoCallScreen() {
                         style={styles.thumbnail}
                         canvas={{
                           uid: isLocal ? 0 : item.uid,
-                          sourceType: isLocal 
+                          sourceType: isLocal
                             ? VideoSourceType.VideoSourceCamera
-                            : (item.isScreenSharing
+                            : item.isScreenSharing
                               ? VideoSourceType.VideoSourceScreen
-                              : VideoSourceType.VideoSourceRemote),
+                              : VideoSourceType.VideoSourceRemote,
                           renderMode: RenderModeType.RenderModeHidden,
-                          mirrorMode: isLocal ? VideoMirrorModeType.VideoMirrorModeEnabled : VideoMirrorModeType.VideoMirrorModeDisabled,
+                          mirrorMode: isLocal
+                            ? VideoMirrorModeType.VideoMirrorModeEnabled
+                            : VideoMirrorModeType.VideoMirrorModeDisabled,
                         }}
                         zOrderMediaOverlay={isLocal}
                       />
+                    )}
+
+                    {/* ⭐ NEW: Emotion badge */}
+                    {item.currentEmotion && (
+                      <View style={styles.emotionBadge}>
+                        <Text style={styles.emotionEmoji}>
+                          {getEmotionEmoji(item.currentEmotion)}
+                        </Text>
+                      </View>
                     )}
 
                     {item.isMuted && (
@@ -1250,7 +1329,9 @@ export default function VideoCallScreen() {
                   </TouchableOpacity>
                 );
               }}
-              keyExtractor={(item) => `${item.uid}-${(item as any).isLocal ? 'local' : 'remote'}`}
+              keyExtractor={(item) =>
+                `${item.uid}-${(item as any).isLocal ? "local" : "remote"}`
+              }
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.thumbnailsContainer}
@@ -1258,9 +1339,41 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* ⭐ RECORDING INDICATOR */}
+        {/* ⭐ EMOTION CAPTURE INDICATOR */}
+        {isCapturing && emotionCaptureEnabled && (
+          <View
+            style={[
+              styles.emotionCaptureIndicator,
+              { top: Platform.OS === "ios" ? 60 : 70, right: 20 },
+            ]}
+          >
+            <Text style={styles.emotionCaptureText}>🎭 Analyzing...</Text>
+          </View>
+        )}
+
+        {/* ⭐ MY EMOTION DISPLAY */}
+        {myCurrentEmotion && (
+          <View
+            style={[
+              styles.myEmotionDisplay,
+              { top: Platform.OS === "ios" ? 100 : 110, right: 20 },
+            ]}
+          >
+            <Text style={styles.myEmotionEmoji}>
+              {getEmotionEmoji(myCurrentEmotion)}
+            </Text>
+            <Text style={styles.myEmotionLabel}>You: {myCurrentEmotion}</Text>
+          </View>
+        )}
+
+        {/* RECORDING INDICATOR */}
         {recordingState.isRecording && (
-          <View style={[styles.recordingIndicator, { top: Platform.OS === "ios" ? 60 : 70 }]}>
+          <View
+            style={[
+              styles.recordingIndicator,
+              { top: Platform.OS === "ios" ? 60 : 70 },
+            ]}
+          >
             <View style={styles.recordingDot} />
             <Text style={styles.recordingText}>
               REC {formatDuration(recordingState.recordingDuration)}
@@ -1268,9 +1381,14 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* ⭐ EMOTION ANALYZING INDICATOR */}
+        {/* EMOTION ANALYZING INDICATOR */}
         {isEmotionAnalyzing && (
-          <View style={[styles.analyzingIndicator, { top: Platform.OS === "ios" ? 60 : 70 }]}>
+          <View
+            style={[
+              styles.analyzingIndicator,
+              { top: Platform.OS === "ios" ? 60 : 70 },
+            ]}
+          >
             <Text style={styles.analyzingText}>🎭 Analyzing emotion...</Text>
           </View>
         )}
@@ -1366,7 +1484,22 @@ export default function VideoCallScreen() {
                 />
               </TouchableOpacity>
 
-              {/* ⭐ RECORDING BUTTON */}
+              {/* ⭐ NEW: Emotion Capture Toggle Button */}
+              <TouchableOpacity
+                style={[
+                  styles.controlButton,
+                  !emotionCaptureEnabled && styles.controlButtonActive,
+                ]}
+                onPress={toggleEmotionCapture}
+              >
+                <Ionicons
+                  name={emotionCaptureEnabled ? "happy" : "happy-outline"}
+                  size={24}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+
+              {/* RECORDING BUTTON */}
               <TouchableOpacity
                 style={[
                   styles.controlButton,
@@ -1376,7 +1509,11 @@ export default function VideoCallScreen() {
                 disabled={isEmotionAnalyzing}
               >
                 <Ionicons
-                  name={recordingState.isRecording ? "stop-circle" : "radio-button-on"}
+                  name={
+                    recordingState.isRecording
+                      ? "stop-circle"
+                      : "radio-button-on"
+                  }
                   size={24}
                   color="#fff"
                 />
@@ -1443,6 +1580,8 @@ export default function VideoCallScreen() {
                   <Text style={styles.participantStatus}>
                     {isMuted ? "Muted" : "Active"} •{" "}
                     {isVideoOff ? "Video Off" : "Video On"}
+                    {myCurrentEmotion &&
+                      ` • ${getEmotionEmoji(myCurrentEmotion)} ${myCurrentEmotion}`}
                   </Text>
                 </View>
               </View>
@@ -1464,6 +1603,8 @@ export default function VideoCallScreen() {
                       {participant.isMuted ? "Muted" : "Active"} •{" "}
                       {participant.isVideoOff ? "Video Off" : "Video On"}
                       {participant.isScreenSharing && " • Sharing Screen"}
+                      {participant.currentEmotion &&
+                        ` • ${getEmotionEmoji(participant.currentEmotion)} ${participant.currentEmotion}`}
                     </Text>
                   </View>
                 </View>
@@ -1570,6 +1711,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
+  // ⭐ NEW: Emotion badge styles
+  emotionBadge: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "rgba(249, 115, 22, 0.9)",
+    borderRadius: 12,
+    padding: 4,
+    minWidth: 24,
+    alignItems: "center",
+  },
+  emotionEmoji: {
+    fontSize: 14,
+  },
   mutedBadge: {
     position: "absolute",
     top: 6,
@@ -1585,47 +1740,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#10b981",
     borderRadius: 12,
     padding: 4,
-  },
-  localVideoContainer: {
-    position: "absolute",
-    top: SCREEN_HEIGHT * 0.12,
-    right: 20,
-    width: 120,
-    height: 160,
-    borderRadius: 12,
-    overflow: "hidden",
-    borderWidth: 2,
-    borderColor: "#f97316",
-  },
-  localVideo: {
-    width: "100%",
-    height: "100%",
-  },
-  localVideoLabel: {
-    position: "absolute",
-    bottom: 4,
-    left: 4,
-    right: 4,
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "600",
-    textAlign: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  screenSharePreview: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  screenSharePreviewText: {
-    color: "#fff",
-    fontSize: 12,
-    marginTop: 8,
-    fontWeight: "500",
   },
   topBar: {
     position: "absolute",
@@ -1783,7 +1897,60 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
-  // ⭐ RECORDING & EMOTION ANALYSIS STYLES
+  // ⭐ NEW: Emotion indicators
+  emotionCaptureIndicator: {
+    position: "absolute",
+    backgroundColor: "rgba(249, 115, 22, 0.8)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 100,
+  },
+  emotionCaptureText: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  myEmotionDisplay: {
+    position: "absolute",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    zIndex: 100,
+  },
+  myEmotionEmoji: {
+    fontSize: 18,
+  },
+  myEmotionLabel: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  mainEmotionIndicator: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 100,
+  },
+  mainEmotionEmoji: {
+    fontSize: 24,
+  },
+  mainEmotionText: {
+    color: "#FFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   recordingIndicator: {
     position: "absolute",
     left: 20,
