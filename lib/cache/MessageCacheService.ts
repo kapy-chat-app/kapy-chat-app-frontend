@@ -1,4 +1,4 @@
-// lib/cache/MessageCacheService.ts
+// lib/cache/MessageCacheService.ts - WITH DECRYPTED URI CACHING
 import * as SQLite from 'expo-sqlite';
 
 // =============================================
@@ -13,11 +13,11 @@ export interface CachedMessage {
   sender_avatar?: string;
   content: string;
   type: string;
-  attachments_json: string;
+  attachments_json: string; // ✅ Now includes decryptedUri
   reactions_json: string;
   read_by_json: string;
   reply_to_json?: string;
-  metadata_json?: string; // ✨ NEW
+  metadata_json?: string;
   is_edited: number;
   created_at: number;
   updated_at: number;
@@ -85,7 +85,6 @@ class MessageCacheService {
         );
       `);
 
-      // ✨ Migration: Add metadata_json column if it doesn't exist
       await this.migrateDatabase();
 
       this.initialized = true;
@@ -96,12 +95,10 @@ class MessageCacheService {
     }
   }
 
-  // ✨ NEW: Migration function
   private async migrateDatabase(): Promise<void> {
     if (!this.db) return;
 
     try {
-      // Check if metadata_json column exists
       const tableInfo = await this.db.getAllAsync<{ name: string }>(
         `PRAGMA table_info(messages)`
       );
@@ -149,7 +146,6 @@ class MessageCacheService {
     if (messages.length === 0) return;
 
     try {
-      // ✨ UPDATED: Add metadata_json to statement (16 parameters now)
       const stmt = await this.db!.prepareAsync(`
         INSERT OR REPLACE INTO messages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
@@ -164,11 +160,11 @@ class MessageCacheService {
             msg.sender_avatar || null, 
             msg.content, 
             msg.type, 
-            msg.attachments_json,
+            msg.attachments_json, // ✅ Contains decryptedUri
             msg.reactions_json, 
             msg.read_by_json, 
             msg.reply_to_json || null,
-            msg.metadata_json || null, // ✨ NEW
+            msg.metadata_json || null,
             msg.is_edited, 
             msg.created_at, 
             msg.updated_at, 
@@ -207,6 +203,35 @@ class MessageCacheService {
       );
     } catch (error) {
       console.error('❌ Failed to update message:', error);
+    }
+  }
+
+  // ✅ NEW: Update specific attachment's decryptedUri
+  async updateAttachmentUri(messageId: string, attachmentId: string, decryptedUri: string): Promise<void> {
+    if (!this.db) await this.initialize();
+
+    try {
+      // Get current message
+      const msg = await this.db!.getFirstAsync<CachedMessage>(
+        `SELECT attachments_json FROM messages WHERE _id = ?`,
+        [messageId]
+      );
+
+      if (!msg) return;
+
+      // Parse, update, save
+      const attachments = JSON.parse(msg.attachments_json || '[]');
+      const updated = attachments.map((att: any) => 
+        att._id === attachmentId ? { ...att, decryptedUri } : att
+      );
+
+      await this.updateMessage(messageId, {
+        attachments_json: JSON.stringify(updated)
+      });
+
+      console.log(`✅ Updated decryptedUri for attachment ${attachmentId}`);
+    } catch (error) {
+      console.error('❌ Failed to update attachment URI:', error);
     }
   }
 

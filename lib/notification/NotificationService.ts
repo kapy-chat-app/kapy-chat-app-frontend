@@ -1,4 +1,4 @@
-// lib/notification/NotificationService.ts - ENHANCED for Full Screen Calls
+// lib/notification/NotificationService.ts - UPDATED with FCM Token for Android
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
@@ -9,7 +9,7 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data as any;
 
-    // For call notifications, ALWAYS show
+    // For call notifications, ALWAYS show with max priority
     if (data.type === "call" && data.action === "incoming_call") {
       return {
         shouldShowAlert: true,
@@ -40,11 +40,77 @@ export class NotificationService {
     return NotificationService.instance;
   }
 
-  async registerForPushNotifications(): Promise<string | undefined> {
-    let token: string | undefined;
+  /**
+   * ⭐ UPDATED: Get push token - FCM for Android, Expo for iOS
+   */
+  private async getPushToken(): Promise<string | undefined> {
+    try {
+      if (Platform.OS === "android") {
+        // ⭐ ANDROID: Try to get native FCM token first
+        console.log("📱 Getting FCM token for Android...");
+        
+        try {
+          const devicePushToken = await Notifications.getDevicePushTokenAsync();
+          const fcmToken = devicePushToken.data;
+          
+          console.log("✅ FCM Token obtained:", fcmToken.substring(0, 30) + "...");
+          console.log("📊 Token type:", devicePushToken.type); // 'fcm' or 'apns'
+          
+          return fcmToken;
+        } catch (fcmError) {
+          console.warn("⚠️ Failed to get FCM token, falling back to Expo token:", fcmError);
+          
+          // Fallback to Expo token
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+          if (!projectId) {
+            console.error("❌ No Expo project ID found in app.json");
+            return undefined;
+          }
+          
+          const expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
+          console.log("✅ Expo Token (fallback):", expoPushToken.data);
+          return expoPushToken.data;
+        }
+      } else {
+        // ⭐ iOS: Use Expo token
+        console.log("📱 Getting Expo token for iOS...");
+        
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        if (!projectId) {
+          console.error("❌ No Expo project ID found in app.json");
+          return undefined;
+        }
+        
+        const expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
+        console.log("✅ Expo Token obtained:", expoPushToken.data);
+        return expoPushToken.data;
+      }
+    } catch (error) {
+      console.error("❌ Error getting push token:", error);
+      return undefined;
+    }
+  }
 
+  /**
+   * ⭐ Register for push notifications
+   * Returns FCM token (Android) or Expo token (iOS)
+   */
+  async registerForPushNotifications(): Promise<string | undefined> {
+    console.log("📱 Starting push notification registration...");
+    console.log("📱 Platform:", Platform.OS);
+    console.log("📱 Device:", Device.isDevice ? "Physical" : "Simulator");
+
+    // Check if running on physical device
+    if (!Device.isDevice) {
+      console.log("⚠️ Must use physical device for push notifications (not simulator)");
+      return undefined;
+    }
+
+    // ⭐ STEP 1: Create notification channels (Android only)
     if (Platform.OS === "android") {
-      // ⭐ Default channel
+      console.log("📱 Creating Android notification channels...");
+
+      // Default channel
       await Notifications.setNotificationChannelAsync("default", {
         name: "default",
         importance: Notifications.AndroidImportance.MAX,
@@ -52,7 +118,7 @@ export class NotificationService {
         lightColor: "#FF231F7C",
       });
 
-      // ⭐ Messages channel
+      // Messages channel
       await Notifications.setNotificationChannelAsync("messages", {
         name: "Tin nhắn",
         importance: Notifications.AndroidImportance.HIGH,
@@ -62,20 +128,18 @@ export class NotificationService {
         showBadge: true,
       });
 
-      // ⭐ CRITICAL: Calls channel with MAXIMUM priority
-      await Notifications.setNotificationChannelAsync("calls", {
-        name: "Cuộc gọi",
+      // ⭐ CRITICAL: Calls channel - MUST match CallNotificationModule.kt
+      await Notifications.setNotificationChannelAsync("incoming_calls", {
+        name: "Cuộc gọi đến",
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 500, 200, 500, 200, 500],
-        sound: "ringtone.wav",
+        sound: "ringtone.wav", // Must exist in android/app/src/main/res/raw/
         enableVibrate: true,
         showBadge: true,
         enableLights: true,
         lightColor: "#FF0000",
-        lockscreenVisibility:
-          Notifications.AndroidNotificationVisibility.PUBLIC,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         bypassDnd: true,
-        // ⭐ Audio settings for ringtone-like behavior
         audioAttributes: {
           usage: Notifications.AndroidAudioUsage.NOTIFICATION_RINGTONE,
           contentType: Notifications.AndroidAudioContentType.SONIFICATION,
@@ -86,81 +150,75 @@ export class NotificationService {
         },
       });
 
-      // ⭐ Friend requests channel
+      // Friend requests channel
       await Notifications.setNotificationChannelAsync("friend_requests", {
         name: "Lời mời kết bạn",
         importance: Notifications.AndroidImportance.DEFAULT,
       });
+
+      console.log("✅ Android notification channels created");
     }
 
-    // iOS specific configuration
-    if (Platform.OS === "ios") {
-      // Request critical alerts permission for calls
-      const { status } = await Notifications.requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowSound: true,
-          allowBadge: true,
-          allowCriticalAlerts: true, // For call notifications
-        },
-      });
+    // ⭐ STEP 2: Request permissions
+    console.log("📋 Requesting notification permissions...");
+    
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-      if (status !== "granted") {
-        console.log("❌ iOS notification permissions not granted");
-      }
+    if (existingStatus !== "granted") {
+      console.log("⚠️ Permission not granted yet, requesting...");
+      
+      const permissionRequest = Platform.OS === "ios"
+        ? {
+            ios: {
+              allowAlert: true,
+              allowSound: true,
+              allowBadge: true,
+              allowCriticalAlerts: true, // For call notifications
+            },
+          }
+        : {};
+
+      const { status } = await Notifications.requestPermissionsAsync(permissionRequest);
+      finalStatus = status;
     }
 
-    if (Device.isDevice) {
-      const { status: existingStatus } =
-        await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync({
-          ios: {
-            allowAlert: true,
-            allowSound: true,
-            allowBadge: true,
-            allowCriticalAlerts: true,
-          },
-        });
-        finalStatus = status;
-      }
-
-      if (finalStatus !== "granted") {
-        console.log("❌ Không thể lấy quyền thông báo!");
-        return undefined;
-      }
-
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-
-      token = (
-        await Notifications.getExpoPushTokenAsync({
-          projectId,
-        })
-      ).data;
-
-      console.log("✅ Push token:", token);
-    } else {
-      console.log("⚠️ Phải sử dụng thiết bị thật để nhận thông báo");
+    if (finalStatus !== "granted") {
+      console.log("❌ Push notification permission DENIED by user");
+      return undefined;
     }
 
+    console.log("✅ Notification permissions granted");
+
+    // ⭐ STEP 3: Get push token (FCM for Android, Expo for iOS)
+    const token = await this.getPushToken();
+
+    if (!token) {
+      console.error("❌ Failed to obtain push token");
+      return undefined;
+    }
+
+    console.log("✅ Push token registration complete");
     return token;
   }
 
+  /**
+   * Send push token to backend
+   */
   async sendPushTokenToServer(
     token: string,
     userId: string,
     getToken: () => Promise<string | null>
   ): Promise<void> {
     try {
-      console.log("🔐 Sending push token to server...");
-      console.log("🔐 User ID:", userId);
+      console.log("📤 Sending push token to server...");
+      console.log("👤 User ID:", userId);
+      console.log("📱 Token type:", token.startsWith("ExponentPushToken[") ? "Expo" : "FCM");
 
       const authToken = await getToken();
 
       if (!authToken) {
-        console.error("🔐 ❌ No auth token available");
+        console.error("❌ No auth token available");
         throw new Error("No authentication token");
       }
 
@@ -177,74 +235,136 @@ export class NotificationService {
             platform: Platform.OS,
             deviceName: Device.deviceName || "Unknown Device",
             deviceId: Constants.sessionId || "unknown",
+            tokenType: token.startsWith("ExponentPushToken[") ? "expo" : "fcm",
           }),
         }
       );
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("🔐 ❌ Server error:", errorData);
-        throw new Error("Failed to send push token");
+        console.error("❌ Server error:", errorData);
+        throw new Error(`Failed to send push token: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("🔐 ✅ Token sent successfully:", data);
+      console.log("✅ Push token sent successfully:", data);
     } catch (error) {
-      console.error("🔐 ❌ Error sending token:", error);
+      console.error("❌ Error sending token to server:", error);
       throw error;
     }
   }
 
+  /**
+   * Remove push token from server
+   */
   async removePushToken(
     userId: string,
     getToken: () => Promise<string | null>
   ): Promise<void> {
     try {
+      console.log("🗑️ Removing push token from server...");
+      
       const authToken = await getToken();
 
       if (!authToken) {
-        console.error("🔐 ❌ No auth token for removal");
+        console.error("❌ No auth token for token removal");
         return;
       }
 
-      await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/push-token`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/push-token`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      console.log("✅ Token removed from server");
+      if (response.ok) {
+        console.log("✅ Push token removed from server");
+      } else {
+        console.error("❌ Failed to remove token:", response.status);
+      }
     } catch (error) {
       console.error("❌ Error removing token:", error);
     }
   }
 
+  /**
+   * Get badge count
+   */
   async getBadgeCount(): Promise<number> {
     return await Notifications.getBadgeCountAsync();
   }
 
+  /**
+   * Set badge count
+   */
   async setBadgeCount(count: number): Promise<void> {
     await Notifications.setBadgeCountAsync(count);
   }
 
+  /**
+   * Clear all notifications
+   */
   async clearAllNotifications(): Promise<void> {
     await Notifications.dismissAllNotificationsAsync();
+    console.log("✅ All notifications cleared");
   }
 
-  // ⭐ NEW: Clear call notifications specifically
+  /**
+   * Clear call notifications specifically
+   */
   async clearCallNotifications(): Promise<void> {
-    const notifications = await Notifications.getPresentedNotificationsAsync();
-
-    for (const notification of notifications) {
-      const data = notification.request.content.data as any;
-      if (data.type === "call") {
-        await Notifications.dismissNotificationAsync(
-          notification.request.identifier
-        );
+    try {
+      const notifications = await Notifications.getPresentedNotificationsAsync();
+      
+      let clearedCount = 0;
+      for (const notification of notifications) {
+        const data = notification.request.content.data as any;
+        if (data.type === "call") {
+          await Notifications.dismissNotificationAsync(
+            notification.request.identifier
+          );
+          clearedCount++;
+        }
       }
+      
+      if (clearedCount > 0) {
+        console.log(`✅ Cleared ${clearedCount} call notification(s)`);
+      }
+    } catch (error) {
+      console.error("❌ Error clearing call notifications:", error);
     }
+  }
+
+  /**
+   * Check if we have notification permissions
+   */
+  async hasPermissions(): Promise<boolean> {
+    const { status } = await Notifications.getPermissionsAsync();
+    return status === "granted";
+  }
+
+  /**
+   * Get current notification settings
+   */
+  async getNotificationSettings() {
+    const permissions = await Notifications.getPermissionsAsync();
+    const badgeCount = await this.getBadgeCount();
+    const channels = Platform.OS === "android" 
+      ? await Notifications.getNotificationChannelsAsync()
+      : [];
+
+    return {
+      permissions,
+      badgeCount,
+      channels,
+      platform: Platform.OS,
+      isDevice: Device.isDevice,
+    };
   }
 }
 

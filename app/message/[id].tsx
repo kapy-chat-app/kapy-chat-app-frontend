@@ -1,4 +1,4 @@
-// MessageScreen.tsx - OPTIMIZED FOR INSTANT MESSAGING WITH ACTIVE TRACKING
+// MessageScreen.tsx - OPTIMIZED WITH MEMOIZATION TO PREVENT RE-DECRYPTION
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -13,7 +13,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +31,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+// ✅ CRITICAL: Memoize MessageItem to prevent unnecessary re-renders
+const MemoizedMessageItem = memo(MessageItem, (prevProps, nextProps) => {
+  // Only re-render if essential props changed
+  return (
+    prevProps.message._id === nextProps.message._id &&
+    prevProps.message.content === nextProps.message.content &&
+    prevProps.message.status === nextProps.message.status &&
+    prevProps.isHighlighted === nextProps.isHighlighted &&
+    // ✅ CRITICAL: Deep compare attachments to detect changes
+    JSON.stringify(prevProps.message.attachments) ===
+      JSON.stringify(nextProps.message.attachments)
+  );
+});
+
+const MemoizedSystemMessage = memo(SystemMessage, (prevProps, nextProps) => {
+  return prevProps.message._id === nextProps.message._id;
+});
+
 export default function MessageScreen() {
   const router = useRouter();
   const { id, scrollToMessageId } = useLocalSearchParams<{
@@ -43,7 +61,9 @@ export default function MessageScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [replyTo, setReplyTo] = useState<any>(null);
   const [conversation, setConversation] = useState<any>(null);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
 
   // Call states
   const [isInitiatingCall, setIsInitiatingCall] = useState(false);
@@ -69,7 +89,8 @@ export default function MessageScreen() {
   const isDark = actualTheme === "dark";
 
   // ✅ OPTIMIZED: Get encryption state from global provider (instant)
-  const { isInitialized: encryptionReady, loading: encryptionLoading } = useEncryption();
+  const { isInitialized: encryptionReady, loading: encryptionLoading } =
+    useEncryption();
 
   // ✅ OPTIMIZED: Messages hook starts loading immediately
   const {
@@ -91,7 +112,7 @@ export default function MessageScreen() {
     retryDecryption,
   } = useMessages(id || null);
 
-  const { socket,isConnected, isUserOnline, onlineUsers } = useSocket();
+  const { socket, isConnected, isUserOnline, onlineUsers } = useSocket();
   const { conversations } = useConversations();
 
   // ✅ OPTIMIZED: Set conversation immediately
@@ -110,71 +131,54 @@ export default function MessageScreen() {
       );
       if (recipient) {
         setRecipientId(recipient.clerkId);
-        console.log("✅ Recipient ID set:", recipient.clerkId);
       }
     } else if (conversation && conversation.type === "group") {
       setRecipientId(null);
-      console.log("⚠️ Group chat - file encryption not supported yet");
     }
   }, [conversation, userId]);
 
   // ==========================================
   // ⭐ NEW: ACTIVE CONVERSATION TRACKING
   // ==========================================
-
-  /**
-   * Notify server when entering/leaving conversation
-   */
   useEffect(() => {
-  if (!socket || !id || !userId || !isConnected) {
-    console.log('⏳ Waiting for socket...', { 
-      hasSocket: !!socket, 
-      id, 
-      userId, 
-      isConnected 
+    if (!socket || !id || !userId || !isConnected) {
+      console.log("⏳ Waiting for socket...", {
+        hasSocket: !!socket,
+        conversationId: id,
+        userId,
+        isConnected,
+      });
+      return;
+    }
+
+    console.log("✅ Socket connected, joining conversation:", id);
+
+    // ✅ Emit join
+    socket.emit("joinConversation", {
+      user_id: userId,
+      conversation_id: id,
     });
-    return;
-  }
 
-  console.log(`👁️ Entering conversation ${id} (socket connected: ${socket.id})`);
+    // ✅ Wait for confirmation
+    const handleJoined = (data: any) => {
+      console.log("✅ Successfully joined conversation:", data);
+    };
 
-  // ✅ Socket is connected, safe to emit
-  socket.emit("enterConversation", {
-    user_id: userId,
-    conversation_id: id,
-  });
+    socket.on("joinedConversation", handleJoined);
 
-  // ✅ Send periodic activity updates
-  activityIntervalRef.current = setInterval(() => {
-    if (socket.connected) {  // ✅ Check before each ping
-      socket.emit("conversationActivity", {
-        user_id: userId,
-        conversation_id: id,
-      });
-      console.log(`🔄 Activity ping for conversation ${id}`);
-    }
-  }, 15000);
+    return () => {
+      socket.off("joinedConversation", handleJoined);
 
-  // ✅ Cleanup
-  return () => {
-    console.log(`👋 Leaving conversation ${id}`);
-    
-    if (activityIntervalRef.current) {
-      clearInterval(activityIntervalRef.current);
-    }
+      if (socket.connected) {
+        socket.emit("leaveConversation", {
+          user_id: userId,
+          conversation_id: id,
+        });
+        console.log(`👋 Left conversation: ${id}`);
+      }
+    };
+  }, [socket, id, userId, isConnected]);
 
-    if (socket && socket.connected) {
-      socket.emit("leaveConversation", {
-        user_id: userId,
-        conversation_id: id,
-      });
-    }
-  };
-}, [socket, id, userId, isConnected]);
-
-  /**
-   * ⭐ NEW: Send activity signal on user interactions
-   */
   const handleUserActivity = useCallback(() => {
     if (socket && id && userId) {
       socket.emit("conversationActivity", {
@@ -384,8 +388,6 @@ export default function MessageScreen() {
 
                 const { call } = response.data;
 
-                console.log("📞 Video call initiated:", call);
-
                 router.push({
                   pathname: "/call/[id]" as any,
                   params: {
@@ -457,8 +459,6 @@ export default function MessageScreen() {
 
                 const { call } = response.data;
 
-                console.log("📞 Audio call initiated:", call);
-
                 router.push({
                   pathname: "/call/[id]" as any,
                   params: {
@@ -505,7 +505,6 @@ export default function MessageScreen() {
     attachments?: string[],
     replyToId?: string
   ) => {
-    // ⭐ Send activity signal
     handleUserActivity();
 
     // ✅ CASE 0: Handle GIF/Sticker FIRST
@@ -514,8 +513,6 @@ export default function MessageScreen() {
       (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
       (contentOrData as any).richMedia
     ) {
-      console.log(`✨ Sending ${contentOrData.type} from MessageScreen`);
-
       try {
         await sendMessage({
           content: contentOrData.content?.trim() || "",
@@ -530,9 +527,6 @@ export default function MessageScreen() {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
 
-        console.log(
-          `✅ ${contentOrData.type} sent successfully from MessageScreen`
-        );
         return;
       } catch (error: any) {
         console.error(`❌ Failed to send ${contentOrData.type}:`, error);
@@ -545,16 +539,7 @@ export default function MessageScreen() {
 
     // ✅ CASE 1: Handle encrypted files
     if (typeof contentOrData === "object" && contentOrData.encryptedFiles) {
-      console.log("📤 Sending message with encrypted files:", {
-        filesCount: contentOrData.encryptedFiles.length,
-        hasContent: !!contentOrData.content,
-        type: contentOrData.type,
-        hasLocalUris: !!contentOrData.localUris,
-      });
-
       try {
-        console.log("📤 Sending encrypted files...");
-
         await sendMessage({
           content: contentOrData.content?.trim() || "",
           type: contentOrData.type as any,
@@ -569,7 +554,6 @@ export default function MessageScreen() {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
 
-        console.log("✅ Message with encrypted files sent successfully");
         return;
       } catch (error: any) {
         console.error("❌ Failed to send encrypted files:", error);
@@ -595,16 +579,7 @@ export default function MessageScreen() {
       messageReplyTo = contentOrData.replyTo;
     }
 
-    console.log("📤 handleSendMessage called:", {
-      contentType: typeof messageContent,
-      content: messageContent,
-      contentLength: messageContent?.length,
-      attachments: messageAttachments,
-      replyToId: messageReplyTo,
-    });
-
     if (typeof messageContent !== "string") {
-      console.error("❌ Content is not a string:", typeof messageContent);
       Alert.alert(t("error"), "Invalid message content");
       return;
     }
@@ -617,8 +592,6 @@ export default function MessageScreen() {
     }
 
     try {
-      console.log("📤 Sending text message with E2EE...");
-
       await sendMessage({
         content: messageContent.trim(),
         type: "text",
@@ -631,8 +604,6 @@ export default function MessageScreen() {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
-
-      console.log("✅ Message sent successfully");
     } catch (error: any) {
       console.error("❌ Failed to send message:", error);
       Alert.alert(t("message.failed"), error.message || t("message.failed"), [
@@ -678,7 +649,6 @@ export default function MessageScreen() {
 
   const handleRetryDecryption = async (messageId: string) => {
     try {
-      console.log("🔄 Retrying decryption for message:", messageId);
       await retryDecryption(messageId);
       Alert.alert(t("success"), t("message.encryption.retrySuccess"));
     } catch (error: any) {
@@ -691,40 +661,57 @@ export default function MessageScreen() {
     }
   };
 
-  const handleReply = (message: any) => {
+  const handleReply = useCallback((message: any) => {
     setReplyTo(message);
-  };
+  }, []);
 
   const handleLoadMore = useCallback(async () => {
+    console.log("🔍 [LOAD_MORE] Called with:", {
+      hasMore,
+      loading,
+      canLoadMore,
+      isLoadingMore: isLoadingMoreRef.current,
+      timeSinceLastLoad: Date.now() - lastLoadTimeRef.current,
+    });
+
     if (
       !hasMore ||
       loading ||
       !canLoadMore ||
       Date.now() - lastLoadTimeRef.current < 1000
     ) {
+      console.log("⏭️ [LOAD_MORE] Skipping - conditions not met");
       return;
     }
 
-    if (isLoadingMoreRef.current) return;
+    if (isLoadingMoreRef.current) {
+      console.log("⏭️ [LOAD_MORE] Already loading");
+      return;
+    }
 
+    console.log("✅ [LOAD_MORE] Starting to load older messages...");
     isLoadingMoreRef.current = true;
 
     const visibleMessages = messages.slice(0, 5);
     if (visibleMessages.length > 0) {
       firstVisibleItemBeforeLoad.current = visibleMessages[0]._id;
+      console.log(
+        "📍 [LOAD_MORE] Saved first visible:",
+        firstVisibleItemBeforeLoad.current
+      );
     }
 
     try {
       await loadMoreMessages();
+      console.log("✅ [LOAD_MORE] Successfully loaded more messages");
     } catch (error) {
-      console.error("Failed to load more messages:", error);
+      console.error("❌ [LOAD_MORE] Failed:", error);
       isLoadingMoreRef.current = false;
     }
   }, [hasMore, loading, loadMoreMessages, canLoadMore, messages]);
 
   const handleScroll = useCallback(
     (event: any) => {
-      // ⭐ Send activity signal on scroll
       handleUserActivity();
 
       const { contentOffset, contentSize, layoutMeasurement } =
@@ -747,12 +734,17 @@ export default function MessageScreen() {
         }).start();
       }
 
+      // ✅ FIX: Check if scrolled to TOP (to load older messages)
+      // With inverted={false}, scrolling UP means scrollPosition approaches 0
+      const distanceFromTop = scrollPosition;
+
       if (
-        scrollPosition < 100 &&
+        distanceFromTop < 100 && // ✅ Near top of list
         hasMore &&
         !isLoadingMoreRef.current &&
         canLoadMore
       ) {
+        console.log("📜 Loading more messages... (scrolled to top)");
         handleLoadMore();
       }
     },
@@ -850,7 +842,7 @@ export default function MessageScreen() {
   };
 
   const handleTypingStart = () => {
-    handleUserActivity(); // ⭐ Send activity signal
+    handleUserActivity();
     sendTypingIndicator(true);
   };
 
@@ -859,40 +851,50 @@ export default function MessageScreen() {
   };
 
   // ========================================
-  // RENDER FUNCTIONS
+  // RENDER FUNCTIONS - ✅ MEMOIZED
   // ========================================
 
-  const renderMessage = ({ item, index }: { item: any; index: number }) => {
-    
-      console.log("🎨 Rendering message:", {
-    id: item._id,
-    type: item.type,
-    isSystemMessage: item.metadata?.isSystemMessage,
-    action: item.metadata?.action,
-    call_status: item.metadata?.call_status,
-  });
-    if (item.metadata?.isSystemMessage === true) {
-      return <SystemMessage message={item} />;
-    }
+  // ✅ CRITICAL: Memoize renderMessage to prevent unnecessary re-renders
+  const renderMessage = useCallback(
+    ({ item, index }: { item: any; index: number }) => {
+      // System message
+      if (item.metadata?.isSystemMessage === true) {
+        return <MemoizedSystemMessage message={item} />;
+      }
 
-    const isOwnMessage = item.sender?.clerkId === userId;
-    const isHighlighted = item._id === highlightedMessageId;
+      const isOwnMessage = item.sender?.clerkId === userId;
+      const isHighlighted = item._id === highlightedMessageId;
 
-    return (
-      <MessageItem
-        message={item}
-        isOwnMessage={isOwnMessage}
-        onReply={handleReply}
-        onEdit={handleEditMessage}
-        onDelete={handleDeleteMessage}
-        onReaction={handleAddReaction}
-        onRemoveReaction={handleRemoveReaction}
-        isHighlighted={isHighlighted}
-        onRetryDecryption={handleRetryDecryption}
-        encryptionReady={encryptionReady}
-      />
-    );
-  };
+      return (
+        <MemoizedMessageItem
+          message={item}
+          isOwnMessage={isOwnMessage}
+          onReply={handleReply}
+          onEdit={handleEditMessage}
+          onDelete={handleDeleteMessage}
+          onReaction={handleAddReaction}
+          onRemoveReaction={handleRemoveReaction}
+          isHighlighted={isHighlighted}
+          onRetryDecryption={handleRetryDecryption}
+          encryptionReady={encryptionReady}
+        />
+      );
+    },
+    [
+      userId,
+      highlightedMessageId,
+      handleReply,
+      handleEditMessage,
+      handleDeleteMessage,
+      handleAddReaction,
+      handleRemoveReaction,
+      handleRetryDecryption,
+      encryptionReady,
+    ]
+  );
+
+  // ✅ CRITICAL: Memoize keyExtractor
+  const keyExtractor = useCallback((item: any) => item._id, []);
 
   const renderLoadingHeader = () => {
     if (!hasMore || !loading) return null;
@@ -963,7 +965,6 @@ export default function MessageScreen() {
                 {getConversationTitle()}
               </Text>
 
-              {/* ✅ Always show E2EE badge (encryption ready from app start) */}
               {encryptionReady && (
                 <View className="ml-2 bg-green-500 rounded-full px-2 py-0.5">
                   <Text className="text-white text-xs font-bold">🔒</Text>
@@ -1153,7 +1154,7 @@ export default function MessageScreen() {
               ref={flatListRef}
               data={messages}
               renderItem={renderMessage}
-              keyExtractor={(item) => item._id}
+              keyExtractor={keyExtractor}
               className="flex-1 px-4"
               showsVerticalScrollIndicator={false}
               onScroll={handleScroll}
@@ -1162,6 +1163,9 @@ export default function MessageScreen() {
               initialNumToRender={15}
               maxToRenderPerBatch={10}
               windowSize={10}
+              // ✅ CRITICAL: Add these for better performance
+              removeClippedSubviews={Platform.OS === "android"}
+              updateCellsBatchingPeriod={50}
               ListHeaderComponent={renderLoadingHeader}
               ListFooterComponent={renderTypingIndicator}
               onViewableItemsChanged={onViewableItemsChanged}
@@ -1181,7 +1185,6 @@ export default function MessageScreen() {
           </>
         )}
 
-        {/* ✅ OPTIMIZED: Input enabled immediately (encryption ready from app start) */}
         <MessageInput
           conversationId={id}
           recipientId={recipientId}

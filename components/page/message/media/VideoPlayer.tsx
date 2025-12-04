@@ -1,8 +1,8 @@
 // components/page/message/media/VideoPlayer.tsx
-// FIXED: Better handling of data URIs for encrypted videos
+// ✅ FIXED: Added onLongPress support for MessageActionsMenu
 
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Image, Text, View, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,116 +12,102 @@ interface VideoPlayerProps {
   videos: any[];
   localUris?: string[];
   isSending: boolean;
+  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from parent
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ 
   videos, 
   localUris, 
-  isSending 
+  isSending,
+  onLongPress, // ✅ NEW
 }) => {
-  const [videoLoadErrors, setVideoLoadErrors] = useState<{ [key: string]: boolean }>({});
-  const [videoLoadStates, setVideoLoadStates] = useState<{ [key: string]: 'loading' | 'ready' | 'error' }>({});
+  const [videoLoadStates, setVideoLoadStates] = useState<{ 
+    [key: string]: 'loading' | 'ready' | 'error' 
+  }>({});
 
   const getVideoUri = (attachment: any, index: number): string | null => {
-    // Priority: decryptedUri > localUri (when sending) > url
     if (attachment.decryptedUri) {
-      console.log(`🎬 Video ${index}: Using decryptedUri`);
-      console.log(`   URI type: ${attachment.decryptedUri.substring(0, 50)}...`);
-      console.log(`   Is data URI: ${attachment.decryptedUri.startsWith('data:')}`);
       return attachment.decryptedUri;
     }
     
     if (isSending && localUris && localUris[index]) {
-      console.log(`🎬 Video ${index}: Using localUri (sending)`);
       return localUris[index];
     }
     
     if (attachment.url) {
-      console.log(`🎬 Video ${index}: Using server URL`);
       return attachment.url;
     }
     
-    console.log(`⚠️ Video ${index}: No URI available`);
     return null;
   };
 
-  const handleVideoError = (attachmentId: string, error: any) => {
-    console.error(`❌ Video load error for ${attachmentId}:`, error);
-    setVideoLoadErrors(prev => ({ ...prev, [attachmentId]: true }));
+  const handleVideoError = (attachmentId: string) => {
+    console.error(`❌ Video load error: ${attachmentId}`);
     setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'error' }));
   };
 
   const handleVideoLoad = (attachmentId: string, status: AVPlaybackStatus) => {
     if (status.isLoaded) {
-      console.log(`✅ Video loaded successfully: ${attachmentId}`);
-      console.log(`   Duration: ${status.durationMillis}ms`);
+      console.log(`✅ Video loaded: ${attachmentId}`);
       setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'ready' }));
     }
   };
 
   const handleVideoLoadStart = (attachmentId: string) => {
-    console.log(`🔄 Video loading started: ${attachmentId}`);
     setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'loading' }));
   };
 
   return (
-    <View>
+    <>
       {videos.map((att: any, index: number) => {
         const videoUri = getVideoUri(att, index);
-        const hasError = videoLoadErrors[att._id] || att.decryption_error;
         const loadState = videoLoadStates[att._id] || 'loading';
-
-        // Log attachment info for debugging
-        useEffect(() => {
-          console.log(`📹 Video attachment ${index}:`, {
-            id: att._id,
-            file_name: att.file_name,
-            file_type: att.file_type,
-            is_encrypted: att.is_encrypted,
-            has_decryptedUri: !!att.decryptedUri,
-            decryption_error: att.decryption_error,
-          });
-        }, [att]);
+        const hasError = att.decryption_error || loadState === 'error';
 
         return (
           <View 
             key={att._id || index} 
             className={index > 0 ? 'mt-1' : ''}
           >
-            {/* Error state */}
+            {/* ❌ Error State */}
             {hasError && (
-              <View 
+              <TouchableOpacity
+                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                delayLongPress={300}
+                activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
-                className="rounded-xl bg-gray-100 items-center justify-center"
+                className="rounded-xl bg-gray-800 items-center justify-center"
               >
-                <Ionicons name="videocam-off-outline" size={32} color="#d1d5db" />
-                <Text className="text-gray-400 text-xs mt-2">Failed to load video</Text>
-                {att.decryption_error && (
-                  <Text className="text-red-400 text-xs mt-1">Decryption failed</Text>
-                )}
-              </View>
+                <Ionicons name="videocam-off-outline" size={32} color="#ef4444" />
+                <Text className="text-red-400 text-xs mt-2">Failed to load</Text>
+              </TouchableOpacity>
             )}
 
-            {/* Loading state - No URI yet */}
+            {/* ⏳ Loading State - No URI yet */}
             {!hasError && !videoUri && (
-              <View 
+              <TouchableOpacity
+                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                delayLongPress={300}
+                activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
-                className="rounded-xl bg-gray-100 items-center justify-center"
+                className="rounded-xl bg-gray-900 items-center justify-center"
               >
                 <ActivityIndicator size="small" color="#f97316" />
                 <Text className="text-gray-400 text-xs mt-2">
                   {isSending ? 'Encrypting...' : 'Decrypting...'}
                 </Text>
-              </View>
+              </TouchableOpacity>
             )}
 
-            {/* Sending state with preview */}
+            {/* 📤 Sending State */}
             {!hasError && videoUri && isSending && (
-              <View 
+              <TouchableOpacity
+                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                delayLongPress={300}
+                activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
-                className="rounded-xl bg-gray-900 overflow-hidden"
+                className="rounded-xl bg-black overflow-hidden"
               >
-                {/* Try to show first frame as preview */}
                 <Video
                   source={{ uri: videoUri }}
                   style={{ position: 'absolute', width: '100%', height: '100%' }}
@@ -130,17 +116,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   isMuted={true}
                 />
                 <View className="absolute inset-0 bg-black/40 items-center justify-center">
-                  <View className="bg-black/60 rounded-full p-3">
-                    <ActivityIndicator size="small" color="white" />
-                  </View>
+                  <ActivityIndicator size="small" color="white" />
                   <Text className="text-white text-xs mt-2">Sending...</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
 
-            {/* Ready to play - Decrypted video */}
+            {/* ✅ Ready to Play - CLEAN VIDEO WITH LONG PRESS */}
             {!hasError && videoUri && !isSending && (
-              <View 
+              <TouchableOpacity
+                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                delayLongPress={300}
+                activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
                 className="rounded-xl overflow-hidden bg-black"
               >
@@ -153,22 +140,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                   shouldPlay={false}
                   onLoadStart={() => handleVideoLoadStart(att._id)}
                   onLoad={(status) => handleVideoLoad(att._id, status)}
-                  onError={(error) => handleVideoError(att._id, error)}
-                  // Important for data URIs
+                  onError={() => handleVideoError(att._id)}
                   progressUpdateIntervalMillis={500}
                 />
                 
-                {/* Loading overlay while video is loading */}
+                {/* Loading overlay */}
                 {loadState === 'loading' && (
-                  <View className="absolute inset-0 bg-black/30 items-center justify-center">
+                  <View className="absolute inset-0 bg-black/60 items-center justify-center">
                     <ActivityIndicator size="small" color="white" />
                   </View>
                 )}
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         );
       })}
-    </View>
+    </>
   );
 };
