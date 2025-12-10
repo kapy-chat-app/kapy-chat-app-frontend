@@ -1,15 +1,17 @@
-// hooks/message/useMessages.ts - COMPREHENSIVE FIX
+// hooks/message/useMessages.ts - COMPLETE FIXED VERSION WITH CACHE
+// ✅ Replace your current useMessages.ts with this file
+
 import {
   CachedMessage,
   messageCacheService,
 } from "@/lib/cache/MessageCacheService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChunkedFileDecryption } from "./useChunkedFileDecryption";
 import { useEncryption } from "./useEncryption";
 import { useFileDecryption } from "./useFileDecryption";
 import { useSocket } from "./useSocket";
-// ✅ ADD THIS LINE
-import { useChunkedFileDecryption } from "./useChunkedFileDecryption";
+
 export interface MessageSender {
   _id: string;
   clerkId: string;
@@ -30,7 +32,6 @@ export interface MessageAttachment {
     authTag: string;
     original_size: number;
     encrypted_size: number;
-    // ✅ ADD THESE 3 FIELDS
     chunks?: any[];
     totalChunks?: number;
     fileId?: string;
@@ -137,6 +138,8 @@ export interface CreateMessageData {
   encryptedFiles?: any[];
   localUris?: string[];
   richMedia?: RichMediaDTO;
+  isOptimistic?: boolean;
+  tempId?: string;
 }
 
 export interface TypingUser {
@@ -192,7 +195,7 @@ const toCachedMessage = (
       url: att.url,
       is_encrypted: att.is_encrypted,
       encryption_metadata: att.encryption_metadata,
-      decryptedUri: att.decryptedUri,
+      decryptedUri: att.decryptedUri, // ✅ CRITICAL: Save decryptedUri
     }))
   ),
   reactions_json: JSON.stringify(msg.reactions),
@@ -233,12 +236,12 @@ const fromCachedMessage = (cached: CachedMessage): Message => {
     },
     content: cached.content,
     type: cached.type as Message["type"],
-    attachments: attachments,
+    attachments: attachments, // ✅ This includes decryptedUri from cache
     reactions: JSON.parse(cached.reactions_json || "[]"),
     read_by: JSON.parse(cached.read_by_json || "[]"),
     reply_to: replyTo,
     metadata: metadata,
-    is_edited: cached.is_edited === 1,
+    is_edited: !!cached.is_edited,
     created_at: new Date(cached.created_at),
     updated_at: new Date(cached.updated_at),
     rich_media: cached.rich_media_json
@@ -278,7 +281,7 @@ export const useMessages = (
   const loadingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ✅ NEW: Track decryption status to prevent duplicate decryption
+  const fullyCachedMessageIds = useRef<Set<string>>(new Set());
   const decryptingFilesRef = useRef<Set<string>>(new Set());
   const decryptedFilesRef = useRef<Set<string>>(new Set());
 
@@ -294,7 +297,34 @@ export const useMessages = (
   }, [messages]);
 
   /**
-   * ✅ CRITICAL: Smart file decryption with deduplication
+   * ✅ Check if message is fully cached
+   */
+  const isMessageFullyCached = useCallback((msg: Message): boolean => {
+    if (fullyCachedMessageIds.current.has(msg._id)) {
+      return true;
+    }
+
+    if (msg.metadata?.isSystemMessage === true) {
+      fullyCachedMessageIds.current.add(msg._id);
+      return true;
+    }
+
+    const hasDecryptedText = !msg.encrypted_content || !!msg.content;
+    const hasEncryptedAttachments = msg.attachments?.some(
+      (att) => att.is_encrypted && !att.decryptedUri
+    );
+
+    const isFullyCached = hasDecryptedText && !hasEncryptedAttachments;
+
+    if (isFullyCached) {
+      fullyCachedMessageIds.current.add(msg._id);
+    }
+
+    return isFullyCached;
+  }, []);
+
+  /**
+   * ✅ Decrypt attachments
    */
   const decryptAttachments = useCallback(
     async (
@@ -306,106 +336,57 @@ export const useMessages = (
         return [];
       }
 
-      console.log(
-        `🔓 [DECRYPT] Processing ${attachments.length} attachments from ${senderClerkId}`
-      );
-
       return await Promise.all(
         attachments.map(async (att) => {
           const attKey = `${messageId}_${att._id}`;
 
-          // ✅ STEP 1: Check if already decrypted
           if (att.decryptedUri && decryptedFilesRef.current.has(attKey)) {
-            console.log(`✅ [DECRYPT] Already decrypted: ${att.file_name}`);
             return att;
           }
 
-          // ✅ STEP 2: Check if currently decrypting (prevent duplicate)
           if (decryptingFilesRef.current.has(attKey)) {
-            console.log(`⏳ [DECRYPT] Already decrypting: ${att.file_name}`);
-
-            // Wait for existing decryption (max 30s)
             const startTime = Date.now();
             while (decryptingFilesRef.current.has(attKey)) {
-              if (Date.now() - startTime > 30000) {
-                console.error(
-                  `⏱️ [DECRYPT] Timeout waiting for: ${att.file_name}`
-                );
-                break;
-              }
+              if (Date.now() - startTime > 30000) break;
               await new Promise((resolve) => setTimeout(resolve, 500));
             }
-
-            // Return attachment (might have URI now)
             return att;
           }
 
-          // ✅ STEP 3: Skip if not encrypted
           if (!att.is_encrypted || !att.encryption_metadata) {
-            console.log(`⏭️ [DECRYPT] Not encrypted: ${att.file_name}`);
             return att;
           }
 
-          // ✅ STEP 4: Check if has cached URI and validate it
-          if (att.decryptedUri) {
-            console.log(`🔍 [DECRYPT] Checking cached URI: ${att.file_name}`);
+          if (att.decryptedUri && att.decryptedUri.startsWith("file://")) {
+            try {
+              const FileSystem = await import("expo-file-system/legacy");
+              const fileInfo = await FileSystem.default.getInfoAsync(
+                att.decryptedUri
+              );
 
-            // For file:// URIs, verify file exists
-            if (att.decryptedUri.startsWith("file://")) {
-              try {
-                const FileSystem = await import("expo-file-system/legacy");
-                const fileInfo = await FileSystem.default.getInfoAsync(
-                  att.decryptedUri
-                );
-
-                if (fileInfo.exists) {
-                  console.log(
-                    `✅ [DECRYPT] Cached file verified: ${att.file_name}`
-                  );
-                  decryptedFilesRef.current.add(attKey);
-                  return att;
-                }
-
-                console.warn(
-                  `⚠️ [DECRYPT] Cached file missing: ${att.file_name}`
-                );
-              } catch (e) {
-                console.warn(`⚠️ [DECRYPT] Failed to verify cache:`, e);
+              if (fileInfo.exists) {
+                decryptedFilesRef.current.add(attKey);
+                return att;
               }
-            } else {
-              // Data URI - always valid
-              console.log(`✅ [DECRYPT] Using data URI: ${att.file_name}`);
-              decryptedFilesRef.current.add(attKey);
-              return att;
+            } catch (e) {
+              console.warn(`⚠️ Failed to verify cache:`, e);
             }
           }
 
-          // ✅ STEP 5: Decrypt now
           try {
-            console.log(`🔓 [DECRYPT] Starting: ${att.file_name}`);
-            console.log(
-              `   Size: ${(att.file_size / 1024 / 1024).toFixed(2)} MB`
-            );
-
             decryptingFilesRef.current.add(attKey);
 
             const token = await getToken();
-            if (!token) {
-              throw new Error("No auth token");
-            }
+            if (!token) throw new Error("No auth token");
 
             let decryptedUri: string;
 
-            // ✅ NEW: Detect if chunked format
-            const isChunked =
+            const isStreamingUpload =
               att.encryption_metadata.chunks &&
-              att.encryption_metadata.totalChunks &&
-              att.encryption_metadata.totalChunks > 1;
+              Array.isArray(att.encryption_metadata.chunks) &&
+              att.encryption_metadata.chunks.length > 0;
 
-            if (isChunked) {
-              console.log("📦 [DECRYPT] Using CHUNKED decryption");
-
-              // Get chunked metadata from server
+            if (isStreamingUpload) {
               const metadataUrl = `${API_BASE_URL}/api/files/metadata/${att._id}`;
               const metadataResponse = await fetch(metadataUrl, {
                 method: "GET",
@@ -425,29 +406,21 @@ export const useMessages = (
 
               const chunkedResult = metadataData.data;
 
-              // Use chunked decryption
               decryptedUri = await getDecryptedUriChunked(
                 att._id,
                 chunkedResult,
-                senderClerkId,
-                (progress) => {
-                  // Log progress
-                  if (
-                    progress.percentage % 10 === 0 ||
-                    progress.percentage === 100
-                  ) {
-                    console.log(
-                      `📊 [DECRYPT] ${att.file_name}: ${progress.phase} ${progress.percentage.toFixed(0)}%`
-                    );
-                  }
-                }
+                senderClerkId
               );
-
-              console.log(`✅ [DECRYPT] Chunked complete: ${att.file_name}`);
             } else {
-              console.log("📄 [DECRYPT] Using STANDARD decryption");
+              if (
+                !att.encryption_metadata.iv ||
+                !att.encryption_metadata.authTag
+              ) {
+                throw new Error(
+                  "Missing iv/authTag for single-file encryption"
+                );
+              }
 
-              // Get presigned URL
               const downloadUrl = `${API_BASE_URL}/api/files/download/${att._id}`;
               const downloadResponse = await fetch(downloadUrl, {
                 method: "GET",
@@ -467,7 +440,6 @@ export const useMessages = (
 
               const presignedUrl = downloadData.downloadUrl;
 
-              // Use standard decryption
               decryptedUri = await getDecryptedUri(
                 att._id,
                 att.encryption_metadata.iv,
@@ -477,8 +449,6 @@ export const useMessages = (
                 att.file_type,
                 presignedUrl
               );
-
-              console.log(`✅ [DECRYPT] Standard complete: ${att.file_name}`);
             }
 
             // ✅ Save to cache
@@ -498,20 +468,8 @@ export const useMessages = (
               decryptedUri,
             };
           } catch (error) {
-            console.error(`❌ [DECRYPT] Failed: ${att.file_name}`, error);
+            console.error(`❌ Failed: ${att.file_name}`, error);
             decryptingFilesRef.current.delete(attKey);
-
-            // ✅ Memory error specific handling
-            if (
-              error instanceof Error &&
-              error.message.includes("Failed to allocate")
-            ) {
-              console.error("💥 [DECRYPT] OUT OF MEMORY - File too large");
-              return {
-                ...att,
-                decryption_error: true,
-              };
-            }
 
             return {
               ...att,
@@ -521,7 +479,13 @@ export const useMessages = (
         })
       );
     },
-    [getDecryptedUri, getDecryptedUriChunked, getToken, API_BASE_URL, conversationId]
+    [
+      getDecryptedUri,
+      getDecryptedUriChunked,
+      getToken,
+      API_BASE_URL,
+      conversationId,
+    ]
   );
 
   /**
@@ -552,136 +516,109 @@ export const useMessages = (
   );
 
   /**
-   * ✅ Retry decryption
+   * ✅ Process message
    */
-  const retryDecryption = useCallback(
-    async (messageId: string) => {
+  const processMessage = useCallback(
+    async (msg: Message): Promise<Message> => {
       try {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === messageId
-              ? { ...msg, status: "decrypting" as MessageStatus }
-              : msg
-          )
-        );
-
-        const message = messages.find((m) => m._id === messageId);
-        if (!message) {
-          throw new Error("Message not found");
+        if (isMessageFullyCached(msg)) {
+          return { ...msg, status: "sent" as MessageStatus };
         }
 
-        // ✅ Clear decryption tracking for retry
-        message.attachments.forEach((att) => {
-          const attKey = `${messageId}_${att._id}`;
-          decryptingFilesRef.current.delete(attKey);
-          decryptedFilesRef.current.delete(attKey);
-        });
+        let decryptedContent = msg.content;
 
-        let decryptedContent = message.content;
-        if (message.encrypted_content) {
-          decryptedContent = await decryptMessageContent(message);
+        if (msg.type === "text" && msg.encrypted_content && !msg.content) {
+          if (encryptionInitialized) {
+            try {
+              decryptedContent = await decryptMessage(
+                msg.sender.clerkId,
+                msg.encrypted_content
+              );
+            } catch (decryptError) {
+              console.error("❌ Decryption error:", decryptError);
+              decryptedContent = "[🔒 Decryption failed]";
+              return {
+                ...msg,
+                content: decryptedContent,
+                status: "failed" as MessageStatus,
+                decryption_error: true,
+              };
+            }
+          } else {
+            decryptedContent = "[🔒 Encrypted - Initializing...]";
+          }
         }
 
-        const decryptedAtts = await decryptAttachments(
-          message.attachments,
-          message.sender.clerkId,
-          messageId
-        );
+        let decryptedAtts = msg.attachments;
+        if (msg.attachments && msg.attachments.length > 0) {
+          const needsDecryption = msg.attachments.filter((att) => {
+            if (!att.is_encrypted) return false;
+            if (!att.encryption_metadata) return false;
 
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === messageId
-              ? {
-                  ...msg,
-                  content: decryptedContent,
-                  attachments: decryptedAtts,
-                  status: "sent" as MessageStatus,
-                  decryption_error: false,
-                }
-              : msg
-          )
-        );
+            const attKey = `${msg._id}_${att._id}`;
+            if (att.decryptedUri && decryptedFilesRef.current.has(attKey)) {
+              return false;
+            }
 
-        // Update cache
-        if (conversationId) {
-          const cached = toCachedMessage(
-            {
-              ...message,
-              content: decryptedContent,
-              attachments: decryptedAtts,
-            },
-            conversationId
-          );
-          await messageCacheService.saveMessages([cached]);
+            return true;
+          });
+
+          if (needsDecryption.length > 0) {
+            const newlyDecrypted = await decryptAttachments(
+              needsDecryption,
+              msg.sender.clerkId,
+              msg._id
+            );
+
+            decryptedAtts = msg.attachments.map((att) => {
+              if (!att.is_encrypted) return att;
+
+              const decrypted = newlyDecrypted.find((d) => d._id === att._id);
+              return decrypted || att;
+            });
+          }
         }
 
-        console.log("✅ Message decrypted successfully");
+        const result = {
+          ...msg,
+          content: decryptedContent,
+          attachments: decryptedAtts,
+          status: "sent" as MessageStatus,
+          decryption_error: false,
+        };
+
+        const hasDecryptedText = !result.encrypted_content || !!result.content;
+        const hasDecryptedFiles = result.attachments?.every(
+          (att) => !att.is_encrypted || att.decryptedUri
+        );
+
+        if (hasDecryptedText && hasDecryptedFiles) {
+          fullyCachedMessageIds.current.add(result._id);
+        }
+
+        return result;
       } catch (error) {
-        console.error("❌ Retry decryption failed:", error);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === messageId
-              ? {
-                  ...msg,
-                  status: "failed" as MessageStatus,
-                  decryption_error: true,
-                }
-              : msg
-          )
-        );
+        console.error(`❌ Exception:`, error);
+        return {
+          ...msg,
+          content: msg.encrypted_content
+            ? "[🔒 Decryption failed]"
+            : msg.content,
+          status: "failed" as MessageStatus,
+          decryption_error: msg.type === "text" && !!msg.encrypted_content,
+        };
       }
     },
-    [messages, decryptMessageContent, decryptAttachments, conversationId]
-  );
-
-  /**
-   * ✅ Join conversation
-   */
-  useEffect(() => {
-    if (!socket || !conversationId || !user?.id || !isConnected) {
-      return;
-    }
-
-    // ✅ GỬI ĐÚNG FORMAT
-    socket.emit("joinConversation", {
-      user_id: user.id,
-      conversation_id: conversationId,
-    });
-
-    console.log(`📥 [SOCKET] Joined: ${conversationId}`);
-
-    return () => {
-      if (socket && socket.connected) {
-        socket.emit("leaveConversation", {
-          user_id: user.id,
-          conversation_id: conversationId,
-        });
-        console.log(`👋 [SOCKET] Left: ${conversationId}`);
-      }
-      setTypingUsers([]);
-    };
-  }, [socket, conversationId, user?.id, isConnected]);
-
-  /**
-   * ✅ Send typing indicator
-   */
-  const sendTypingIndicator = useCallback(
-    (isTyping: boolean) => {
-      if (!socket || !conversationId || !user) return;
-      if (!socket.connected) return;
-
-      emit("userTyping", {
-        conversation_id: conversationId,
-        user_id: user.id,
-        user_name: user.fullName || user.username || "User",
-        is_typing: isTyping,
-      });
-    },
-    [socket, conversationId, user, emit]
+    [
+      isMessageFullyCached,
+      decryptMessage,
+      decryptAttachments,
+      encryptionInitialized,
+    ]
   );
 
   // =============================================
-  // FETCH MESSAGES WITH OPTIMIZED CACHE
+  // ✅ FETCH MESSAGES WITH CACHE-FIRST + VERIFICATION
   // =============================================
   const fetchMessages = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
@@ -691,42 +628,131 @@ export const useMessages = (
         loadingRef.current = true;
         setError(null);
 
-        // ✅ STEP 1: Load from cache FIRST (instant display)
+        console.log(
+          `📥 [FETCH] Starting - Page: ${pageNum}, Append: ${append}`
+        );
+
+        // ✅ STEP 1: Load from cache FIRST
         if (pageNum === 1 && !append) {
-          console.log("📦 [FETCH] Loading from cache...");
+          console.log("📦 [FETCH] Checking cache...");
 
           const cachedMessages = await messageCacheService.getMessages(
             conversationId,
             MESSAGES_PER_PAGE
           );
 
+          console.log(
+            `📊 [FETCH] Cache returned ${cachedMessages.length} messages`
+          );
+
           if (cachedMessages.length > 0) {
-            const msgs = cachedMessages.map(fromCachedMessage).reverse();
-            setMessages(msgs);
-            console.log(`✅ [FETCH] Loaded ${msgs.length} from cache`);
+            // ✅ Verify attachments have URIs
+            let allHaveUris = true;
 
-            // ✅ Check if all files are already decrypted
-            const needsDecryption = msgs.some((msg) =>
-              msg.attachments?.some(
-                (att) => att.is_encrypted && !att.decryptedUri
-              )
-            );
+            for (const cached of cachedMessages) {
+              const attachments = JSON.parse(cached.attachments_json || "[]");
+              if (attachments.length > 0) {
+                const hasUri = attachments.every(
+                  (att: any) => !att.is_encrypted || att.decryptedUri
+                );
 
-            if (!needsDecryption) {
-              console.log("✅ [FETCH] All files cached - INSTANT LOAD");
-              setLoading(false);
-            } else {
-              console.log("⏳ [FETCH] Some files need decryption");
+                if (!hasUri) {
+                  allHaveUris = false;
+                  break;
+                }
+              }
             }
-          } else {
-            setLoading(true);
-            console.log("📭 [FETCH] No cache - fetching from server");
+
+            if (allHaveUris) {
+              console.log(
+                "✅ [FETCH] All messages have decrypted URIs - using cache!"
+              );
+
+              const msgs = cachedMessages.map(fromCachedMessage).reverse();
+              setMessages(msgs);
+
+              // Mark as cached
+              msgs.forEach((msg) => {
+                fullyCachedMessageIds.current.add(msg._id);
+
+                msg.attachments?.forEach((att) => {
+                  if (att.decryptedUri) {
+                    const attKey = `${msg._id}_${att._id}`;
+                    decryptedFilesRef.current.add(attKey);
+                  }
+                });
+              });
+
+              console.log("✅ [FETCH] Using cache - NO DECRYPTION!");
+              setLoading(false);
+              loadingRef.current = false;
+
+              // Check for new messages in background
+              const meta =
+                await messageCacheService.getConversationMeta(conversationId);
+              if (meta?.last_sync_time) {
+                const token = await getToken();
+                const lastSyncISO = new Date(meta.last_sync_time).toISOString();
+                const url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=1&limit=${MESSAGES_PER_PAGE}&after=${encodeURIComponent(lastSyncISO)}`;
+
+                const response = await fetch(url, {
+                  method: "GET",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+
+                if (response.ok) {
+                  const result = await response.json();
+                  const serverMessages = result.data.messages || [];
+
+                  if (serverMessages.length > 0) {
+                    console.log(
+                      `📥 [FETCH] Found ${serverMessages.length} new messages`
+                    );
+
+                    const processedMessages = await Promise.all(
+                      serverMessages.map((msg: Message) => processMessage(msg))
+                    );
+
+                    const messagesToCache = processedMessages.map((msg) =>
+                      toCachedMessage(msg, conversationId)
+                    );
+                    await messageCacheService.saveMessages(messagesToCache);
+
+                    const lastMsg =
+                      processedMessages[processedMessages.length - 1];
+                    await messageCacheService.updateConversationMeta({
+                      conversation_id: conversationId,
+                      last_sync_time: Date.now(),
+                      total_cached:
+                        (meta?.total_cached || 0) + processedMessages.length,
+                      last_message_id: lastMsg._id,
+                    });
+
+                    const allCached = await messageCacheService.getMessages(
+                      conversationId,
+                      MESSAGES_PER_PAGE
+                    );
+                    const allMessages = allCached
+                      .map(fromCachedMessage)
+                      .reverse();
+                    setMessages(allMessages);
+                  }
+                }
+              }
+
+              return; // ✅ STOP - using cache!
+            }
           }
+
+          setLoading(true);
         } else {
           setLoading(true);
         }
 
-        // ✅ STEP 2: Fetch new messages from server
+        // ✅ STEP 2: Fetch from server
         const token = await getToken();
         const meta =
           await messageCacheService.getConversationMeta(conversationId);
@@ -736,7 +762,6 @@ export const useMessages = (
         if (meta && meta.last_sync_time > 0 && pageNum === 1 && !append) {
           const lastSyncISO = new Date(meta.last_sync_time).toISOString();
           url += `&after=${encodeURIComponent(lastSyncISO)}`;
-          console.log(`🔄 [FETCH] Incremental sync after: ${lastSyncISO}`);
         }
 
         const response = await fetch(url, {
@@ -761,166 +786,108 @@ export const useMessages = (
 
         console.log(`📥 [FETCH] Got ${serverMessages.length} new messages`);
 
-        if (serverMessages.length === 0 && pageNum === 1 && !append) {
+        if (
+          serverMessages.length === 0 &&
+          pageNum === 1 &&
+          !append &&
+          messages.length > 0
+        ) {
           setHasMore(pagination?.hasNext || false);
           setLoading(false);
           loadingRef.current = false;
-          console.log("✅ [FETCH] No new messages - using cache");
           return;
         }
 
-        // ✅ STEP 3: Process messages (decrypt text, merge cached URIs)
-        console.log("🔀 [FETCH] Processing messages...");
+        // ✅ STEP 3: Process messages
+        console.log("🔐 [FETCH] Processing and decrypting messages...");
 
         const processedMessages = await Promise.all(
           serverMessages.map(async (msg: Message) => {
-            try {
-              let decryptedContent = msg.content;
+            // Process text content
+            const processed = await processMessage(msg);
 
-              // Decrypt text
-              if (msg.type === "text" && msg.encrypted_content) {
-                if (encryptionInitialized) {
-                  try {
-                    decryptedContent = await decryptMessage(
-                      msg.sender.clerkId,
-                      msg.encrypted_content
-                    );
-                  } catch (decryptError) {
-                    decryptedContent = "[🔒 Decryption failed]";
-                    return {
-                      ...msg,
-                      content: decryptedContent,
-                      status: "failed" as MessageStatus,
-                      decryption_error: true,
-                    };
-                  }
-                } else {
-                  decryptedContent = "[🔒 Encrypted - Initializing...]";
-                }
-              }
+            // ✅ FORCE decrypt attachments if any
+            if (processed.attachments && processed.attachments.length > 0) {
+              const needsDecryption = processed.attachments.some(
+                (att) => att.is_encrypted && !att.decryptedUri
+              );
 
-              // ✅ Process attachments: merge cached URIs, decrypt only if needed
-              let decryptedAtts = msg.attachments;
-              if (msg.attachments && msg.attachments.length > 0) {
-                // Get cached version
-                const cached = await messageCacheService.getMessages(
-                  conversationId,
-                  MESSAGES_PER_PAGE * 2 // Look back further
-                );
-                const cachedMsg = cached.find((c) => c._id === msg._id);
-
-                if (cachedMsg) {
-                  const cachedAtts = JSON.parse(
-                    cachedMsg.attachments_json || "[]"
-                  );
-
-                  // Merge cached URIs
-                  decryptedAtts = msg.attachments.map((att) => {
-                    const cachedAtt = cachedAtts.find(
-                      (c: any) => c._id === att._id
-                    );
-                    if (cachedAtt?.decryptedUri) {
-                      return { ...att, decryptedUri: cachedAtt.decryptedUri };
-                    }
-                    return att;
-                  });
-                }
-
-                // Only decrypt files without cached URIs
-                const needsDecryption = decryptedAtts.filter(
-                  (att) => att.is_encrypted && !att.decryptedUri
+              if (needsDecryption) {
+                console.log(
+                  `🔐 [FETCH] Decrypting attachments for ${processed._id}...`
                 );
 
-                if (needsDecryption.length > 0) {
-                  console.log(
-                    `🔓 [FETCH] Decrypting ${needsDecryption.length} files for ${msg._id}`
-                  );
+                const decryptedAtts = await decryptAttachments(
+                  processed.attachments,
+                  processed.sender.clerkId,
+                  processed._id
+                );
 
-                  const newlyDecrypted = await decryptAttachments(
-                    needsDecryption,
-                    msg.sender.clerkId,
-                    msg._id
-                  );
-
-                  // Merge back
-                  decryptedAtts = decryptedAtts.map((att) => {
-                    if (att.decryptedUri) return att;
-                    const decrypted = newlyDecrypted.find(
-                      (d) => d._id === att._id
-                    );
-                    return decrypted || att;
-                  });
-                } else {
-                  console.log(`✅ [FETCH] All files cached for ${msg._id}`);
-                }
+                return {
+                  ...processed,
+                  attachments: decryptedAtts,
+                };
               }
-
-              return {
-                ...msg,
-                content: decryptedContent,
-                attachments: decryptedAtts,
-                status: "sent" as MessageStatus,
-                decryption_error: false,
-              };
-            } catch (error) {
-              console.error(`❌ [FETCH] Failed to process ${msg._id}:`, error);
-              return {
-                ...msg,
-                content: msg.encrypted_content
-                  ? "[🔒 Decryption failed]"
-                  : msg.content,
-                status: "failed" as MessageStatus,
-                decryption_error:
-                  msg.type === "text" && !!msg.encrypted_content,
-              };
             }
+
+            return processed;
           })
         );
 
-        // ✅ STEP 4: Save to cache with URIs
+        // ✅ STEP 4: Save to cache WITH VERIFICATION
         if (processedMessages.length > 0) {
-          console.log("💾 [FETCH] Saving to cache with URIs...");
+          console.log("💾 [FETCH] Saving to cache...");
 
           const messagesToCache = processedMessages.map((msg) =>
             toCachedMessage(msg, conversationId)
           );
+
           await messageCacheService.saveMessages(messagesToCache);
+
+          // ✅ VERIFY save immediately
+          const verifyRead = await messageCacheService.getMessages(
+            conversationId,
+            MESSAGES_PER_PAGE
+          );
+
+          console.log(
+            `✅ [VERIFY] Saved and verified: ${verifyRead.length} messages`
+          );
+
+          if (verifyRead.length === 0) {
+            console.error("❌ [VERIFY] CACHE SAVE FAILED!");
+          } else {
+            const firstAtts = JSON.parse(
+              verifyRead[0].attachments_json || "[]"
+            );
+            if (firstAtts.length > 0) {
+              console.log(
+                `📎 [VERIFY] First attachment URI exists: ${!!firstAtts[0]?.decryptedUri}`
+              );
+            }
+          }
 
           const lastMsg = processedMessages[processedMessages.length - 1];
           await messageCacheService.updateConversationMeta({
             conversation_id: conversationId,
             last_sync_time: Date.now(),
-            total_cached: (meta?.total_cached || 0) + processedMessages.length,
+            total_cached: processedMessages.length,
             last_message_id: lastMsg._id,
           });
-
-          console.log("✅ [FETCH] Saved to cache");
         }
 
         // ✅ STEP 5: Update UI
-        if (pageNum === 1 && !append) {
-          // Reload from cache to get complete data
-          const allCached = await messageCacheService.getMessages(
-            conversationId,
-            MESSAGES_PER_PAGE
-          );
+        const allCached = await messageCacheService.getMessages(
+          conversationId,
+          MESSAGES_PER_PAGE
+        );
+
+        if (allCached.length > 0) {
           const allMessages = allCached.map(fromCachedMessage).reverse();
           setMessages(allMessages);
-          console.log(
-            `✅ [FETCH] Updated UI with ${allMessages.length} messages`
-          );
-        } else if (append) {
-          const reversedDecrypted = processedMessages.reverse();
-          setMessages((prev) => [...reversedDecrypted, ...prev]);
-          console.log(
-            `✅ [FETCH] Prepended ${reversedDecrypted.length} older messages`
-          );
-        } else {
-          setMessages(processedMessages);
         }
 
         setHasMore(pagination?.hasNext || false);
-        console.log(`✅ [FETCH] Complete. Has more: ${pagination?.hasNext}`);
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : "Failed to fetch messages";
@@ -936,15 +903,68 @@ export const useMessages = (
       getToken,
       API_BASE_URL,
       MESSAGES_PER_PAGE,
-      decryptMessage,
-      decryptAttachments,
-      encryptionInitialized,
+      processMessage,
+      messages.length,
     ]
   );
 
-  // ... (Continue with sendMessage and other functions - identical to original)
-  // I'll skip them for brevity, but they should remain the same
+  /**
+   * ✅ Retry decryption
+   */
+  const retryDecryption = useCallback(
+    async (messageId: string) => {
+      try {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? { ...msg, status: "decrypting" as MessageStatus }
+              : msg
+          )
+        );
 
+        const message = messages.find((m) => m._id === messageId);
+        if (!message) {
+          throw new Error("Message not found");
+        }
+
+        fullyCachedMessageIds.current.delete(messageId);
+        message.attachments.forEach((att) => {
+          const attKey = `${messageId}_${att._id}`;
+          decryptingFilesRef.current.delete(attKey);
+          decryptedFilesRef.current.delete(attKey);
+        });
+
+        const processedMessage = await processMessage(message);
+
+        setMessages((prev) =>
+          prev.map((msg) => (msg._id === messageId ? processedMessage : msg))
+        );
+
+        if (conversationId) {
+          const cached = toCachedMessage(processedMessage, conversationId);
+          await messageCacheService.saveMessages([cached]);
+        }
+
+        console.log("✅ Message decrypted successfully");
+      } catch (error) {
+        console.error("❌ Retry decryption failed:", error);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? {
+                  ...msg,
+                  status: "failed" as MessageStatus,
+                  decryption_error: true,
+                }
+              : msg
+          )
+        );
+      }
+    },
+    [messages, processMessage, conversationId]
+  );
+
+  // ✅ Create optimistic message
   const createOptimisticMessage = useCallback(
     (data: CreateMessageData | FormData, localUris?: string[]): Message => {
       const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -952,6 +972,7 @@ export const useMessages = (
       let messageType: Message["type"] = "text";
       let content = "";
       let attachmentPreviews: MessageAttachment[] = [];
+      let richMedia: RichMediaDTO | undefined;
 
       if (data instanceof FormData) {
         messageType = (data.get("type") as Message["type"]) || "text";
@@ -959,6 +980,7 @@ export const useMessages = (
       } else {
         messageType = data.type;
         content = String(data.content || "");
+        richMedia = data.richMedia;
       }
 
       if (localUris && localUris.length > 0) {
@@ -984,6 +1006,7 @@ export const useMessages = (
             file_type: fileType,
             file_size: 0,
             url: "",
+            decryptedUri: uri,
           } as MessageAttachment;
         });
       }
@@ -1009,32 +1032,246 @@ export const useMessages = (
         updated_at: new Date(),
         status: "encrypting" as MessageStatus,
         localUri: localUris,
+        rich_media: richMedia,
       };
     },
     [conversationId, user]
   );
-
-  // Note: sendMessage, editMessage, etc. remain the same as original
-  // Only showing modified parts for brevity
 
   const sendMessage = useCallback(
     async (data: CreateMessageData | FormData): Promise<Message> => {
       if (!conversationId) {
         throw new Error("No conversation selected");
       }
-
       if (!encryptionInitialized) {
         throw new Error("E2EE not initialized");
       }
 
-      // ... (rest of sendMessage implementation stays the same)
-      // Placeholder return to avoid errors
-      return {} as Message;
-    },
-    [conversationId, encryptionInitialized]
-  );
+      try {
+        let localUris: string[] | undefined;
+        let messageType: Message["type"] = "text";
+        let messageContent = "";
+        let richMedia: RichMediaDTO | undefined;
+        let tempId: string | undefined;
+        let isOptimistic = false;
 
-  // ... (rest of the functions: editMessage, deleteMessage, etc.)
+        if (data instanceof FormData) {
+          messageType = (data.get("type") as Message["type"]) || "text";
+          messageContent = String(data.get("content") || "");
+        } else {
+          messageType = data.type;
+          messageContent = String(data.content || "");
+          localUris = data.localUris;
+          richMedia = data.richMedia;
+          tempId = data.tempId;
+          isOptimistic = data.isOptimistic || false;
+        }
+
+        if (isOptimistic && tempId) {
+          const optimisticMessage = createOptimisticMessage(data, localUris);
+          optimisticMessage.tempId = tempId;
+          setMessages((prev) => [...prev, optimisticMessage]);
+          return optimisticMessage;
+        }
+
+        const optimisticMessage = tempId
+          ? messages.find((m) => m.tempId === tempId)
+          : createOptimisticMessage(data, localUris);
+
+        if (!tempId && optimisticMessage) {
+          setMessages((prev) => [...prev, optimisticMessage]);
+        } else if (tempId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.tempId === tempId
+                ? { ...m, status: "sending" as MessageStatus }
+                : m
+            )
+          );
+        }
+
+        let requestBody: any;
+        let contentType = "application/json";
+
+        if (data instanceof FormData) {
+          requestBody = data;
+          contentType = "multipart/form-data";
+        } else {
+          requestBody = {
+            type: data.type,
+            conversationId,
+          };
+
+          if (data.type === "text" && data.content) {
+            const token = await getToken();
+            if (!token) {
+              throw new Error("Authentication failed");
+            }
+
+            const conversationResponse = await fetch(
+              `${API_BASE_URL}/api/conversations/${conversationId}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+
+            if (!conversationResponse.ok) {
+              throw new Error("Failed to fetch conversation");
+            }
+
+            const convResult = await conversationResponse.json();
+            const participants = convResult.data.participants || [];
+            const recipientId = participants.find(
+              (p: any) => p.clerkId !== user?.id
+            )?.clerkId;
+
+            if (!recipientId) {
+              throw new Error("Recipient not found");
+            }
+
+            const encryptedResult = await encryptMessage(
+              recipientId,
+              data.content
+            );
+
+            requestBody.encryptedContent = encryptedResult.encryptedContent;
+            requestBody.encryptionMetadata = encryptedResult.encryptionMetadata;
+          }
+
+          if ((data.type === "gif" || data.type === "sticker") && richMedia) {
+            requestBody.richMedia = richMedia;
+          }
+
+          if (data.encryptedFiles && data.encryptedFiles.length > 0) {
+            requestBody.encryptedFiles = data.encryptedFiles;
+          }
+
+          if (data.attachments && data.attachments.length > 0) {
+            requestBody.attachments = data.attachments;
+          }
+
+          if (data.replyTo) {
+            requestBody.replyTo = data.replyTo;
+          }
+        }
+
+        const token = await getToken();
+        if (!token) {
+          throw new Error("Authentication failed");
+        }
+
+        const headers: any = {
+          Authorization: `Bearer ${token}`,
+        };
+
+        if (contentType === "application/json") {
+          headers["Content-Type"] = "application/json";
+        }
+
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
+          {
+            method: "POST",
+            headers,
+            body:
+              contentType === "application/json"
+                ? JSON.stringify(requestBody)
+                : requestBody,
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (response.status === 401) {
+            throw new Error("Session expired");
+          }
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText };
+          }
+          throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to send message");
+        }
+
+        const serverMessage = result.data;
+
+        setMessages((prev) => {
+          const targetTempId = tempId || optimisticMessage?.tempId;
+
+          const existsByRealId = prev.findIndex(
+            (m) => m._id === serverMessage._id
+          );
+          if (existsByRealId !== -1) {
+            return prev;
+          }
+
+          const index = prev.findIndex((m) => m.tempId === targetTempId);
+
+          if (index !== -1) {
+            const updated = [...prev];
+            updated[index] = {
+              ...serverMessage,
+              content: messageContent,
+              status: "sent" as MessageStatus,
+              localUri: optimisticMessage?.localUri,
+              attachments:
+                serverMessage.attachments ||
+                optimisticMessage?.attachments ||
+                [],
+            };
+
+            if (conversationId) {
+              const cached = toCachedMessage(updated[index], conversationId);
+              messageCacheService.saveMessages([cached]);
+            }
+
+            return updated;
+          } else {
+            const alreadyExists = prev.some((m) => m._id === serverMessage._id);
+            if (alreadyExists) {
+              return prev;
+            }
+
+            if (conversationId) {
+              const cached = toCachedMessage(serverMessage, conversationId);
+              messageCacheService.saveMessages([cached]);
+            }
+
+            return [...prev, serverMessage];
+          }
+        });
+
+        return serverMessage;
+      } catch (error) {
+        console.error("❌ Failed:", error);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.tempId &&
+            (msg.status === "sending" || msg.status === "encrypting")
+              ? { ...msg, status: "failed" as MessageStatus }
+              : msg
+          )
+        );
+        throw error;
+      }
+    },
+    [
+      conversationId,
+      encryptionInitialized,
+      getToken,
+      API_BASE_URL,
+      createOptimisticMessage,
+      encryptMessage,
+      user,
+      messages,
+    ]
+  );
 
   const loadMoreMessages = useCallback(async () => {
     if (hasMore && !loadingRef.current) {
@@ -1054,6 +1291,7 @@ export const useMessages = (
     setPage(1);
     setHasMore(true);
     setSocketMessageCount(0);
+    fullyCachedMessageIds.current.clear();
     decryptingFilesRef.current.clear();
     decryptedFilesRef.current.clear();
   }, []);
@@ -1061,6 +1299,7 @@ export const useMessages = (
   const clearMessageCache = useCallback(async () => {
     if (conversationId) {
       await messageCacheService.clearConversation(conversationId);
+      fullyCachedMessageIds.current.clear();
       decryptingFilesRef.current.clear();
       decryptedFilesRef.current.clear();
       console.log("✅ Cleared cache for conversation:", conversationId);
@@ -1069,182 +1308,146 @@ export const useMessages = (
 
   const clearAllMessageCache = useCallback(async () => {
     await messageCacheService.clearAll();
+    fullyCachedMessageIds.current.clear();
     decryptingFilesRef.current.clear();
     decryptedFilesRef.current.clear();
     console.log("✅ Cleared all message cache");
   }, []);
 
-  // Socket event handlers
+  // Socket handlers
   useEffect(() => {
     if (!socket || !conversationId) return;
 
     const handleNewMessage = async (data: any) => {
-      console.log("🔔 [SOCKET] NEW MESSAGE:", data.message_id);
-
       if (data.conversation_id !== conversationId) return;
       if (!data.message) return;
 
       let newMessage = data.message;
 
-      // System messages - use as-is
-      if (newMessage.metadata?.isSystemMessage === true) {
-        setMessages((prev) => {
-          const exists = prev.some((msg) => msg._id === newMessage._id);
-          if (!exists) {
-            setSocketMessageCount((prevCount) => prevCount + 1);
+      const messageExists = messagesRef.current.some(
+        (msg) => msg._id === newMessage._id
+      );
 
-            // Save to cache
-            const cached = toCachedMessage(newMessage, conversationId);
-            messageCacheService.saveMessages([cached]);
-
-            return [...prev, newMessage];
-          }
-          return prev;
-        });
+      if (messageExists) {
         return;
       }
 
-      // Own message - replace optimistic
+      if (newMessage.metadata?.isSystemMessage === true) {
+        setMessages((prev) => [...prev, newMessage]);
+        return;
+      }
+
       if (data.sender_id === user?.id) {
         setMessages((prev) => {
           const optimisticIndex = prev.findIndex(
-            (msg) => msg.tempId && msg.status === "sending"
+            (msg) =>
+              msg.tempId &&
+              (msg.status === "sending" || msg.status === "encrypting")
           );
 
           if (optimisticIndex !== -1) {
+            const optimisticMsg = prev[optimisticIndex];
             const updated = [...prev];
+
             updated[optimisticIndex] = {
               ...newMessage,
-              content: prev[optimisticIndex].content,
+              _id: newMessage._id,
+              tempId: undefined,
+              content: optimisticMsg.content,
               status: "sent" as MessageStatus,
-              localUri: prev[optimisticIndex].localUri,
-              attachments: prev[optimisticIndex].attachments,
+              attachments: optimisticMsg.attachments,
             };
-
-            // Save to cache
-            const cached = toCachedMessage(
-              updated[optimisticIndex],
-              conversationId
-            );
-            messageCacheService.saveMessages([cached]);
 
             return updated;
           }
+
           return prev;
         });
         return;
       }
 
-      // Message from others - check cache first
       try {
-        const cachedMessages = await messageCacheService.getMessages(
-          conversationId,
-          50
-        );
+        const processedMessage = await processMessage(newMessage);
 
-        const cachedMsg = cachedMessages.find((c) => c._id === newMessage._id);
-
-        if (cachedMsg) {
-          console.log("📦 [SOCKET] Using cached message");
-          const cachedMessage = fromCachedMessage(cachedMsg);
-
-          setMessages((prev) => {
-            const exists = prev.some((msg) => msg._id === newMessage._id);
-            if (!exists) {
-              setSocketMessageCount((prevCount) => prevCount + 1);
-              return [...prev, cachedMessage];
-            }
+        setMessages((prev) => {
+          if (prev.some((msg) => msg._id === processedMessage._id)) {
             return prev;
-          });
-
-          return;
-        }
-
-        // New message - decrypt it
-        console.log("🆕 [SOCKET] New message - decrypting");
-
-        // Decrypt text
-        if (newMessage.type === "text" && newMessage.encrypted_content) {
-          if (encryptionInitialized) {
-            const decrypted = await decryptMessage(
-              data.sender_id,
-              newMessage.encrypted_content
-            );
-            newMessage = { ...newMessage, content: decrypted };
-          } else {
-            newMessage = {
-              ...newMessage,
-              content: "[🔒 Encrypted - Initializing...]",
-            };
           }
-        }
 
-        // Decrypt attachments
-        if (
-          newMessage.attachments &&
-          newMessage.attachments.length > 0 &&
-          encryptionInitialized
-        ) {
-          const decryptedAtts = await decryptAttachments(
-            newMessage.attachments,
-            data.sender_id,
-            newMessage._id
-          );
-          newMessage = { ...newMessage, attachments: decryptedAtts };
-        }
+          setSocketMessageCount((c) => c + 1);
 
-        newMessage = {
-          ...newMessage,
-          status: "sent" as MessageStatus,
-          decryption_error: false,
-        };
+          if (conversationId) {
+            const cached = toCachedMessage(processedMessage, conversationId);
+            messageCacheService.saveMessages([cached]);
+          }
+
+          return [...prev, processedMessage];
+        });
       } catch (error) {
-        console.error("❌ [SOCKET] Decryption failed:", error);
+        console.error("❌ Failed to process message:", error);
+
         newMessage = {
           ...newMessage,
-          content:
-            newMessage.type === "text" && newMessage.encrypted_content
-              ? "[🔒 Decryption failed]"
-              : newMessage.content,
+          content: newMessage.encrypted_content
+            ? "[🔒 Decryption failed]"
+            : newMessage.content,
           status: "failed" as MessageStatus,
-          decryption_error:
-            newMessage.type === "text" && !!newMessage.encrypted_content,
         };
-      }
 
-      // Add to messages and cache
-      setMessages((prev) => {
-        const exists = prev.some((msg) => msg._id === newMessage._id);
-        if (!exists) {
-          setSocketMessageCount((prevCount) => prevCount + 1);
-
-          // Save to cache
-          const cached = toCachedMessage(newMessage, conversationId);
-          messageCacheService.saveMessages([cached]);
-
+        setMessages((prev) => {
+          if (prev.some((msg) => msg._id === newMessage._id)) {
+            return prev;
+          }
+          setSocketMessageCount((c) => c + 1);
           return [...prev, newMessage];
-        }
-        return prev;
-      });
+        });
+      }
     };
-
-    // ... (other socket handlers remain the same)
 
     on("newMessage", handleNewMessage);
 
     return () => {
       off("newMessage", handleNewMessage);
     };
-  }, [
-    socket,
-    conversationId,
-    on,
-    off,
-    user?.id,
-    decryptMessage,
-    decryptAttachments,
-    encryptionInitialized,
-  ]);
+  }, [socket, conversationId, on, off, user?.id, processMessage]);
+
+  // Join conversation
+  useEffect(() => {
+    if (!socket || !conversationId || !user?.id || !isConnected) {
+      return;
+    }
+
+    socket.emit("joinConversation", {
+      user_id: user.id,
+      conversation_id: conversationId,
+    });
+
+    return () => {
+      if (socket && socket.connected) {
+        socket.emit("leaveConversation", {
+          user_id: user.id,
+          conversation_id: conversationId,
+        });
+      }
+      setTypingUsers([]);
+    };
+  }, [socket, conversationId, user?.id, isConnected]);
+
+  // Send typing indicator
+  const sendTypingIndicator = useCallback(
+    (isTyping: boolean) => {
+      if (!socket || !conversationId || !user) return;
+      if (!socket.connected) return;
+
+      emit("userTyping", {
+        conversation_id: conversationId,
+        user_id: user.id,
+        user_name: user.fullName || user.username || "User",
+        is_typing: isTyping,
+      });
+    },
+    [socket, conversationId, user, emit]
+  );
 
   // Initial fetch
   useEffect(() => {
@@ -1259,7 +1462,7 @@ export const useMessages = (
     loading,
     error,
     sendMessage,
-    editMessage: async () => ({}) as Message, // Placeholder
+    editMessage: async () => ({}) as Message,
     deleteMessage: async () => {},
     addReaction: async () => {},
     removeReaction: async () => {},

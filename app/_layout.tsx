@@ -7,10 +7,12 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useIncomingCalls } from "@/hooks/call/useIncomingCalls";
 import { useNotificationHandler } from "@/hooks/notification/useNotificationHandler";
 import { useProfileCheck } from "@/hooks/user/useProfileCheck";
+import { UnifiedEncryptionService } from "@/lib/encryption/UnifiedEncryptionService";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { Buffer } from "buffer";
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import "react-native-get-random-values";
 import { TextDecoder, TextEncoder } from "text-encoding";
@@ -73,6 +75,15 @@ function ProtectedLayout() {
 }
 
 export default function RootLayout() {
+   useEffect(() => {
+    // Initialize encryption on app start
+    UnifiedEncryptionService.initialize().then(() => {
+      const info = UnifiedEncryptionService.getPerformanceInfo();
+      console.log('🚀 Encryption initialized:', info);
+      // Example output:
+      // { platform: 'android', useNative: true, speedMultiplier: 7 }
+    });
+  }, []);
   return (
     <ClerkProvider
       publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}

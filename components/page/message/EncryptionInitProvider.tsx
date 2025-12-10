@@ -1,10 +1,8 @@
-// components/page/message/EncryptionInitProvider.tsx - FIXED for old users
+// components/page/message/EncryptionInitProvider.tsx - PURE NATIVE VERSION
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { 
-  nativeEncryptionService, 
-  KeyBackupData 
-} from '@/lib/encryption/NativeEncryptionService';
+import { NativeEncryptionBridge } from '@/lib/encryption/NativeEncryptionBridge';
+import * as SecureStore from 'expo-secure-store';
 import { 
   ActivityIndicator, 
   View, 
@@ -22,13 +20,23 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const ENCRYPTION_KEY_STORE = "e2ee_master_key";
+
+// ✅ Backup data structure
+interface KeyBackupData {
+  encryptedMasterKey: string;
+  iv: string;
+  authTag: string;
+  keyVersion: number;
+  createdAt: string;
+}
 
 interface EncryptionContextType {
   isReady: boolean;
   loading: boolean;
   error: string | null;
   hasBackup: boolean;
-  showBackupPrompt: () => void; // ✅ NEW: Allow manual backup creation
+  showBackupPrompt: () => void;
 }
 
 const EncryptionContext = createContext<EncryptionContextType>({
@@ -51,7 +59,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
   
   // Backup password setup state
   const [needsBackupPassword, setNeedsBackupPassword] = useState(false);
-  const [isCreatingBackupForExistingKeys, setIsCreatingBackupForExistingKeys] = useState(false); // ✅ NEW
+  const [isCreatingBackupForExistingKeys, setIsCreatingBackupForExistingKeys] = useState(false);
   const [backupPassword, setBackupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -95,9 +103,41 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, [needsBackupPassword, needsRestore]);
 
-   const checkAndInitialize = async () => {
+  // ============================================
+  // ✅ Check if local keys exist
+  // ============================================
+  const hasLocalKeys = async (): Promise<boolean> => {
     try {
-      console.log('🔐 [App Init] Checking encryption status...');
+      const key = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
+      return key !== null;
+    } catch {
+      return false;
+    }
+  };
+
+  // ============================================
+  // ✅ Check server backup status
+  // ============================================
+  const checkServerBackup = async (token: string): Promise<boolean> => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/keys/backup/check`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        return result.success && result.data?.hasBackup === true;
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to check server backup:', err);
+    }
+    return false;
+  };
+
+  const checkAndInitialize = async () => {
+    try {
+      console.log('🔐 [Init] Checking encryption status...');
       setLoading(true);
       setError(null);
 
@@ -106,109 +146,51 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         throw new Error('Authentication token not available');
       }
 
-      // Check if keys exist locally
-      const hasLocalKeys = await nativeEncryptionService.isInitialized();
-      console.log('📱 [App Init] Has local keys:', hasLocalKeys);
+      // Check local keys
+      const hasLocal = await hasLocalKeys();
+      console.log('📱 [Init] Has local keys:', hasLocal);
 
-      // ✅ FIX: Always check server backup status FIRST (even before checking local keys)
-      let serverHasBackup = false;
-      try {
-        console.log('📡 [App Init] Checking server for backup...');
-        const backupResponse = await fetch(
-          `${API_BASE_URL}/api/keys/backup/check`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        console.log('📡 [App Init] Backup check response status:', backupResponse.status);
-
-        if (backupResponse.ok) {
-          const backupResult = await backupResponse.json();
-          console.log('📡 [App Init] Backup check result:', backupResult);
-
-          if (backupResult.success && backupResult.data && typeof backupResult.data.hasBackup === 'boolean') {
-            serverHasBackup = backupResult.data.hasBackup;
-            console.log('✅ [App Init] Server has backup:', serverHasBackup);
-            
-            // ✅ FIX: Update hasBackup state immediately
-            setHasBackup(serverHasBackup);
-          } else {
-            console.log('⚠️ [App Init] Invalid backup check response format');
-          }
-        } else {
-          console.log('⚠️ [App Init] Backup check failed with status:', backupResponse.status);
-        }
-      } catch (backupError) {
-        console.error('❌ [App Init] Error checking backup:', backupError);
-      }
+      // Check server backup
+      const serverHasBackup = await checkServerBackup(token);
+      console.log('📡 [Init] Server has backup:', serverHasBackup);
+      setHasBackup(serverHasBackup);
 
       // ✅ SCENARIO 1: Has backup but no local keys → RESTORE
-      if (serverHasBackup && !hasLocalKeys) {
-        console.log('📦 Backup found, prompting for restore password');
+      if (serverHasBackup && !hasLocal) {
+        console.log('📦 [Init] Need to restore from backup');
         setNeedsRestore(true);
         setLoading(false);
         return;
       }
 
       // ✅ SCENARIO 2: No local keys, no backup → NEW USER
-      if (!hasLocalKeys) {
-        console.log('🆕 New user, need to create backup password');
+      if (!hasLocal) {
+        console.log('🆕 [Init] New user - need to create keys');
         setNeedsBackupPassword(true);
         setLoading(false);
         return;
       }
 
       // ✅ SCENARIO 3: Has local keys AND has backup → ALL GOOD
-      if (hasLocalKeys && serverHasBackup) {
-        console.log('✅ Complete user: Has keys AND backup');
+      if (hasLocal && serverHasBackup) {
+        console.log('✅ [Init] Complete setup detected');
         await initializeEncryption();
         return;
       }
 
       // ✅ SCENARIO 4: Has local keys but NO backup → OLD USER
-      if (hasLocalKeys && !serverHasBackup) {
-        console.log('👤 Old user detected (has keys but no backup)');
-        // Initialize app normally first
+      if (hasLocal && !serverHasBackup) {
+        console.log('👤 [Init] Old user (no backup)');
         setIsReady(true);
         setLoading(false);
         
-        // ✅ FIX: Only show dialog if we're SURE there's no backup
-        // Wait a bit longer to ensure state is settled
-        setTimeout(async () => {
-          // ✅ DOUBLE CHECK: Verify backup status one more time
-          try {
-            const token = await getToken();
-            if (!token) return;
-            
-            const recheck = await fetch(
-              `${API_BASE_URL}/api/keys/backup/check`,
-              { headers: { Authorization: `Bearer ${token}` } }
-            );
-            
-            if (recheck.ok) {
-              const recheckResult = await recheck.json();
-              if (recheckResult.success && recheckResult.data?.hasBackup) {
-                console.log('✅ [Recheck] Backup found, not showing dialog');
-                setHasBackup(true);
-                return; // Don't show dialog
-              }
-            }
-          } catch (err) {
-            console.error('⚠️ [Recheck] Failed:', err);
-          }
-          
-          // ✅ Still no backup after recheck → show dialog
-          console.log('⚠️ [Recheck] No backup confirmed, showing dialog');
+        // Show backup recommendation after delay
+        setTimeout(() => {
           Alert.alert(
             t('encryption.backup.recommendTitle') || 'Backup Your Keys',
-            t('encryption.backup.recommendMessage') || 'We recommend creating a backup password to protect your encryption keys.',
+            t('encryption.backup.recommendMessage') || 'Create a backup to protect your encryption keys',
             [
-              { 
-                text: t('encryption.backup.later') || 'Later', 
-                style: 'cancel',
-                onPress: () => console.log('User chose to create backup later')
-              },
+              { text: t('encryption.backup.later') || 'Later', style: 'cancel' },
               {
                 text: t('encryption.backup.createNow') || 'Create Now',
                 onPress: () => {
@@ -218,107 +200,109 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
               }
             ]
           );
-        }, 2000); // ✅ Increased delay to 2s for state to settle
+        }, 2000);
         return;
       }
 
-      // Fallback: Initialize normally
+      // Fallback
       await initializeEncryption();
       
     } catch (err: any) {
-      console.error('❌ [App Init] Check failed:', err);
+      console.error('❌ [Init] Failed:', err);
       setError(err.message);
-      
-      // If check fails, still try to initialize with local keys
-      try {
-        const hasLocalKeys = await nativeEncryptionService.isInitialized();
-        if (hasLocalKeys) {
-          console.log('⚠️ Check failed but local keys exist, initializing anyway...');
-          await initializeEncryption();
-          return;
-        }
-      } catch (fallbackError) {
-        console.error('❌ Fallback init also failed:', fallbackError);
-      }
-      
       setLoading(false);
     }
   };
 
+  // ============================================
+  // ✅ Pure native key generation
+  // ============================================
+  const generateAndUploadKey = async (): Promise<string> => {
+    // Generate native key
+    const masterKey = await NativeEncryptionBridge.generateKey();
+    
+    // Store locally
+    await SecureStore.setItemAsync(ENCRYPTION_KEY_STORE, masterKey);
+    
+    // Upload to server
+    const token = await getToken();
+    if (token) {
+      const uploadResponse = await fetch(`${API_BASE_URL}/api/keys/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ publicKey: masterKey }),
+      });
+
+      if (uploadResponse.ok) {
+        console.log('✅ [Init] Key uploaded to server');
+      }
+    }
+    
+    return masterKey;
+  };
+
+  // ============================================
+  // ✅ Create backup using native encryption
+  // ============================================
+  const createNativeBackup = async (
+    masterKey: string,
+    password: string
+  ): Promise<KeyBackupData> => {
+    // Use native module to encrypt the master key with password
+    const result = await NativeEncryptionBridge.encryptMessage(masterKey, password);
+    
+    return {
+      encryptedMasterKey: result.encryptedContent,
+      iv: result.iv,
+      authTag: result.authTag,
+      keyVersion: 1,
+      createdAt: new Date().toISOString(),
+    };
+  };
 
   const initializeEncryption = async (password?: string) => {
     try {
-      console.log('🔐 [App Init] Initializing E2EE...');
+      console.log('🔐 [Init] Initializing E2EE...');
       
-      const result = await nativeEncryptionService.initializeKeys(password);
-      console.log('✅ [App Init] Native keys initialized');
-
-      const token = await getToken();
-      if (!token) {
-        throw new Error('Authentication token not available');
+      // Check if key already exists
+      let masterKey = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
+      
+      if (!masterKey) {
+        // Generate new key
+        masterKey = await generateAndUploadKey();
       }
 
-      // Upload public key to server
-      try {
-        console.log('📤 [App Init] Uploading key to server...');
-        const uploadResponse = await fetch(`${API_BASE_URL}/api/keys/upload`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ publicKey: result.publicKey }),
-        });
-
-        if (!uploadResponse.ok) {
-          console.log('⚠️ [App Init] Key upload failed with status:', uploadResponse.status);
-        } else {
-          const uploadResult = await uploadResponse.json();
-          if (!uploadResult.success) {
-            console.log('⚠️ [App Init] Key upload failed:', uploadResult.error);
-          } else {
-            console.log('✅ [App Init] Key uploaded successfully');
-          }
-        }
-      } catch (uploadError) {
-        console.error('❌ [App Init] Error uploading key:', uploadError);
-      }
-
-      // Upload backup if password was provided
-      if (result.backupData) {
-        try {
-          console.log('📤 [App Init] Uploading backup...');
+      // Create backup if password provided
+      if (password) {
+        const backupData = await createNativeBackup(masterKey, password);
+        
+        const token = await getToken();
+        if (token) {
           const backupResponse = await fetch(`${API_BASE_URL}/api/keys/backup`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ backup: result.backupData }),
+            body: JSON.stringify({ backup: backupData }),
           });
 
-          if (!backupResponse.ok) {
-            console.log('⚠️ [App Init] Backup upload failed with status:', backupResponse.status);
-          } else {
-            const backupResult = await backupResponse.json();
-            if (backupResult.success) {
-              console.log('✅ [App Init] Backup uploaded');
-              setHasBackup(true);
-            } else {
-              console.log('⚠️ [App Init] Backup upload failed:', backupResult.error);
-            }
+          if (backupResponse.ok) {
+            console.log('✅ [Init] Backup uploaded');
+            setHasBackup(true);
           }
-        } catch (backupError) {
-          console.error('❌ [App Init] Error uploading backup:', backupError);
         }
       }
 
       setIsReady(true);
       setNeedsBackupPassword(false);
       setIsCreatingBackupForExistingKeys(false);
-      console.log('✅ [App Init] E2EE ready globally');
+      console.log('✅ [Init] E2EE ready');
     } catch (err: any) {
-      console.error('❌ [App Init] E2EE initialization failed:', err);
+      console.error('❌ [Init] Failed:', err);
       setError(err.message);
       setIsReady(false);
     } finally {
@@ -326,33 +310,35 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // ✅ NEW: Function to create backup for existing keys
-   const createBackupForExistingKeys = async () => {
+  // ============================================
+  // ✅ Create backup for existing keys
+  // ============================================
+  const createBackupForExistingKeys = async () => {
     if (backupPassword.length < 8) {
-      Alert.alert(t('error'), t('encryption.backup.passwordTooShort') || 'Password must be at least 8 characters');
+      Alert.alert(t('error'), 'Password must be at least 8 characters');
       return;
     }
 
     if (backupPassword !== confirmPassword) {
-      Alert.alert(t('error'), t('encryption.backup.passwordMismatch') || 'Passwords do not match');
+      Alert.alert(t('error'), 'Passwords do not match');
       return;
     }
 
     setLoading(true);
     try {
-      console.log('🔐 Creating backup for existing keys...');
-      
-      // Create backup from existing keys
-      const backupData = await nativeEncryptionService.createBackup(backupPassword);
+      const masterKey = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
+      if (!masterKey) {
+        throw new Error('Master key not found');
+      }
+
+      const backupData = await createNativeBackup(masterKey, backupPassword);
       
       const token = await getToken();
       if (!token) {
         throw new Error('Authentication token not available');
       }
 
-      // Upload backup to server
-      console.log('📤 Uploading backup...');
-      const backupResponse = await fetch(`${API_BASE_URL}/api/keys/backup`, {
+      const response = await fetch(`${API_BASE_URL}/api/keys/backup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -361,32 +347,20 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         body: JSON.stringify({ backup: backupData }),
       });
 
-      if (!backupResponse.ok) {
+      if (!response.ok) {
         throw new Error('Failed to upload backup');
       }
 
-      const backupResult = await backupResponse.json();
-      if (!backupResult.success) {
-        throw new Error(backupResult.error || 'Failed to upload backup');
-      }
-
-      console.log('✅ Backup created successfully');
-      
-      // ✅ FIX: Update state immediately
+      console.log('✅ [Init] Backup created');
       setHasBackup(true);
       setNeedsBackupPassword(false);
       setIsCreatingBackupForExistingKeys(false);
-      
-      // ✅ FIX: Clear password fields
       setBackupPassword('');
       setConfirmPassword('');
       
-      Alert.alert(
-        t('success') || 'Success', 
-        t('encryption.backup.created') || 'Backup created successfully'
-      );
+      Alert.alert(t('success') || 'Success', 'Backup created successfully');
     } catch (err: any) {
-      console.error('❌ Failed to create backup:', err);
+      console.error('❌ [Init] Backup creation failed:', err);
       Alert.alert(t('error'), err.message);
     } finally {
       setLoading(false);
@@ -394,18 +368,16 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const handleCreateBackup = async () => {
-    // ✅ NEW: Check if we're creating backup for existing keys or new keys
     if (isCreatingBackupForExistingKeys) {
       await createBackupForExistingKeys();
     } else {
-      // Original flow - creating new keys with backup
       if (backupPassword.length < 8) {
-        Alert.alert(t('error'), t('encryption.backup.passwordTooShort') || 'Password must be at least 8 characters');
+        Alert.alert(t('error'), 'Password must be at least 8 characters');
         return;
       }
 
       if (backupPassword !== confirmPassword) {
-        Alert.alert(t('error'), t('encryption.backup.passwordMismatch') || 'Passwords do not match');
+        Alert.alert(t('error'), 'Passwords do not match');
         return;
       }
 
@@ -419,9 +391,12 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
+  // ============================================
+  // ✅ Restore from backup using native decryption
+  // ============================================
   const handleRestore = async () => {
     if (!restorePassword) {
-      Alert.alert(t('error'), t('encryption.restore.passwordRequired') || 'Password is required');
+      Alert.alert(t('error'), 'Password is required');
       return;
     }
 
@@ -433,7 +408,6 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
       }
 
       // Fetch backup from server
-      console.log('📥 Fetching backup from server...');
       const response = await fetch(`${API_BASE_URL}/api/keys/backup`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -443,32 +417,34 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         throw new Error('Backup not found');
       }
 
-      // Restore from backup
-      console.log('🔄 Restoring from backup...');
-      await nativeEncryptionService.restoreFromBackup(
-        result.data.backup,
+      const backupData: KeyBackupData = result.data.backup;
+
+      // Decrypt master key using native module
+      const masterKey = await NativeEncryptionBridge.decryptMessage(
+        backupData.encryptedMasterKey,
+        backupData.iv,
+        backupData.authTag,
         restorePassword
       );
 
+      // Store restored key
+      await SecureStore.setItemAsync(ENCRYPTION_KEY_STORE, masterKey);
+      
       // Initialize normally
       await initializeEncryption();
       setNeedsRestore(false);
       
-      Alert.alert(t('success'), t('encryption.restore.success') || 'Keys restored successfully');
+      Alert.alert(t('success'), 'Keys restored successfully');
     } catch (err: any) {
-      console.error('❌ Restore failed:', err);
-      Alert.alert(t('error'), t('encryption.restore.invalidPassword') || 'Invalid password or backup corrupted');
+      console.error('❌ [Init] Restore failed:', err);
+      Alert.alert(t('error'), 'Invalid password or corrupted backup');
       setLoading(false);
     }
   };
 
-  // ✅ NEW: Manual backup creation function
   const showBackupPrompt = () => {
     if (hasBackup) {
-      Alert.alert(
-        t('info') || 'Info',
-        t('encryption.backup.alreadyExists') || 'You already have a backup'
-      );
+      Alert.alert(t('info') || 'Info', 'You already have a backup');
       return;
     }
     
@@ -476,7 +452,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     setNeedsBackupPassword(true);
   };
 
-  // Theme-based colors
+  // Theme colors
   const isDark = theme === 'dark';
   const bgColor = isDark ? 'bg-gray-900' : 'bg-white';
   const cardBg = isDark ? 'bg-gray-800' : 'bg-gray-50';
@@ -493,7 +469,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         className={`flex-1 ${bgColor}`}
       >
         <ScrollView 
-          contentContainerClassName="flex-grow justify-center p-6"
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
           showsVerticalScrollIndicator={false}
         >
           <Animated.View 
@@ -807,9 +783,8 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     );
   }
 
-  // Error state (non-blocking, app can still work)
   if (error) {
-    console.warn('⚠️ [App Init] E2EE error (non-blocking):', error);
+    console.warn('⚠️ [Init] E2EE error (non-blocking):', error);
   }
 
   return (

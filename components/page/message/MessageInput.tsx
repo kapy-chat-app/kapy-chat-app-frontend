@@ -1,11 +1,10 @@
-// components/page/message/MessageInput.tsx - OPTIMIZED SEND SPEED
+// components/page/message/MessageInput.tsx - STREAMING UPLOAD VERSION
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useOnDeviceAI } from "@/hooks/ai/useOnDeviceAI";
 import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
 import type { RichMediaDTO } from "@/hooks/message/useGiphy";
-import { EncryptionProgress } from "@/lib/encryption/ChunkedEncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
@@ -46,7 +45,21 @@ interface MessageInputProps {
   onTyping?: (isTyping: boolean) => void;
   disabled?: boolean;
 }
-
+// ✅ Helper function (add at top of file)
+function getMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
 // ============================================
 // DEBOUNCE HELPER
 // ============================================
@@ -81,11 +94,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [showGiphyPicker, setShowGiphyPicker] = useState(false);
 
-  // Encryption progress state
-  const [encryptionProgress, setEncryptionProgress] =
-    useState<EncryptionProgress | null>(null);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
-  const [totalFiles, setTotalFiles] = useState(0);
+  // ✅ Streaming upload progress state
+  const [uploadProgress, setUploadProgress] = useState<{
+    phase: "thumbnail" | "encrypting" | "uploading" | "finalizing";
+    percentage: number;
+    chunksEncrypted: number;
+    chunksUploaded: number;
+    totalChunks: number;
+    currentFile: number;
+    totalFiles: number;
+  } | null>(null);
 
   // Emotion analysis state
   const [emotionAnalysis, setEmotionAnalysis] = useState<any>(null);
@@ -99,11 +117,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const isTypingRef = useRef(false);
   const isSendingRef = useRef(false);
 
-  const {
-    encryptFile,
-    isReady: encryptionReady,
-    resetProgress,
-  } = useChunkedFileEncryption();
+  const { encryptAndUploadFile, isReady: encryptionReady } =
+    useChunkedFileEncryption();
 
   const { getToken } = useAuth();
 
@@ -116,7 +131,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   } = useOnDeviceAI();
 
   // ============================================
-  // ✅ Analyze text while typing - INCREASED DEBOUNCE
+  // ✅ Analyze text while typing
   // ============================================
   const analyzeWhileTyping = useCallback(
     debounce(async (text: string) => {
@@ -130,7 +145,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         const analysis = await analyzeTextMessage(text);
         setEmotionAnalysis(analysis);
 
-        // ✅ Chỉ warn nếu RẤT toxic (>80%)
         if (analysis.isToxic && analysis.toxicityScore > 80) {
           Alert.alert(
             "⚠️ " + t("message.ai.toxicWarning"),
@@ -141,7 +155,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       } catch (error) {
         console.error("❌ Analysis error:", error);
       }
-    }, 2000), // ✅ Debounce 2s (LightweightAI nhanh hơn nên có thể giảm)
+    }, 2000),
     [aiReady, analyzeTextMessage, t]
   );
 
@@ -169,7 +183,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     }, 2000);
 
-    // Analyze while typing (debounced)
     analyzeWhileTyping(text);
   };
 
@@ -218,7 +231,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
           img.mimeType || "image/jpeg"
         );
 
-        // ✅ LightweightAI basic check (có thể customize threshold)
         if (toxicityCheck.isToxic) {
           Alert.alert(
             "⚠️ " + t("message.ai.imageToxicTitle"),
@@ -238,7 +250,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } catch (error) {
       console.error("❌ Image check error:", error);
       setAnalyzingImage(false);
-      return true; // Fail-safe: allow send
+      return true;
     }
   };
 
@@ -276,7 +288,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   // ============================================
-  // ✅ OPTIMIZED: Handle send WITHOUT blocking analysis
+  // ✅ STREAMING UPLOAD: Handle send
   // ============================================
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
@@ -299,15 +311,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const currentAttachments = [...attachments];
     const currentReplyTo = replyTo?._id;
 
-    // ✅ Check images for toxicity (still important)
+    // ✅ Check images for toxicity
     const imagesAreSafe = await checkImagesBeforeSend(currentAttachments);
     if (!imagesAreSafe) {
       return;
     }
 
-    // ✅ OPTIMIZED: Quick toxicity check only (no full ONNX analysis)
+    // ✅ Quick toxicity check for text
     if (messageContent && aiReady) {
-      // Use rule-based check (instant, no ONNX)
       const quickCheck = await (async () => {
         try {
           const analysis = await analyzeTextMessage(messageContent);
@@ -317,7 +328,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         }
       })();
 
-      // Block only if EXTREMELY toxic (>85%)
       if (quickCheck.isToxic && quickCheck.toxicityScore > 85) {
         Alert.alert(
           "🚫 " + t("message.ai.cannotSend"),
@@ -327,7 +337,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         return;
       }
 
-      // Warn but allow send if toxic 70-85%
       if (quickCheck.isToxic && quickCheck.toxicityScore > 70) {
         const shouldSend = await new Promise<boolean>((resolve) => {
           Alert.alert(
@@ -352,7 +361,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     }
 
-    // ✅ Clear UI IMMEDIATELY (don't wait for analysis)
+    // ✅ Clear UI IMMEDIATELY
     setMessage("");
     setAttachments([]);
     setEmotionAnalysis(null);
@@ -360,109 +369,111 @@ const MessageInput: React.FC<MessageInputProps> = ({
       onCancelReply();
     }
 
-    // ✅ Send message WITHOUT waiting for full emotion analysis
     try {
       isSendingRef.current = true;
+      setUploadingFiles(true);
+
       const shouldEncryptFiles =
         encryptionReady && recipientId && currentAttachments.length > 0;
 
       if (shouldEncryptFiles) {
-        console.log("🚀 Encrypting files with STREAMING upload...");
-        setUploadingFiles(true);
-        setTotalFiles(currentAttachments.length);
-        setEncryptionProgress(null);
+        console.log("🚀 [SEND] Starting STREAMING encrypt + upload...");
 
+        // ✅ STEP 1: Determine message type
+        const firstAttachment = currentAttachments[0];
+        let messageType: "image" | "video" | "audio" | "file" = "file";
+
+        if (firstAttachment.type === "image") messageType = "image";
+        else if (firstAttachment.type === "video") messageType = "video";
+        else if (firstAttachment.type === "audio") messageType = "audio";
+
+        // ✅ STEP 2: Get local URIs for preview
+        const localUris = currentAttachments.map((att) => att.uri);
+
+        // ✅ STEP 3: Create optimistic message LOCALLY (no API call)
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+
+        onSendMessage({
+          tempId,
+          type: messageType,
+          content: messageContent || undefined,
+          localUris: localUris,
+          replyTo: currentReplyTo,
+          isOptimistic: true, // ✅ Flag: LOCAL only
+        });
+
+        console.log("✅ [SEND] Optimistic message created locally");
+
+        // ✅ STEP 4: Encrypt + Upload files (STREAMING)
         const encryptedFiles: any[] = [];
-        const localUris: string[] = [];
+        const totalFiles = currentAttachments.length;
 
         for (let i = 0; i < currentAttachments.length; i++) {
           const att = currentAttachments[i];
-          setCurrentFileIndex(i + 1);
 
-          try {
-            console.log(
-              `🔒 Encrypting file ${i + 1}/${currentAttachments.length}: ${att.name}`
-            );
+          console.log(`🔒 [ENCRYPT] File ${i + 1}/${totalFiles}: ${att.name}`);
 
-            const result = await encryptFile(
-              att.uri,
-              att.name,
-              conversationId!,
-              recipientId,
-              {
-                onProgress: (progress) => {
-                  setEncryptionProgress(progress);
+          // ✅ CRITICAL: encryptFile now does STREAMING upload internally
+          const result = await encryptAndUploadFile(
+            att.uri,
+            att.name,
+            conversationId!,
+            recipientId,
+            {
+              onProgress: (progress) => {
+                // ✅ Update progress state
+                setUploadProgress({
+                  phase: progress.phase,
+                  percentage: progress.percentage,
+                  chunksEncrypted: progress.chunksEncrypted || 0,
+                  chunksUploaded: progress.chunksUploaded || 0,
+                  totalChunks: progress.totalChunks || 1,
+                  currentFile: i + 1,
+                  totalFiles,
+                });
 
-                  // ✅ Show thumbnail immediately when available
-                  if ("thumbnailUrl" in progress && progress.thumbnailUrl) {
-                    console.log("🖼️ Thumbnail ready:", progress.thumbnailUrl);
-                    // You can show this in UI
-                  }
-                },
-              }
-            );
-
-            console.log("✅ [handleSend] File encrypted:", {
-              name: att.name,
-              isLargeFile: result.isLargeFile,
-              hasFileId: !!result.encryptedFileId,
-              hasThumbnail: !!result.thumbnailUrl, // ✅ NEW
-            });
-
-            encryptedFiles.push({
-              encryptedFileId: result.encryptedFileId,
-              encryptedBase64: result.encryptedBase64,
-              thumbnailUrl: result.thumbnailUrl, // ✅ Include thumbnail
-              originalFileName: att.name,
-              originalFileType: att.mimeType || result.metadata.file_type,
-              encryptionMetadata: {
-                iv: result.metadata.iv,
-                authTag: result.metadata.authTag,
-                original_size: result.metadata.original_size,
-                encrypted_size: result.metadata.encrypted_size,
+                console.log(
+                  `📊 [UPLOAD] ${att.name}: ${progress.phase} ${progress.percentage.toFixed(0)}%`
+                );
               },
-              isLargeFile: result.isLargeFile,
-            });
+            }
+          );
 
-            localUris.push(att.uri);
+          encryptedFiles.push({
+            encryptedFileId: result.fileId, // ✅ Changed
+            isLargeFile: true,
+            originalFileName: att.name,
+            originalFileType: att.mimeType || getMimeType(att.name),
+            encryptionMetadata: {
+              iv: result.masterIv, // ✅ Changed
+              authTag: result.masterAuthTag, // ✅ Changed
+              original_size: result.originalSize, // ✅ Changed
+              encrypted_size: result.encryptedSize, // ✅ Changed
+              chunks: result.chunks, // ✅ Changed
+              totalChunks: result.totalChunks, // ✅ Changed
+              fileId: result.fileId, // ✅ Changed
+            },
+          });
 
-            console.log(
-              "✅ File encrypted:",
-              att.name,
-              result.isLargeFile
-                ? "(streaming upload - with thumbnail)"
-                : "(direct upload)"
-            );
-          } catch (error: any) {
-            console.error("❌ Failed to encrypt file:", att.name, error);
-            setUploadingFiles(false);
-            setEncryptionProgress(null);
-            isSendingRef.current = false;
-
-            Alert.alert(
-              t("error"),
-              `Cannot encrypt ${att.name}: ${error.message || "Unknown error"}`
-            );
-            return;
-          }
+          console.log(`✅ [UPLOAD] File uploaded: ${att.name}`);
         }
 
+        // ✅ Clear progress
+        setUploadProgress(null);
+
+        console.log("✅ [SEND] All files uploaded, sending to server...");
+
+        // ✅ STEP 5: Send to server with fileIds (NO base64 data!)
+        onSendMessage({
+          content: messageContent || undefined,
+          type: messageType,
+          encryptedFiles: encryptedFiles, // ✅ Contains fileIds only
+          replyTo: currentReplyTo,
+          tempId: tempId, // ✅ Match optimistic message
+        });
+
+        console.log("✅ [SEND] Message sent with streaming encrypted files");
         setUploadingFiles(false);
-        setEncryptionProgress(null);
-        resetProgress();
-
-        if (messageContent || encryptedFiles.length > 0) {
-          const messageData = {
-            content: messageContent || undefined,
-            type: "file" as const,
-            encryptedFiles: encryptedFiles,
-            localUris: localUris,
-            replyTo: currentReplyTo,
-          };
-
-          onSendMessage(messageData);
-        }
-
         isSendingRef.current = false;
 
         // Background emotion analysis
@@ -473,14 +484,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
         return;
       }
 
-      // Fallback: Non-encrypted file handling
-      const mediaFiles = currentAttachments.filter((att) =>
-        ["image", "video", "audio"].includes(att.type)
-      );
-      const documentFiles = currentAttachments.filter(
-        (att) => att.type === "file"
-      );
-
+      // ==========================================
+      // ✅ Handle text-only or non-encrypted files
+      // ==========================================
       if (currentAttachments.length === 0 && messageContent) {
         const textData = {
           content: messageContent,
@@ -488,28 +494,38 @@ const MessageInput: React.FC<MessageInputProps> = ({
           replyTo: currentReplyTo,
         };
         onSendMessage(textData);
-      } else if (mediaFiles.length > 0) {
-        const mediaFormData = new FormData();
-        const firstMediaType = mediaFiles[0].type;
-        mediaFormData.append("type", firstMediaType);
+      } else if (currentAttachments.length > 0) {
+        // Non-encrypted files (fallback)
+        const mediaFiles = currentAttachments.filter((att) =>
+          ["image", "video", "audio"].includes(att.type)
+        );
+        const documentFiles = currentAttachments.filter(
+          (att) => att.type === "file"
+        );
 
-        if (messageContent) {
-          mediaFormData.append("content", messageContent);
+        if (mediaFiles.length > 0) {
+          const mediaFormData = new FormData();
+          const firstMediaType = mediaFiles[0].type;
+          mediaFormData.append("type", firstMediaType);
+
+          if (messageContent) {
+            mediaFormData.append("content", messageContent);
+          }
+
+          if (currentReplyTo) {
+            mediaFormData.append("replyTo", currentReplyTo);
+          }
+
+          mediaFiles.forEach((att) => {
+            mediaFormData.append("files", {
+              uri: att.uri,
+              type: att.mimeType || "application/octet-stream",
+              name: att.name,
+            } as any);
+          });
+
+          onSendMessage(mediaFormData);
         }
-
-        if (currentReplyTo) {
-          mediaFormData.append("replyTo", currentReplyTo);
-        }
-
-        mediaFiles.forEach((att) => {
-          mediaFormData.append("files", {
-            uri: att.uri,
-            type: att.mimeType || "application/octet-stream",
-            name: att.name,
-          } as any);
-        });
-
-        onSendMessage(mediaFormData);
 
         if (documentFiles.length > 0) {
           const docFormData = new FormData();
@@ -517,6 +533,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           if (messageContent) {
             docFormData.append("content", messageContent);
+          }
+
+          if (currentReplyTo) {
+            docFormData.append("replyTo", currentReplyTo);
           }
 
           documentFiles.forEach((att) => {
@@ -529,45 +549,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           onSendMessage(docFormData);
         }
-      } else if (documentFiles.length > 0) {
-        const docFormData = new FormData();
-        docFormData.append("type", "file");
-
-        if (messageContent) {
-          docFormData.append("content", messageContent);
-        }
-
-        if (currentReplyTo) {
-          docFormData.append("replyTo", currentReplyTo);
-        }
-
-        documentFiles.forEach((att) => {
-          docFormData.append("files", {
-            uri: att.uri,
-            type: att.mimeType || "application/octet-stream",
-            name: att.name,
-          } as any);
-        });
-
-        onSendMessage(docFormData);
       }
 
+      setUploadingFiles(false);
       isSendingRef.current = false;
 
-      // ✅ Background emotion analysis AFTER send
+      // Background emotion analysis
       if (messageContent && aiReady && conversationId) {
         saveEmotionInBackground(messageContent, conversationId);
       }
     } catch (error: any) {
-      console.error("Send error:", error);
+      console.error("❌ [SEND] Error:", error);
       setUploadingFiles(false);
-      setEncryptionProgress(null);
+      setUploadProgress(null);
       isSendingRef.current = false;
       Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
-  // ✅ NEW: Background emotion save (non-blocking)
+  // ✅ Background emotion save
   const saveEmotionInBackground = async (text: string, convId: string) => {
     setTimeout(async () => {
       try {
@@ -800,22 +800,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const removeAttachment = (id: string) => {
     setAttachments(attachments.filter((att) => att.id !== id));
   };
-  const renderThumbnailPreview = (thumbnailUrl?: string) => {
-    if (!thumbnailUrl) return null;
-
-    return (
-      <View style={styles.thumbnailPreview}>
-        <Image
-          source={{ uri: thumbnailUrl }}
-          style={styles.thumbnailImage}
-          resizeMode="cover"
-        />
-        <View style={styles.thumbnailBadge}>
-          <Ionicons name="checkmark" size={16} color="white" />
-        </View>
-      </View>
-    );
-  };
 
   const renderAttachmentPreview = ({ item }: { item: AttachmentPreview }) => (
     <View style={styles.attachmentContainer}>
@@ -884,51 +868,68 @@ const MessageInput: React.FC<MessageInputProps> = ({
     </View>
   );
 
-  const getProgressText = () => {
-  if (!encryptionProgress) {
-    return t("message.encryption.encryptingFiles");
-  }
+  // ✅ Render upload progress (STREAMING)
+  const renderUploadProgress = () => {
+    if (!uploadProgress) return null;
 
-  // ✅ Check if streaming upload (has chunksEncrypted field)
-  if ('chunksEncrypted' in encryptionProgress) {
-    const p = encryptionProgress as any; // StreamingUploadProgress
+    const {
+      phase,
+      percentage,
+      chunksEncrypted,
+      chunksUploaded,
+      totalChunks,
+      currentFile,
+      totalFiles,
+    } = uploadProgress;
+
+    let statusText = "";
+    let statusIcon = "";
+
+    switch (phase) {
+      case "thumbnail":
+        statusText = t("message.encryption.generatingThumbnail");
+        statusIcon = "🖼️";
+        break;
+      case "encrypting":
+        statusText = `${t("message.encryption.encrypting")}: ${chunksEncrypted}/${totalChunks} chunks`;
+        statusIcon = "🔒";
+        break;
+      case "uploading":
+        statusText = `${t("message.encryption.uploading")}: ${chunksUploaded}/${totalChunks} chunks`;
+        statusIcon = "📤";
+        break;
+      case "finalizing":
+        statusText = t("message.encryption.finalizing");
+        statusIcon = "✅";
+        break;
+    }
 
     if (totalFiles > 1) {
-      return `${t("message.encryption.encrypting")} ${currentFileIndex}/${totalFiles}: ${p.phase} ${p.percentage.toFixed(0)}%`;
+      statusText = `${statusIcon} File ${currentFile}/${totalFiles}: ${statusText}`;
+    } else {
+      statusText = `${statusIcon} ${statusText}`;
     }
 
-    switch (p.phase) {
-      case 'thumbnail':
-        return `🖼️ ${t("message.encryption.generatingThumbnail")}...`;
-      case 'encrypting':
-        return `🔒 ${t("message.encryption.encrypting")}: ${p.chunksEncrypted}/${p.totalChunks} chunks`;
-      case 'uploading':
-        return `📤 ${t("message.encryption.uploading")}: ${p.chunksUploaded}/${p.totalChunks} chunks`;
-      case 'finalizing':
-        return `✅ ${t("message.encryption.finalizing")}...`;
-      default:
-        return `${p.percentage.toFixed(0)}%`;
-    }
-  }
+    return (
+      <View style={styles.uploadingContainer}>
+        <View style={styles.progressHeader}>
+          <ActivityIndicator size="small" color="#f97316" />
+          <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
+            {statusText}
+          </Text>
+        </View>
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBarBackground}>
+            <View
+              style={[styles.progressBarFill, { width: `${percentage}%` }]}
+            />
+          </View>
+          <Text style={styles.progressDetail}>{percentage.toFixed(0)}%</Text>
+        </View>
+      </View>
+    );
+  };
 
-  // Old format (direct encryption)
-  const { phase, percentage } = encryptionProgress;
-
-  if (totalFiles > 1) {
-    return `${t("message.encryption.encrypting")} ${currentFileIndex}/${totalFiles}: ${percentage.toFixed(0)}%`;
-  }
-
-  switch (phase) {
-    case "reading":
-      return `${t("message.encryption.reading")} ${percentage.toFixed(0)}%`;
-    case "encrypting":
-      return `${t("message.encryption.encrypting")}: ${percentage.toFixed(0)}%`;
-    case "finalizing":
-      return t("message.encryption.finalizing");
-    default:
-      return `${percentage.toFixed(0)}%`;
-  }
-};
   const renderEmotionIndicator = () => {
     if (!emotionAnalysis || !message.trim()) return null;
 
@@ -1025,35 +1026,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
-      {uploadingFiles && (
-        <View style={styles.uploadingContainer}>
-          <View style={styles.progressHeader}>
-            <ActivityIndicator size="small" color="#f97316" />
-            <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
-              {getProgressText()}
-            </Text>
-          </View>
-
-          <View style={styles.progressBarContainer}>
-            <View style={styles.progressBarBackground}>
-              <View
-                style={[
-                  styles.progressBarFill,
-                  { width: `${encryptionProgress?.percentage || 0}%` },
-                ]}
-              />
-            </View>
-          </View>
-
-          {encryptionProgress && encryptionProgress.totalBytes > 0 && (
-            <Text style={[styles.progressDetail, isDark && styles.textGray400]}>
-              {(encryptionProgress.bytesProcessed / 1024 / 1024).toFixed(1)} /{" "}
-              {(encryptionProgress.totalBytes / 1024 / 1024).toFixed(1)} MB
-            </Text>
-          )}
-        </View>
-      )}
-
       {analyzingImage && (
         <View style={styles.uploadingContainer}>
           <View style={styles.progressHeader}>
@@ -1065,6 +1037,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
+      {renderUploadProgress()}
       {renderEmotionIndicator()}
 
       <View style={styles.inputRow}>
@@ -1352,6 +1325,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#9ca3af",
     textAlign: "center",
+    marginTop: 4,
   },
   emotionIndicator: {
     flexDirection: "row",
@@ -1441,29 +1415,6 @@ const styles = StyleSheet.create({
   },
   textRed400: {
     color: "#f87171",
-  },
-  thumbnailPreview: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    position: 'relative',
-    marginRight: 8,
-  },
-  thumbnailImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  thumbnailBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
 

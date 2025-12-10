@@ -1,4 +1,4 @@
-// MessageScreen.tsx - OPTIMIZED WITH MEMOIZATION TO PREVENT RE-DECRYPTION
+// MessageScreen.tsx - OPTIMIZED WITH MEMOIZATION TO PREVENT RE-DECRYPTION - NEW
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -491,80 +491,115 @@ export default function MessageScreen() {
   // MESSAGE HANDLERS
   // ========================================
 
-  const handleSendMessage = async (
-    contentOrData:
-      | string
-      | {
-          content?: string;
-          type: string;
-          replyTo?: string;
-          encryptedFiles?: any[];
-          localUris?: string[];
-          richMedia?: any;
-        },
-    attachments?: string[],
-    replyToId?: string
-  ) => {
-    handleUserActivity();
+ const handleSendMessage = async (
+  contentOrData:
+    | string
+    | {
+        content?: string;
+        type: string;
+        replyTo?: string;
+        encryptedFiles?: any[];
+        localUris?: string[];
+        richMedia?: any;
+        isOptimistic?: boolean; // ✅ NEW
+        tempId?: string; // ✅ NEW
+      },
+  attachments?: string[],
+  replyToId?: string
+) => {
+  handleUserActivity();
 
-    // ✅ CASE 0: Handle GIF/Sticker FIRST
-    if (
-      typeof contentOrData === "object" &&
-      (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
-      (contentOrData as any).richMedia
-    ) {
-      try {
-        await sendMessage({
-          content: contentOrData.content?.trim() || "",
-          type: contentOrData.type as any,
-          richMedia: (contentOrData as any).richMedia,
-          replyTo: contentOrData.replyTo,
-        });
+  // ✅ CASE 0: Handle GIF/Sticker
+  if (
+    typeof contentOrData === "object" &&
+    (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
+    (contentOrData as any).richMedia
+  ) {
+    try {
+      await sendMessage({
+        content: contentOrData.content?.trim() || "",
+        type: contentOrData.type as any,
+        richMedia: (contentOrData as any).richMedia,
+        replyTo: contentOrData.replyTo,
+      });
 
-        setReplyTo(null);
+      setReplyTo(null);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-
-        return;
-      } catch (error: any) {
-        console.error(`❌ Failed to send ${contentOrData.type}:`, error);
-        Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-          { text: t("ok") },
-        ]);
-        return;
-      }
+      return;
+    } catch (error: any) {
+      console.error(`❌ Failed to send ${contentOrData.type}:`, error);
+      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+        { text: t("ok") },
+      ]);
+      return;
     }
+  }
 
-    // ✅ CASE 1: Handle encrypted files
-    if (typeof contentOrData === "object" && contentOrData.encryptedFiles) {
-      try {
-        await sendMessage({
-          content: contentOrData.content?.trim() || "",
-          type: contentOrData.type as any,
-          encryptedFiles: contentOrData.encryptedFiles,
-          localUris: contentOrData.localUris,
-          replyTo: contentOrData.replyTo,
-        });
+  // ✅ CASE 1: Optimistic message (LOCAL only, no API call)
+  if (
+    typeof contentOrData === "object" &&
+    contentOrData.isOptimistic === true
+  ) {
+    console.log("📤 [SCREEN] Creating LOCAL optimistic message");
 
-        setReplyTo(null);
+    try {
+      // ✅ Just create optimistic message in hook, don't call API
+      await sendMessage({
+        content: contentOrData.content?.trim() || "",
+        type: contentOrData.type as any,
+        localUris: contentOrData.localUris,
+        replyTo: contentOrData.replyTo,
+        tempId: contentOrData.tempId, // ✅ Pass tempId
+        isOptimistic: true, // ✅ Flag for hook
+      });
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+      setReplyTo(null);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
 
-        return;
-      } catch (error: any) {
-        console.error("❌ Failed to send encrypted files:", error);
-        Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-          { text: t("ok") },
-        ]);
-        return;
-      }
+      console.log("✅ [SCREEN] Optimistic message created");
+      return;
+    } catch (error: any) {
+      console.error("❌ Failed to create optimistic message:", error);
+      return;
     }
+  }
 
-    // ✅ CASE 2: Handle normal message (text only)
+  // ✅ CASE 2: Send encrypted files to server (REAL API call)
+  if (
+    typeof contentOrData === "object" &&
+    contentOrData.encryptedFiles &&
+    contentOrData.tempId
+  ) {
+    console.log("📤 [SCREEN] Sending encrypted files to server");
+
+    try {
+      await sendMessage({
+        content: contentOrData.content?.trim() || "",
+        type: contentOrData.type as any,
+        encryptedFiles: contentOrData.encryptedFiles,
+        localUris: contentOrData.localUris,
+        replyTo: contentOrData.replyTo,
+        tempId: contentOrData.tempId, // ✅ To match optimistic message
+      });
+
+      console.log("✅ [SCREEN] Encrypted files sent");
+      return;
+    } catch (error: any) {
+      console.error("❌ Failed to send encrypted files:", error);
+      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+        { text: t("ok") },
+      ]);
+      return;
+    }
+  }
+
+
+    // ✅ CASE 3: Handle normal text message
     let messageContent: string;
     let messageAttachments: string[] | undefined;
     let messageReplyTo: string | undefined;
@@ -709,7 +744,7 @@ export default function MessageScreen() {
       isLoadingMoreRef.current = false;
     }
   }, [hasMore, loading, loadMoreMessages, canLoadMore, messages]);
-
+  let scrollDebounceTimer: NodeJS.Timeout | null = null;
   const handleScroll = useCallback(
     (event: any) => {
       handleUserActivity();
@@ -720,6 +755,7 @@ export default function MessageScreen() {
       const scrollHeight = contentSize.height;
       const viewHeight = layoutMeasurement.height;
 
+      // Handle scroll to bottom logic...
       const distanceFromBottom = scrollHeight - scrollPosition - viewHeight;
       const isNear = distanceFromBottom < 100;
       setIsNearBottom(isNear);
@@ -734,18 +770,24 @@ export default function MessageScreen() {
         }).start();
       }
 
-      // ✅ FIX: Check if scrolled to TOP (to load older messages)
-      // With inverted={false}, scrolling UP means scrollPosition approaches 0
+      // ✅ IMPROVED: Debounced load more check
       const distanceFromTop = scrollPosition;
 
       if (
-        distanceFromTop < 100 && // ✅ Near top of list
+        distanceFromTop < 100 &&
         hasMore &&
         !isLoadingMoreRef.current &&
         canLoadMore
       ) {
-        console.log("📜 Loading more messages... (scrolled to top)");
-        handleLoadMore();
+        // ✅ Debounce to prevent multiple triggers
+        if (scrollDebounceTimer) {
+          clearTimeout(scrollDebounceTimer);
+        }
+
+        scrollDebounceTimer = setTimeout(() => {
+          console.log("📜 Loading more messages... (scrolled to top)");
+          handleLoadMore();
+        }, 300); // ✅ Wait 300ms before triggering
       }
     },
     [showScrollButton, hasMore, canLoadMore, handleLoadMore, handleUserActivity]
@@ -897,6 +939,23 @@ export default function MessageScreen() {
   const keyExtractor = useCallback((item: any) => item._id, []);
 
   const renderLoadingHeader = () => {
+    // ✅ Show loading indicator khi đang load more
+    if (!hasMore && !loading) return null;
+
+    // ✅ NEW: Show different indicator for loading more vs initial load
+    if (isLoadingMoreRef.current) {
+      return (
+        <View className="py-4 items-center">
+          <ActivityIndicator size="small" color="#F97316" />
+          <Text
+            className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+          >
+            Loading older messages...
+          </Text>
+        </View>
+      );
+    }
+
     if (!hasMore || !loading) return null;
 
     return (

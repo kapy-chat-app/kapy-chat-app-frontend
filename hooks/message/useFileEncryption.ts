@@ -1,18 +1,14 @@
-// hooks/message/useFileEncryption.ts - FIXED: Pass recipient info for shared secret
-
-import { simpleEncryptionService } from "@/lib/encryption/EncryptionService";
+// hooks/message/useFileEncryption.ts - UPDATED WITH UnifiedEncryptionService
+import { UnifiedEncryptionService } from "@/lib/encryption/UnifiedEncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useMemo } from "react";
 import { useEncryption } from "./useEncryption";
+import * as FileSystem from "expo-file-system/legacy";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
 export const useFileEncryption = () => {
   const { isInitialized } = useEncryption();
-  const { getToken, userId } = useAuth();
-
-  const API_BASE_URL = useMemo(
-    () => process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000",
-    []
-  );
+  const { getToken } = useAuth();
 
   // Helper: Get MIME type from file name
   const getMimeType = (fileName: string): string => {
@@ -39,13 +35,13 @@ export const useFileEncryption = () => {
   };
 
   /**
-   * ✅ FIXED: Encrypt file with recipient info for proper shared secret
+   * ✅ UPDATED: Encrypt file using UnifiedEncryptionService
    */
   const encryptFile = useCallback(
     async (
       fileUri: string,
       fileName: string,
-      recipientUserId?: string // ✅ NEW: Optional recipient for shared secret
+      recipientUserId?: string
     ): Promise<{
       encryptedBase64: string;
       metadata: {
@@ -69,34 +65,45 @@ export const useFileEncryption = () => {
           throw new Error("Authentication token not available");
         }
 
-        // ✅ Pass recipient info for shared secret derivation
-        const encryptionResult = await simpleEncryptionService.encryptFile(
+        // Get recipient's public key
+        let recipientKey: string | undefined;
+        if (recipientUserId) {
+          const keyResponse = await fetch(
+            `${API_BASE_URL}/api/keys/${recipientUserId}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          
+          const keyResult = await keyResponse.json();
+          if (!keyResult.success) {
+            throw new Error("Failed to get recipient key");
+          }
+          recipientKey = keyResult.data.publicKey;
+        }
+
+        // ✅ CRITICAL: Use UnifiedEncryptionService.encryptFile
+        // Automatically uses native (Android) or JS (iOS)
+        const result = await UnifiedEncryptionService.encryptFile(
           fileUri,
           fileName,
-          recipientUserId,
-          API_BASE_URL,
-          token
+          recipientKey || '', // Pass recipient key for shared secret
+          undefined // No progress callback for small files
         );
-
-        const mimeType = getMimeType(fileName);
 
         console.log("✅ File encrypted successfully:", {
           fileName,
-          mimeType,
-          originalSize: encryptionResult.metadata.original_size,
-          encryptedSize: encryptionResult.metadata.encrypted_size,
-          hasRecipient: !!recipientUserId,
+          originalSize: result.metadata.original_size,
+          encryptedSize: result.metadata.encrypted_size,
         });
 
         return {
-          encryptedBase64: encryptionResult.encryptedBase64,
+          encryptedBase64: result.encryptedBase64,
           metadata: {
-            iv: encryptionResult.metadata.iv,
-            authTag: encryptionResult.metadata.authTag,
-            original_size: encryptionResult.metadata.original_size,
-            encrypted_size: encryptionResult.metadata.encrypted_size,
+            iv: result.metadata.iv,
+            authTag: result.metadata.authTag,
+            original_size: result.metadata.original_size,
+            encrypted_size: result.metadata.encrypted_size,
             file_name: fileName,
-            file_type: mimeType,
+            file_type: result.metadata.file_type,
           },
         };
       } catch (error) {
@@ -104,9 +111,12 @@ export const useFileEncryption = () => {
         throw error;
       }
     },
-    [isInitialized, getToken, API_BASE_URL]
+    [isInitialized, getToken]
   );
 
+  /**
+   * ✅ UPDATED: Decrypt file using UnifiedEncryptionService
+   */
   const decryptFile = useCallback(
     async (
       encryptedBase64: string,
@@ -126,29 +136,48 @@ export const useFileEncryption = () => {
           throw new Error("Authentication token not available");
         }
 
-        const metadata = { iv, authTag };
-
-        const decryptedUint8Array = await simpleEncryptionService.decryptFile(
-          encryptedBase64,
-          metadata,
-          senderUserId,
-          API_BASE_URL,
-          token
+        // Get sender's public key
+        const keyResponse = await fetch(
+          `${API_BASE_URL}/api/keys/${senderUserId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
 
-        const decryptedBuffer = Buffer.from(decryptedUint8Array);
+        const keyResult = await keyResponse.json();
+        if (!keyResult.success) {
+          throw new Error("Failed to get sender key");
+        }
 
-        console.log("✅ File decrypted successfully:", {
-          size: decryptedBuffer.length,
+        const senderKey = keyResult.data.publicKey;
+
+        // ✅ CRITICAL: Use UnifiedEncryptionService.decryptFile
+        const outputPath = `${FileSystem.cacheDirectory}temp_decrypt_${Date.now()}.bin`;
+        
+        await UnifiedEncryptionService.decryptFile(
+          encryptedBase64,
+          iv,
+          authTag,
+          senderKey,
+          outputPath
+        );
+
+        // Read decrypted file as buffer
+        const base64Data = await FileSystem.readAsStringAsync(outputPath, {
+          encoding: FileSystem.EncodingType.Base64,
         });
 
-        return decryptedBuffer;
+        // Clean up temp file
+        await FileSystem.deleteAsync(outputPath, { idempotent: true });
+
+        const buffer = Buffer.from(base64Data, 'base64');
+        console.log("✅ File decrypted successfully:", { size: buffer.length });
+
+        return buffer;
       } catch (error) {
         console.error("❌ File decryption failed:", error);
         throw error;
       }
     },
-    [isInitialized, getToken, API_BASE_URL]
+    [isInitialized, getToken]
   );
 
   return {

@@ -1,10 +1,12 @@
 // components/page/message/media/VideoPlayer.tsx
-// ✅ FIXED: Added onLongPress support for MessageActionsMenu
+// ✅ FIXED: Added stream endpoint support for encrypted files
 
-import React, { useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
+import React, { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { useAuth } from "@clerk/clerk-expo";
 
 const GALLERY_WIDTH = 260;
 
@@ -12,81 +14,220 @@ interface VideoPlayerProps {
   videos: any[];
   localUris?: string[];
   isSending: boolean;
-  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from parent
+  onLongPress?: () => void;
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ 
-  videos, 
-  localUris, 
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({
+  videos,
+  localUris,
   isSending,
-  onLongPress, // ✅ NEW
+  onLongPress,
 }) => {
-  const [videoLoadStates, setVideoLoadStates] = useState<{ 
-    [key: string]: 'loading' | 'ready' | 'error' 
+  const [videoLoadStates, setVideoLoadStates] = useState<{
+    [key: string]: "loading" | "ready" | "error";
+  }>({});
+  
+  const [validatedUris, setValidatedUris] = useState<{
+    [key: string]: { uri: string | null; valid: boolean; checked: boolean };
   }>({});
 
-  const getVideoUri = (attachment: any, index: number): string | null => {
+  const { getToken } = useAuth();
+
+  /**
+   * ✅ CRITICAL: Validate file URI before rendering
+   */
+  const validateVideoUri = useCallback(async (
+    attachmentId: string,
+    uri: string | null
+  ): Promise<{ uri: string | null; valid: boolean }> => {
+    if (!uri) {
+      console.warn(`⚠️ [VIDEO] Missing URI for ${attachmentId}`);
+      return { uri: null, valid: false };
+    }
+
+    // ✅ Validate URI format
+    if (uri.startsWith('file://')) {
+      // Check minimum length
+      if (uri.length < 20) {
+        console.warn(`⚠️ [VIDEO] URI too short: ${uri}`);
+        return { uri: null, valid: false };
+      }
+
+      // ✅ CRITICAL: Verify file exists
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(uri);
+        
+        if (!fileInfo.exists) {
+          console.error(`❌ [VIDEO] File not found: ${uri}`);
+          return { uri: null, valid: false };
+        }
+
+        const fileSize = (fileInfo as any).size || 0;
+        
+        if (fileSize === 0) {
+          console.error(`❌ [VIDEO] File is empty: ${uri}`);
+          return { uri: null, valid: false };
+        }
+
+        console.log(`✅ [VIDEO] Valid file: ${attachmentId}`, {
+          uri: uri.substring(0, 50),
+          size: `${(fileSize / 1024 / 1024).toFixed(2)} MB`,
+        });
+
+        return { uri, valid: true };
+      } catch (error) {
+        console.error(`❌ [VIDEO] Failed to validate file: ${uri}`, error);
+        return { uri: null, valid: false };
+      }
+    } else if (uri.startsWith('data:')) {
+      // Data URI validation
+      if (uri.length < 100) {
+        console.warn(`⚠️ [VIDEO] Data URI too short: ${uri.substring(0, 50)}`);
+        return { uri: null, valid: false };
+      }
+
+      console.log(`✅ [VIDEO] Valid data URI: ${attachmentId}`);
+      return { uri, valid: true };
+    } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      // HTTP URI validation (including stream endpoint)
+      console.log(`✅ [VIDEO] Valid HTTP URI: ${attachmentId}`);
+      return { uri, valid: true };
+    } else {
+      console.warn(`⚠️ [VIDEO] Unknown URI format: ${uri.substring(0, 50)}`);
+      return { uri: null, valid: false };
+    }
+  }, []);
+
+  /**
+   * ✅ Get video URI - SIMPLIFIED (no stream endpoint for mobile)
+   */
+  const getVideoUri = useCallback((attachment: any, index: number): string | null => {
+    // Priority 1: Decrypted URI (highest priority)
     if (attachment.decryptedUri) {
       return attachment.decryptedUri;
     }
-    
+
+    // Priority 2: Local URI (for sending)
     if (isSending && localUris && localUris[index]) {
       return localUris[index];
     }
-    
+
+    // ✅ For encrypted files without decryptedUri, return null
+    // This will show "Decrypting..." state
+    if (attachment.is_encrypted) {
+      return null;
+    }
+
+    // Priority 3: Remote URL (for non-encrypted files)
     if (attachment.url) {
       return attachment.url;
     }
-    
+
     return null;
-  };
+  }, [isSending, localUris]);
 
-  const handleVideoError = (attachmentId: string) => {
-    console.error(`❌ Video load error: ${attachmentId}`);
-    setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'error' }));
-  };
+  /**
+   * ✅ Validate URIs on mount and when they change
+   */
+  useEffect(() => {
+    const validateAllUris = async () => {
+      const newValidatedUris: typeof validatedUris = {};
 
-  const handleVideoLoad = (attachmentId: string, status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      console.log(`✅ Video loaded: ${attachmentId}`);
-      setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'ready' }));
+      for (let i = 0; i < videos.length; i++) {
+        const att = videos[i];
+        const uri = getVideoUri(att, i); // ✅ Now synchronous
+        
+        if (uri) {
+          const validation = await validateVideoUri(att._id, uri);
+          newValidatedUris[att._id] = {
+            ...validation,
+            checked: true,
+          };
+        } else {
+          newValidatedUris[att._id] = {
+            uri: null,
+            valid: false,
+            checked: true,
+          };
+        }
+      }
+
+      setValidatedUris(newValidatedUris);
+    };
+
+    validateAllUris();
+  }, [videos, localUris, isSending, validateVideoUri]); // ✅ Removed getVideoUri from deps
+
+  const handleVideoError = useCallback((attachmentId: string, error?: any) => {
+    console.error(`❌ [VIDEO] Load error: ${attachmentId}`, error);
+    
+    const att = videos.find(v => v._id === attachmentId);
+    if (att) {
+      const validation = validatedUris[attachmentId];
+      console.error(`   URI: ${validation?.uri || 'N/A'}`);
+      console.error(`   Valid: ${validation?.valid}`);
+      console.error(`   Type: ${validation?.uri?.startsWith('file://') ? 'FILE' : 
+                              validation?.uri?.startsWith('data:') ? 'DATA_URI' : 
+                              validation?.uri?.startsWith('http') ? 'HTTP' : 'UNKNOWN'}`);
     }
-  };
+    
+    setVideoLoadStates((prev) => ({ ...prev, [attachmentId]: "error" }));
+  }, [videos, validatedUris]);
 
-  const handleVideoLoadStart = (attachmentId: string) => {
-    setVideoLoadStates(prev => ({ ...prev, [attachmentId]: 'loading' }));
-  };
+  const handleVideoLoad = useCallback((attachmentId: string, status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      console.log(`✅ [VIDEO] Loaded successfully: ${attachmentId}`);
+      setVideoLoadStates((prev) => ({ ...prev, [attachmentId]: "ready" }));
+    }
+  }, []);
+
+  const handleVideoLoadStart = useCallback((attachmentId: string) => {
+    console.log(`⏳ [VIDEO] Load started: ${attachmentId}`);
+    setVideoLoadStates((prev) => ({ ...prev, [attachmentId]: "loading" }));
+  }, []);
 
   return (
     <>
       {videos.map((att: any, index: number) => {
-        const videoUri = getVideoUri(att, index);
-        const loadState = videoLoadStates[att._id] || 'loading';
-        const hasError = att.decryption_error || loadState === 'error';
+        const validation = validatedUris[att._id];
+        const videoUri = validation?.uri;
+        const isValidUri = validation?.valid;
+        const isChecked = validation?.checked;
+        
+        const loadState = videoLoadStates[att._id] || "loading";
+        const hasError = att.decryption_error || loadState === "error" || (isChecked && !isValidUri);
 
         return (
-          <View 
-            key={att._id || index} 
-            className={index > 0 ? 'mt-1' : ''}
-          >
+          <View key={att._id || index} className={index > 0 ? "mt-1" : ""}>
             {/* ❌ Error State */}
             {hasError && (
               <TouchableOpacity
-                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                onLongPress={onLongPress}
                 delayLongPress={300}
                 activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
                 className="rounded-xl bg-gray-800 items-center justify-center"
               >
-                <Ionicons name="videocam-off-outline" size={32} color="#ef4444" />
-                <Text className="text-red-400 text-xs mt-2">Failed to load</Text>
+                <Ionicons
+                  name="videocam-off-outline"
+                  size={32}
+                  color="#ef4444"
+                />
+                <Text className="text-red-400 text-xs mt-2">
+                  {att.decryption_error ? "Decryption failed" : "Failed to load"}
+                </Text>
+                {__DEV__ && validation?.uri && (
+                  <Text className="text-gray-500 text-[10px] mt-1 px-2 text-center" numberOfLines={1}>
+                    {validation.uri.substring(0, 40)}...
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
 
-            {/* ⏳ Loading State - No URI yet */}
-            {!hasError && !videoUri && (
+            {/* ⏳ Loading State - Validation in progress or no URI yet */}
+            {!hasError && (!isChecked || !videoUri) && (
               <TouchableOpacity
-                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                onLongPress={onLongPress}
                 delayLongPress={300}
                 activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
@@ -94,15 +235,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               >
                 <ActivityIndicator size="small" color="#f97316" />
                 <Text className="text-gray-400 text-xs mt-2">
-                  {isSending ? 'Encrypting...' : 'Decrypting...'}
+                  {!isChecked ? "Validating..." : 
+                   isSending ? "Encrypting..." : "Loading..."}
                 </Text>
               </TouchableOpacity>
             )}
 
             {/* 📤 Sending State */}
-            {!hasError && videoUri && isSending && (
+            {!hasError && videoUri && isValidUri && isSending && (
               <TouchableOpacity
-                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                onLongPress={onLongPress}
                 delayLongPress={300}
                 activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
@@ -110,7 +252,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               >
                 <Video
                   source={{ uri: videoUri }}
-                  style={{ position: 'absolute', width: '100%', height: '100%' }}
+                  style={{
+                    position: "absolute",
+                    width: "100%",
+                    height: "100%",
+                  }}
                   resizeMode={ResizeMode.COVER}
                   shouldPlay={false}
                   isMuted={true}
@@ -122,10 +268,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               </TouchableOpacity>
             )}
 
-            {/* ✅ Ready to Play - CLEAN VIDEO WITH LONG PRESS */}
-            {!hasError && videoUri && !isSending && (
+            {/* ✅ Ready to Play - VALIDATED VIDEO WITH LONG PRESS */}
+            {!hasError && videoUri && isValidUri && !isSending && (
               <TouchableOpacity
-                onLongPress={onLongPress} // ✅ FIXED: Add long press
+                onLongPress={onLongPress}
                 delayLongPress={300}
                 activeOpacity={0.95}
                 style={{ width: GALLERY_WIDTH, height: GALLERY_WIDTH * 0.6 }}
@@ -133,21 +279,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
               >
                 <Video
                   source={{ uri: videoUri }}
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: "100%", height: "100%" }}
                   useNativeControls
                   resizeMode={ResizeMode.CONTAIN}
                   isLooping={false}
                   shouldPlay={false}
                   onLoadStart={() => handleVideoLoadStart(att._id)}
                   onLoad={(status) => handleVideoLoad(att._id, status)}
-                  onError={() => handleVideoError(att._id)}
+                  onError={(error) => handleVideoError(att._id, error)}
                   progressUpdateIntervalMillis={500}
                 />
-                
+
                 {/* Loading overlay */}
-                {loadState === 'loading' && (
+                {loadState === "loading" && (
                   <View className="absolute inset-0 bg-black/60 items-center justify-center">
                     <ActivityIndicator size="small" color="white" />
+                  </View>
+                )}
+
+                {/* ✅ Debug info (dev only) */}
+                {__DEV__ && loadState === "ready" && (
+                  <View className="absolute top-1 right-1 bg-green-500/80 px-1 py-0.5 rounded">
+                    <Text className="text-white text-[8px] font-bold">✓</Text>
                   </View>
                 )}
               </TouchableOpacity>

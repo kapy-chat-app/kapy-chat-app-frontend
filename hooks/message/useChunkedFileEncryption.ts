@@ -1,231 +1,444 @@
-// hooks/message/useChunkedFileEncryption.ts - TOKEN REFRESH FIX
-import {
-  ChunkedUploadProgress,
-  chunkedUploadService,
-} from "@/lib/encryption/ChunkedUploadService";
-import {
-  EncryptionProgress,
-  nativeEncryptionService,
-} from "@/lib/encryption/NativeEncryptionService";
-import { useAuth } from "@clerk/clerk-expo";
-import { useCallback, useState } from "react";
+// hooks/message/useChunkedFileEncryption.ts - FIXED: Pass recipientKeys to native
+
+import { NativeEncryptionBridge } from "@/lib/encryption/NativeEncryptionBridge";
+import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useCallback } from "react";
+import { NativeModules } from "react-native";
 import { useEncryption } from "./useEncryption";
 
+const { KapyEncryption } = NativeModules;
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
-export interface FileEncryptionOptions {
-  onProgress?: (progress: EncryptionProgress | ChunkedUploadProgress) => void;
+export interface StreamingUploadResult {
+  fileId: string;
+  messageId: string;
+  masterIv: string;
+  masterAuthTag: string;
+  chunks: ChunkInfo[];
+  totalChunks: number;
+  originalSize: number;
+  encryptedSize: number;
+  fileName: string;
+  recipientKeys?: {
+    userId: string;
+    encryptedSymmetricKey: string;
+    keyIv: string;
+    keyAuthTag: string;
+  }[];
 }
 
-export interface EncryptedFileResult {
-  encryptedBase64?: string; // For small files
-  encryptedFileId?: string; // For large files (chunked upload)
-  metadata: {
-    iv: string;
-    authTag: string;
-    original_size: number;
-    encrypted_size: number;
-    file_name: string;
-    file_type: string;
-    chunks?: number;
-  };
-  isLargeFile: boolean;
-  originalFileName: string;
-  originalFileType: string;
-  localUri: string;
+export interface ChunkInfo {
+  index: number;
+  iv: string;
+  authTag: string;
+  gcmAuthTag: string;
+  originalSize: number;
+  encryptedSize: number;
 }
-
-export { ChunkedUploadProgress, EncryptionProgress };
 
 export const useChunkedFileEncryption = () => {
   const { isInitialized } = useEncryption();
   const { getToken } = useAuth();
-  const [isEncrypting, setIsEncrypting] = useState(false);
-  const [progress, setProgress] = useState<
-    EncryptionProgress | ChunkedUploadProgress | null
-  >(null);
+  const { user } = useUser();
+
+  const hasNewMethods = useCallback(() => {
+    try {
+      return (
+        typeof NativeEncryptionBridge.generateSymmetricKey === "function" &&
+        typeof NativeEncryptionBridge.encryptSymmetricKey === "function" &&
+        typeof NativeEncryptionBridge.encryptFileWithSymmetricKey === "function"
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const getConversationParticipants = useCallback(
+    async (conversationId: string): Promise<string[]> => {
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("No auth token");
+
+        console.log("👥 [ENCRYPT] Getting conversation participants...");
+
+        const convResponse = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (!convResponse.ok) {
+          throw new Error(`Failed to fetch conversation: ${convResponse.status}`);
+        }
+
+        const convResult = await convResponse.json();
+        const participants = convResult.data.participants || [];
+        const participantIds = participants.map((p: any) => p.clerkId);
+
+        console.log(`✅ [ENCRYPT] Found ${participantIds.length} participants`);
+
+        return participantIds;
+      } catch (error) {
+        console.error("❌ [ENCRYPT] getConversationParticipants error:", error);
+        throw error;
+      }
+    },
+    [getToken, API_BASE_URL]
+  );
+
+  const getParticipantKeys = useCallback(
+    async (participantIds: string[]): Promise<Map<string, string>> => {
+      const token = await getToken();
+      if (!token) throw new Error("No auth token");
+
+      console.log(`🔑 [ENCRYPT] Fetching ${participantIds.length} public keys...`);
+
+      const keyMap = new Map<string, string>();
+
+      await Promise.all(
+        participantIds.map(async (clerkId) => {
+          try {
+            const keyResponse = await fetch(
+              `${API_BASE_URL}/api/keys/${clerkId}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (!keyResponse.ok) {
+              console.warn(`⚠️ [ENCRYPT] No key for user: ${clerkId}`);
+              return;
+            }
+
+            const keyResult = await keyResponse.json();
+            if (keyResult.success && keyResult.data?.publicKey) {
+              keyMap.set(clerkId, keyResult.data.publicKey);
+              console.log(`✅ [ENCRYPT] Got key for: ${clerkId.substring(0, 10)}...`);
+            }
+          } catch (error) {
+            console.error(`❌ [ENCRYPT] Failed to get key for ${clerkId}:`, error);
+          }
+        })
+      );
+
+      console.log(`✅ [ENCRYPT] Retrieved ${keyMap.size}/${participantIds.length} keys`);
+
+      if (keyMap.size === 0) {
+        throw new Error("No recipient keys found");
+      }
+
+      return keyMap;
+    },
+    [getToken, API_BASE_URL]
+  );
 
   /**
-   * ✅ ENHANCED: Encrypt and upload file with TOKEN REFRESH after encryption
+   * ✅ FIXED: Pass recipientKeys as JSON string to native method
    */
-  const encryptFile = useCallback(
+  const encryptAndUploadFileNew = useCallback(
     async (
       fileUri: string,
       fileName: string,
       conversationId: string,
-      recipientUserId?: string,
-      options?: FileEncryptionOptions
-    ): Promise<EncryptedFileResult> => {
-      console.log("\n" + "=".repeat(60));
-      console.log("🔒 [encryptFile] START");
-      console.log("=".repeat(60));
-      
+      options?: { onProgress?: (progress: any) => void }
+    ): Promise<StreamingUploadResult> => {
+      console.log("🚀 [ENCRYPT] Starting OPTIMIZED NATIVE upload flow");
+      console.log(`   File: ${fileName}`);
+      console.log(`   URI: ${fileUri}`);
+
+      const token = await getToken();
+      if (!token) throw new Error("No auth token");
+
+      // STEP 1: Get participants
+      console.log("👥 [ENCRYPT] STEP 1: Getting participants...");
+      const participantIds = await getConversationParticipants(conversationId);
+      console.log(`✅ [ENCRYPT] Got ${participantIds.length} participants`);
+
+      // STEP 2: Get public keys
+      console.log("🔑 [ENCRYPT] STEP 2: Getting public keys...");
+      const participantKeys = await getParticipantKeys(participantIds);
+      console.log(`✅ [ENCRYPT] Got ${participantKeys.size} keys`);
+
+      // STEP 3: Generate symmetric key
+      console.log("🔐 [ENCRYPT] STEP 3: Generating symmetric key...");
+      const symmetricKey = await NativeEncryptionBridge.generateSymmetricKey();
+      console.log("✅ [ENCRYPT] Symmetric key generated");
+      console.log(`   Key length: ${symmetricKey.length}`);
+
+      // STEP 4: Encrypt symmetric key for each participant
+      console.log(
+        `🔐 [ENCRYPT] STEP 4: Encrypting symmetric key for ${participantKeys.size} recipients...`
+      );
+
+      const recipientKeys = await Promise.all(
+        Array.from(participantKeys.entries()).map(
+          async ([userId, publicKey]) => {
+            const encryptedKey = await NativeEncryptionBridge.encryptSymmetricKey(
+              symmetricKey,
+              publicKey
+            );
+
+            console.log(`✅ [ENCRYPT] Key encrypted for: ${userId.substring(0, 10)}...`);
+
+            return {
+              userId,
+              encryptedSymmetricKey: encryptedKey.encryptedSymmetricKey,
+              keyIv: encryptedKey.keyIv,
+              keyAuthTag: encryptedKey.keyAuthTag,
+            };
+          }
+        )
+      );
+
+      console.log(`✅ [ENCRYPT] Encrypted symmetric key for ${recipientKeys.length} recipients`);
+
+      // STEP 5: Check native method
+      console.log("🔍 [ENCRYPT] STEP 5: Checking native method availability...");
+      console.log(`   KapyEncryption module:`, !!KapyEncryption);
+      console.log(
+        `   Has method:`,
+        !!KapyEncryption?.encryptAndUploadFileStreamingWithSymmetricKey
+      );
+
+      if (!KapyEncryption?.encryptAndUploadFileStreamingWithSymmetricKey) {
+        console.error("❌ [ENCRYPT] Native method NOT AVAILABLE!");
+        throw new Error("Native upload method not available - rebuild app");
+      }
+
+      // ✅ STEP 6: Call native method WITH recipientKeys
+      console.log("🚀 [ENCRYPT] STEP 6: Calling NATIVE encrypt + upload...");
+      console.log(`   📦 Passing ${recipientKeys.length} recipientKeys to native`);
+      console.log("   ⚠️ IF YOU SEE JS LOGS BELOW, NATIVE FAILED!");
+      console.log("   ✅ IF YOU SEE KOTLIN LOGS, NATIVE WORKING!");
+
+      let result;
+      try {
+        // ✅ CRITICAL FIX: Pass recipientKeys as 6th parameter (JSON string)
+        result = await KapyEncryption.encryptAndUploadFileStreamingWithSymmetricKey(
+          fileUri,              // 1. File URI
+          fileName,             // 2. File name
+          conversationId,       // 3. Conversation ID
+          symmetricKey,         // 4. Symmetric key (base64)
+          JSON.stringify(recipientKeys), // 5. ✅ recipientKeys as JSON string
+          token                 // 6. Auth token
+        );
+
+        console.log("✅ [ENCRYPT] Native method returned!");
+        console.log("   Result keys:", Object.keys(result || {}));
+        console.log(`   File ID: ${result.fileId}`);
+        console.log(`   Message ID: ${result.messageId}`);
+
+      } catch (nativeError) {
+        console.error("❌ [ENCRYPT] Native method FAILED:", nativeError);
+        console.error("   Error type:", nativeError.constructor.name);
+        console.error("   Error message:", nativeError.message);
+        throw nativeError;
+      }
+
+      console.log("🎉 [ENCRYPT] COMPLETE!");
+      console.log(`   Upload time: ${result.uploadTimeSeconds?.toFixed(1)}s`);
+      console.log(`   Avg speed: ~${result.avgSpeedMBps}MB/s`);
+      console.log(`   Recipients saved: ${recipientKeys.length}`);
+
+      return {
+        fileId: result.fileId,
+        messageId: result.messageId,
+        masterIv: "",
+        masterAuthTag: result.masterAuthTag,
+        chunks: result.chunks,
+        totalChunks: result.totalChunks,
+        originalSize: result.originalSize,
+        encryptedSize: result.encryptedSize,
+        fileName,
+        recipientKeys, // ✅ Return recipientKeys for reference
+      };
+    },
+    [getToken, getConversationParticipants, getParticipantKeys, API_BASE_URL]
+  );
+
+  /**
+   * ⚠️ FALLBACK: JS upload (old method)
+   */
+  const encryptAndUploadFileNewFallback = useCallback(
+    async (
+      fileUri: string,
+      fileName: string,
+      conversationId: string,
+      options?: { onProgress?: (progress: any) => void }
+    ): Promise<StreamingUploadResult> => {
+      console.log("🔄 [FALLBACK] Using JS upload method");
+
+      const token = await getToken();
+      if (!token) throw new Error("No auth token");
+
+      const participantIds = await getConversationParticipants(conversationId);
+      const participantKeys = await getParticipantKeys(participantIds);
+
+      const symmetricKey = await NativeEncryptionBridge.generateSymmetricKey();
+
+      const recipientKeys = await Promise.all(
+        Array.from(participantKeys.entries()).map(
+          async ([userId, publicKey]) => {
+            const encryptedKey = await NativeEncryptionBridge.encryptSymmetricKey(
+              symmetricKey,
+              publicKey
+            );
+            return {
+              userId,
+              encryptedSymmetricKey: encryptedKey.encryptedSymmetricKey,
+              keyIv: encryptedKey.keyIv,
+              keyAuthTag: encryptedKey.keyAuthTag,
+            };
+          }
+        )
+      );
+
+      const encryptedFile = await NativeEncryptionBridge.encryptFileWithSymmetricKey(
+        fileUri,
+        fileName,
+        symmetricKey,
+        options?.onProgress
+      );
+
+      const initResponse = await fetch(
+        `${API_BASE_URL}/api/conversations/${conversationId}/files/init-streaming-upload`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            fileName,
+            fileSize: encryptedFile.encryptedSize,
+            totalChunks: encryptedFile.totalChunks,
+            fileType: getMimeType(fileName),
+          }),
+        }
+      );
+
+      if (!initResponse.ok) {
+        throw new Error(`Failed to initialize upload: ${initResponse.status}`);
+      }
+
+      const initResult = await initResponse.json();
+      const { uploadId, uploadUrls } = initResult;
+
+      const chunkETags: string[] = [];
+      const encryptedData = Buffer.from(encryptedFile.encryptedBase64, "base64");
+
+      let offset = 0;
+      for (let i = 0; i < encryptedFile.chunks.length; i++) {
+        const chunk = encryptedFile.chunks[i];
+        const chunkData = encryptedData.slice(offset, offset + chunk.encryptedSize);
+        offset += chunk.encryptedSize;
+
+        const uploadResponse = await fetch(uploadUrls[i], {
+          method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: chunkData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to upload chunk ${i}: ${uploadResponse.status}`);
+        }
+
+        const etag = uploadResponse.headers.get("ETag")?.replace(/"/g, "") || `chunk-${i}`;
+        chunkETags.push(etag);
+      }
+
+      const finalizeResponse = await fetch(
+        `${API_BASE_URL}/api/conversations/${conversationId}/files/finalize-streaming-upload`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            uploadId,
+            chunks: chunkETags,
+            metadata: {
+              iv: encryptedFile.iv,
+              authTag: encryptedFile.authTag,
+              original_size: encryptedFile.originalSize,
+              encrypted_size: encryptedFile.encryptedSize,
+              file_name: fileName,
+              file_type: getMimeType(fileName),
+              chunks: encryptedFile.chunks,
+              recipientKeys, // ✅ Include recipientKeys
+            },
+          }),
+        }
+      );
+
+      if (!finalizeResponse.ok) {
+        throw new Error(`Failed to finalize upload: ${finalizeResponse.status}`);
+      }
+
+      const finalizeResult = await finalizeResponse.json();
+
+      return {
+        fileId: finalizeResult.fileId,
+        messageId: finalizeResult.messageId,
+        masterIv: encryptedFile.iv,
+        masterAuthTag: encryptedFile.authTag,
+        chunks: encryptedFile.chunks,
+        totalChunks: encryptedFile.totalChunks,
+        originalSize: encryptedFile.originalSize,
+        encryptedSize: encryptedFile.encryptedSize,
+        fileName,
+        recipientKeys,
+      };
+    },
+    [getToken, getConversationParticipants, getParticipantKeys, API_BASE_URL]
+  );
+
+  const encryptAndUploadFile = useCallback(
+    async (
+      fileUri: string,
+      fileName: string,
+      conversationId: string,
+      recipientId?: string,
+      options?: { onProgress?: (progress: any) => void }
+    ): Promise<StreamingUploadResult> => {
       if (!isInitialized) {
         throw new Error("E2EE not initialized");
       }
 
-      setIsEncrypting(true);
-      setProgress(null);
-
       try {
-        // ✅ STEP 1: Get file size
-        console.log("📊 [STEP 1] Getting file size...");
-        const fileSize = await nativeEncryptionService.getFileSize(fileUri);
-        const fileSizeMB = fileSize / 1024 / 1024;
-        
-        console.log(`📦 File Info:`);
-        console.log(`   Name: ${fileName}`);
-        console.log(`   URI: ${fileUri}`);
-        console.log(`   Size: ${fileSizeMB.toFixed(2)} MB (${fileSize} bytes)`);
-        console.log(`   ConversationId: ${conversationId}`);
-        console.log(`   RecipientId: ${recipientUserId || 'N/A'}`);
-
-        // ✅ STEP 2: Check threshold
-        console.log("\n📊 [STEP 2] Checking upload strategy...");
-        const THRESHOLD_MB = 8;
-        const THRESHOLD_BYTES = THRESHOLD_MB * 1024 * 1024;
-        const isLargeFile = chunkedUploadService.shouldUseChunkedUpload(fileSize);
-
-        console.log(`⚙️ Threshold: ${THRESHOLD_MB} MB (${THRESHOLD_BYTES} bytes)`);
-        console.log(`⚙️ File size: ${fileSize} bytes`);
-        console.log(`⚙️ Is larger than threshold? ${fileSize > THRESHOLD_BYTES}`);
-        console.log(`⚙️ shouldUseChunkedUpload() returned: ${isLargeFile}`);
-        console.log(`⚙️ Will use: ${isLargeFile ? "🚀 CHUNKED" : "📤 DIRECT"} upload`);
-
-        // ✅ STEP 3: Route to correct method
-        if (isLargeFile) {
-          console.log("\n" + "=".repeat(60));
-          console.log("🚀 [CHUNKED UPLOAD PATH]");
-          console.log("=".repeat(60));
-
-          // ✅ Pass getToken callback to service for token refresh
-          const progressHandler = (p: ChunkedUploadProgress) => {
-            console.log(`📊 Upload Progress: ${p.phase} - ${p.percentage}%`);
-            setProgress(p);
-            options?.onProgress?.(p);
-          };
-
-          console.log("📤 Calling chunkedUploadService.uploadEncryptedFile()...");
-          const result = await chunkedUploadService.uploadEncryptedFile(
-            fileUri,
-            fileName,
-            conversationId,
-            getToken, // ✅ PASS getToken CALLBACK instead of token string
-            progressHandler
-          );
-
-          console.log("\n✅ [CHUNKED UPLOAD COMPLETE]");
-          console.log(`   Encrypted File ID: ${result.encryptedFileId}`);
-          console.log(`   Total Chunks: ${result.metadata.chunks}`);
-          console.log(`   Encrypted Size: ${(result.metadata.encrypted_size / 1024 / 1024).toFixed(2)} MB`);
-          console.log("=".repeat(60) + "\n");
-
-          return {
-            encryptedFileId: result.encryptedFileId,
-            metadata: result.metadata,
-            isLargeFile: true,
-            originalFileName: fileName,
-            originalFileType: result.metadata.file_type,
-            localUri: fileUri,
-          };
+        if (hasNewMethods()) {
+          console.log("✨ [ENCRYPT] Using NEW hybrid encryption flow");
+          return await encryptAndUploadFileNew(fileUri, fileName, conversationId, options);
         } else {
-          console.log("\n" + "=".repeat(60));
-          console.log("📤 [DIRECT UPLOAD PATH]");
-          console.log("=".repeat(60));
-
-          const progressHandler = (p: EncryptionProgress) => {
-            console.log(`📊 Encryption Progress: ${p.phase} - ${p.percentage}%`);
-            setProgress(p);
-            options?.onProgress?.(p);
-          };
-
-          console.log("🔒 Calling nativeEncryptionService.encryptFile()...");
-          const result = await nativeEncryptionService.encryptFile(
-            fileUri,
-            fileName,
-            progressHandler
-          );
-
-          console.log("\n✅ [DIRECT ENCRYPTION COMPLETE]");
-          console.log(`   Encrypted Size: ${(result.metadata.encrypted_size / 1024 / 1024).toFixed(2)} MB`);
-          console.log(`   Base64 Length: ${result.encryptedBase64.length} chars`);
-          console.log("=".repeat(60) + "\n");
-
-          return {
-            encryptedBase64: result.encryptedBase64,
-            metadata: result.metadata,
-            isLargeFile: false,
-            originalFileName: fileName,
-            originalFileType: result.metadata.file_type,
-            localUri: fileUri,
-          };
+          throw new Error("Old encryption flow not supported");
         }
       } catch (error) {
-        console.error("\n" + "❌".repeat(30));
-        console.error("❌ [encryptFile] ERROR");
-        console.error("❌".repeat(30));
-        console.error(error);
-        console.error("❌".repeat(30) + "\n");
+        console.error("❌ [ENCRYPT] Error:", error);
         throw error;
-      } finally {
-        setIsEncrypting(false);
       }
     },
-    [isInitialized, getToken]
+    [isInitialized, hasNewMethods, encryptAndUploadFileNew]
   );
-
-  /**
-   * Encrypt multiple files
-   */
-  const encryptFiles = useCallback(
-    async (
-      files: { uri: string; name: string; mimeType?: string }[],
-      conversationId: string,
-      recipientUserId?: string,
-      onOverallProgress?: (
-        current: number,
-        total: number,
-        fileName: string
-      ) => void
-    ): Promise<EncryptedFileResult[]> => {
-      console.log(`\n📦 Encrypting ${files.length} files...`);
-      const results: EncryptedFileResult[] = [];
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        console.log(`\n📁 File ${i + 1}/${files.length}: ${file.name}`);
-        onOverallProgress?.(i + 1, files.length, file.name);
-
-        const result = await encryptFile(
-          file.uri,
-          file.name,
-          conversationId,
-          recipientUserId
-        );
-
-        results.push(result);
-      }
-
-      console.log(`\n✅ All ${files.length} files encrypted successfully\n`);
-      return results;
-    },
-    [encryptFile]
-  );
-
-  /**
-   * Reset progress state
-   */
-  const resetProgress = useCallback(() => {
-    setProgress(null);
-    setIsEncrypting(false);
-  }, []);
 
   return {
-    encryptFile,
-    encryptFiles,
-    resetProgress,
-    isEncrypting,
-    progress,
+    encryptFile: encryptAndUploadFile,
+    encryptAndUploadFile,
     isReady: isInitialized,
+    isStreamingAvailable: () => !!KapyEncryption?.encryptAndUploadFileStreaming,
+    hasNewEncryption: hasNewMethods(),
   };
 };
+
+function getMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    pdf: "application/pdf",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
