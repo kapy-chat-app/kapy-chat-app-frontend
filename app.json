@@ -1,0 +1,144 @@
+{
+  "expo": {
+    "name": "Kapii",
+    "slug": "kapy-chat-app-front-end",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "kapychatappfrontend",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "deploymentTarget": "15.1",
+      "bundleIdentifier": "com.hoanglam21.kapychatappfrontend",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kapii cần quyền truy cập camera để thực hiện cuộc gọi video.",
+        "NSMicrophoneUsageDescription": "Kapii cần quyền truy cập microphone để thực hiện cuộc gọi.",
+        "UIBackgroundModes": [
+          "audio",
+          "voip",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F36A1B",
+        "foregroundImage": "./assets/images/icon.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.hoanglam21.kapychatappfrontend",
+      "minSdkVersion": 24,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "BLUETOOTH",
+        "BLUETOOTH_CONNECT",
+        "READ_PHONE_STATE",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "USE_FULL_SCREEN_INTENT",
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "ACCESS_NETWORK_STATE",
+        "INTERNET",
+        "SYSTEM_ALERT_WINDOW",
+        "FOREGROUND_SERVICE"
+      ],
+      "intentFilters": [
+        {
+          "action": "android.intent.action.VIEW",
+          "category": [
+            "android.intent.category.DEFAULT",
+            "android.intent.category.BROWSABLE"
+          ],
+          "data": {
+            "scheme": "kapychatappfrontend"
+          }
+        }
+      ]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-web-browser",
+      "expo-localization",
+      "expo-sqlite",
+      "expo-asset",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FF8C42",
+          "sounds": [
+            "./assets/sounds/ringtone.mp3",
+            "./assets/sounds/message.mp3"
+          ],
+          "mode": "production",
+          "androidMode": "default",
+          "androidCollapsedTitle": "Incoming Call",
+          "android": {
+            "useNextNotificationsApi": true
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0",
+            "enableProguardInReleaseBuilds": false,
+            "enableShrinkResourcesInReleaseBuilds": false,
+            "usesCleartextTraffic": true,
+            "extraPropertiesGradle": {
+              "android.useAndroidX": "true",
+              "android.enableJetifier": "true"
+            },
+            "extraMavenRepos": [
+              "https://pkgs.dev.azure.com/onnxruntime/onnxruntime/_packaging/onnxruntime-mobile/maven/v1"
+            ]
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "54cf73ae-c604-447e-99f9-c28825f55faf"
+      }
+    }
+  }
+}

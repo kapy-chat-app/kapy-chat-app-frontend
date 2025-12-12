@@ -1,0 +1,971 @@
+{
+  "home": "Home",
+  "settings": "Settings",
+  "welcome": "Welcome",
+  "greeting": "Hello, {{name}}!",
+  "language": "Language",
+  "selectLanguage": "Select Language",
+  "save": "Save",
+  "cancel": "Cancel",
+  "changeLanguage": "Change Language",
+  "currentLanguage": "Current Language",
+  "next": "Next",
+  "skip": "Skip",
+  "getStarted": "Get Started",
+  "auth": {
+    "signIn": {
+      "title": "Sign in",
+      "emailPlaceholder": "Phone Number or Email",
+      "passwordPlaceholder": "Password",
+      "forgotPassword": "Forgot your password?",
+      "resetNow": "Reset now",
+      "signInButton": "Sign In",
+      "signingIn": "Signing In...",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Sign Up",
+      "errors": {
+        "emailRequired": "Please enter your email or phone number",
+        "passwordRequired": "Please enter your password",
+        "signInFailed": "Sign In Failed",
+        "incomplete": "Please complete additional steps required.",
+        "generic": "Failed to sign in. Please try again."
+      }
+    },
+    "signUp": {
+      "title": "Sign up",
+      "emailPlaceholder": "Enter your email",
+      "passwordPlaceholder": "Enter password",
+      "passwordRequirement": "Password must be at least 8 characters",
+      "continueButton": "Continue",
+      "creatingAccount": "Creating Account...",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign In",
+      "verifyEmail": {
+        "title": "Verify Email",
+        "description": "We've sent a verification code to",
+        "codePlaceholder": "Enter verification code",
+        "verifyButton": "Verify Email",
+        "verifying": "Verifying...",
+        "didntReceive": "Didn't receive code?",
+        "goBack": "Go back"
+      },
+      "errors": {
+        "emailRequired": "Please enter your email address",
+        "passwordRequired": "Please enter your password",
+        "passwordLength": "Password must be at least 8 characters",
+        "signUpFailed": "Sign Up Failed",
+        "codeRequired": "Please enter the verification code",
+        "verifyFailed": "Verification Failed",
+        "incomplete": "Please complete additional steps required.",
+        "generic": "Failed to sign up. Please try again."
+      }
+    },
+    "forgotPassword": {
+      "title": "Forgot Password?",
+      "resetTitle": "Reset Password",
+      "description": "Enter your email address and we'll send you a code to reset your password.",
+      "resetDescription": "Enter the verification code sent to your email and your new password.",
+      "emailPlaceholder": "Email Address",
+      "codePlaceholder": "Verification Code",
+      "newPasswordPlaceholder": "New Password",
+      "confirmPasswordPlaceholder": "Confirm New Password",
+      "sendCodeButton": "Send Reset Code",
+      "sending": "Sending...",
+      "resetButton": "Reset Password",
+      "resetting": "Resetting...",
+      "didntReceive": "Didn't receive the code?",
+      "resend": "Resend",
+      "codeSentTo": "Code sent to:",
+      "requirements": {
+        "title": "Password Requirements:",
+        "minLength": "• At least 8 characters long",
+        "recommended": "• Mix of letters, numbers, and symbols recommended"
+      },
+      "alerts": {
+        "codeSent": {
+          "title": "Code Sent",
+          "message": "We've sent a verification code to your email. Please check your inbox."
+        },
+        "success": {
+          "title": "Success",
+          "message": "Your password has been reset successfully. Please sign in with your new password."
+        },
+        "resendSuccess": "Verification code resent to your email"
+      },
+      "errors": {
+        "emailRequired": "Please enter your email address",
+        "emailInvalid": "Please enter a valid email address",
+        "codeRequired": "Please enter the verification code",
+        "passwordRequired": "Please enter a new password",
+        "passwordLength": "Password must be at least 8 characters long",
+        "passwordMismatch": "Passwords do not match",
+        "sendFailed": "Failed to send reset code. Please try again.",
+        "resetFailed": "Failed to reset password. Please try again.",
+        "incomplete": "Password reset incomplete. Please try again.",
+        "resendFailed": "Failed to resend code. Please try again."
+      }
+    }
+  },
+  "settingsScreen": {
+    "account": {
+      "title": "Account",
+      "security": {
+        "title": "Security",
+        "subtitle": "Password, 2FA"
+      },
+      "privacy": {
+        "title": "Privacy",
+        "subtitle": "Blocked accounts, visibility"
+      }
+    },
+    "preferences": {
+      "title": "Preferences",
+      "appearance": {
+        "title": "Appearance",
+        "subtitle": "Theme, dark mode"
+      },
+      "language": {
+        "title": "Language",
+        "subtitle": "App language"
+      }
+    },
+    "data": {
+      "title": "Data",
+      "storage": {
+        "title": "Storage",
+        "subtitle": "Manage app data"
+      },
+      "devices": {
+        "title": "Devices",
+        "subtitle": "Active sessions"
+      }
+    },
+    "profile": {
+      "loading": "Loading...",
+      "viewAndEdit": "View and edit profile"
+    },
+    "signOut": {
+      "title": "Sign Out",
+      "message": "Are you sure you want to sign out?",
+      "confirm": "Sign Out"
+    }
+  },
+  "appearance": {
+    "light": {
+      "title": "Light",
+      "description": "Use light theme"
+    },
+    "dark": {
+      "title": "Dark",
+      "description": "Use dark theme"
+    },
+    "system": {
+      "title": "System",
+      "description": "Follow device settings"
+    },
+    "currentTheme": {
+      "title": "Current Theme",
+      "followingDevice": "Following your device settings",
+      "usingMode": "Using {{mode}} mode"
+    },
+    "chooseTheme": "CHOOSE THEME",
+    "info": "System mode will automatically switch between light and dark based on your device settings."
+  },
+  "languageScreen": {
+    "currentLanguage": {
+      "title": "Current Language",
+      "description": "The app interface will be displayed in this language"
+    },
+    "availableLanguages": "AVAILABLE LANGUAGES",
+    "info": "Changing the language will update all text in the app immediately. Your preference will be saved."
+  },
+  "sidebar": {
+    "menu": "Menu",
+    "user": "User",
+    "conversations": "Conversations",
+    "contacts": "Contacts",
+    "discover": "Discover",
+    "blockedUsers": "Blocked Users",
+    "helpSupport": "Help & Support",
+    "about": "About"
+  },
+  "loading": "Loading...",
+  "success": "Success",
+  "error": "Error",
+  "ok": "OK",
+  "camera": "Camera",
+  "gallery": "Gallery",
+  "saving": "Saving...",
+  "profile": {
+    "screen": {
+      "title": "Profile"
+    },
+    "sections": {
+      "general": "General",
+      "contact": "Contact",
+      "personal": "Personal",
+      "preferences": "Preferences",
+      "account": "Account Information"
+    },
+    "labels": {
+      "fullName": "Full Name",
+      "username": "Username",
+      "bio": "Bio",
+      "bioEmpty": "No bio available",
+      "gender": "Gender",
+      "birthday": "Birthday",
+      "phone": "Phone",
+      "email": "Email",
+      "location": "Location",
+      "website": "Website",
+      "status": "Status",
+      "active": "Active",
+      "theme": "Theme",
+      "joined": "Joined",
+      "verified": "Verified",
+      "verifiedStatus": {
+        "yes": "Verified",
+        "no": "Not Verified"
+      },
+      "notSet": "Not set"
+    },
+    "edit": {
+      "imagePicker": {
+        "title": "Profile Picture",
+        "message": "Choose an option"
+      },
+      "removePhoto": "Remove Photo",
+      "permission": {
+        "title": "Permission needed",
+        "message": "Please grant permission to access your {{source}}"
+      },
+      "imageUpdated": "Profile picture updated successfully",
+      "imageUpdateFailed": "Failed to update profile picture",
+      "imagePickFailed": "Failed to pick image",
+      "imageRemoved": "Profile picture removed successfully",
+      "imageRemoveFailed": "Failed to remove profile picture",
+      "title": "Edit Profile",
+      "sections": {
+        "basic": "Basic Information",
+        "contact": "Contact Information",
+        "personal": "Personal Information"
+      },
+      "placeholders": {
+        "fullName": "Enter your full name",
+        "username": "Enter your username",
+        "bio": "Tell us about yourself...",
+        "phone": "Enter your phone number",
+        "location": "Enter your location",
+        "website": "Enter your website URL",
+        "gender": "Select your gender",
+        "birthday": "Select your date of birth",
+        "status": "Select your current status"
+      },
+      "validation": {
+        "title": "Validation Error",
+        "message": "Please fix the errors before saving"
+      },
+      "updateSuccess": "Profile updated successfully",
+      "updateFailed": "Failed to update profile",
+      "unexpectedError": "An unexpected error occurred",
+      "saveChanges": "Save Changes",
+      "saving": "Saving Profile..."
+    }
+  },
+  "tabs": {
+    "home": "Home",
+    "conversations": "Conversations",
+    "contacts": "Contacts",
+    "emotion": "Emotion",
+    "ai": "AI",
+    "setting": "Setting"
+  },
+  "friends": {
+    "title": "Friends",
+    "searchPlaceholder": "Search friends...",
+    "searching": "Searching...",
+    "noUsersFound": "No users found",
+    "requests": {
+      "title": "Friend requests",
+      "all": "All requests",
+      "accepted": "Friend request accepted!",
+      "acceptFailed": "Failed to accept request",
+      "declineTitle": "Decline Request",
+      "declineMessage": "Are you sure you want to decline this friend request?",
+      "decline": "Decline",
+      "declineFailed": "Failed to decline request"
+    },
+    "myFriends": "My friends ({{count}})",
+    "seeAll": "See all",
+    "addFriend": "Add Friend",
+    "sent": "Sent",
+    "friends": "Friends",
+    "unknownError": "Unknown error",
+    "menu": {
+      "title": "Choose an action",
+      "viewProfile": "View Profile",
+      "message": "Send Message",
+      "unfriend": "Unfriend",
+      "block": "Block User"
+    },
+    "blocked": {
+      "title": "Unblock User",
+      "confirm": "Are you sure you want to unblock {{name}}?",
+      "cancel": "Cancel",
+      "unblock": "Unblock",
+      "on": "Blocked on {{date}}",
+      "reason": "Reason: {{reason}}"
+    },
+    "request": {
+      "message": "Wants to be your friend",
+      "accept": "Accept",
+      "decline": "Decline"
+    },
+    "labels": {
+      "mutual": "{{count}} mutual friends"
+    },
+    "unfriend": {
+      "title": "Unfriend",
+      "message": "Are you sure you want to remove {{name}} from your friends?",
+      "confirm": "Unfriend",
+      "success": "{{name}} has been removed from your friends",
+      "failed": "Failed to remove friend"
+    },
+    "block": {
+      "title": "Block User",
+      "message": "Block {{name}}? They won't be able to contact you or see your profile.",
+      "confirm": "Block",
+      "success": "{{name}} has been blocked",
+      "failed": "Failed to block user"
+    },
+    "notifications": {
+      "requestReceived": "{{name}} sent you a friend request",
+      "requestAccepted": "{{name}} accepted your friend request",
+      "requestDeclined": "{{name}} declined your friend request",
+      "requestCancelled": "{{name}} cancelled their friend request",
+      "friendRemoved": "{{name}} removed you from friends",
+      "friendOnline": "{{name}} is now online"
+    }
+  },
+  "publicProfile": {
+    "title": "Profile",
+    "loading": "Loading profile...",
+    "notFound": "Profile not found",
+    "notFoundDescription": "The user profile could not be loaded",
+    "tryAgain": "Try Again",
+    "information": "Information",
+    "location": "Location",
+    "website": "Website",
+    "status": "Status",
+    "friends": "Friends",
+    "mutual": "Mutual",
+    "online": "Online",
+    "offline": "Offline",
+    "recentlyOnline": "Recently online",
+    "hoursAgo": "{{hours}}h ago",
+    "daysAgo": "{{days}}d ago",
+    "blocked": {
+      "title": "This user is blocked",
+      "message": "You have blocked this user and cannot see their profile"
+    },
+    "private": {
+      "title": "This profile is private",
+      "message": "Send a friend request to see more details"
+    },
+    "actions": {
+      "addFriend": "Add Friend",
+      "message": "Message",
+      "requestSent": "Request Sent",
+      "cancelRequest": "Cancel Request",
+      "unfriend": "Unfriend",
+      "shareProfile": "Share Profile",
+      "reportUser": "Report User",
+      "blockUser": "Block User",
+      "acceptRequest": "Accept Request",
+      "declineRequest": "Decline Request"
+    },
+    "cancelRequest": {
+      "title": "Cancel Request",
+      "message": "Are you sure you want to cancel this friend request?",
+      "confirm": "Cancel Request",
+      "success": "Friend request cancelled",
+      "failed": "Failed to cancel request",
+      "notFound": "Friend request not found"
+    },
+    "unfriend": {
+      "title": "Unfriend",
+      "message": "Are you sure you want to remove {{name}} from your friends?",
+      "confirm": "Unfriend",
+      "success": "Friend removed successfully",
+      "failed": "Failed to remove friend"
+    },
+    "declineRequest": {
+      "title": "Decline Request",
+      "message": "Are you sure you want to decline this friend request?",
+      "confirm": "Decline",
+      "success": "Friend request declined",
+      "failed": "Failed to decline request"
+    },
+    "block": {
+      "confirmTitle": "Block User",
+      "confirmMessage": "Are you sure you want to block {{name}}? They will no longer be able to contact you or see your profile.",
+      "reasonTitle": "Block Reason (Optional)",
+      "reasonDescription": "Why are you blocking this user? This will help us improve the platform.",
+      "reasonPlaceholder": "Enter reason (optional)...",
+      "blocking": "Blocking...",
+      "skip": "Skip",
+      "block": "Block",
+      "success": "User blocked successfully",
+      "failed": "Failed to block user",
+      "unexpectedError": "An unexpected error occurred while blocking user"
+    },
+    "friendRequest": {
+      "success": "Friend request sent successfully",
+      "failed": "Failed to send friend request",
+      "accepted": "Friend request accepted",
+      "acceptFailed": "Failed to accept request",
+      "declineInfo": "Decline functionality not implemented yet",
+      "notFound": "Friend request not found"
+    },
+    "share": {
+      "info": "Share functionality not implemented yet"
+    },
+    "report": {
+      "success": "User reported successfully"
+    }
+  },
+  "blockedUsers": {
+    "title": "Blocked Users",
+    "empty": "No blocked users",
+    "emptyDescription": "You haven't blocked anyone yet",
+    "unblockSuccess": "User unblocked successfully",
+    "unblockFailed": "Failed to unblock user"
+  },
+  "emotions": {
+    "joy": "Happy",
+    "sadness": "Sad",
+    "anger": "Angry",
+    "fear": "Fearful",
+    "surprise": "Surprised",
+    "neutral": "Neutral"
+  },
+
+  "emotion": {
+    "title": "My Emotions",
+    "tabs": {
+      "history": "History",
+      "stats": "Statistics"
+    },
+    "empty": "No emotion data",
+    "tryAgain": "Try Again",
+
+    "emotions": {
+      "joy": "Joy",
+      "sadness": "Sadness",
+      "anger": "Anger",
+      "fear": "Fear",
+      "surprise": "Surprise",
+      "love": "Love",
+      "neutral": "Neutral"
+    },
+
+    "stats": {
+      "overview": "Overview",
+      "analyses": "Analyses",
+      "dominantEmotion": "Dominant Emotion",
+      "distribution": "Emotion Distribution",
+      "averageScores": "Average Scores",
+      "byContext": "By Context",
+      "confidence": "{{percent}}% confidence"
+    }
+  },
+
+  "common": {
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "ok": "OK",
+    "save": "Save",
+    "loading": "Loading...",
+    "success": "Success",
+    "error": "Error",
+    "retry": "Retry"
+  },
+
+   "aiChat": {
+    "title": "AI Assistant",
+    "placeholder": "Share your thoughts...",
+    "typing": "AI is typing",
+    
+    "sidebar": {
+      "newChat": "New Chat",
+      "noChats": "No conversations yet",
+      "deleteConfirm": {
+        "title": "Delete Chat",
+        "message": "Delete \"{{title}}\"? This will permanently remove the conversation."
+      }
+    },
+    
+    "newChat": {
+      "confirm": {
+        "title": "New Chat",
+        "message": "Start a new conversation? Current chat will be saved."
+      }
+    },
+    
+    "suggestions": {
+      "title": "AI Suggestions for You",
+      "showSuggestions": "Show Suggestions",
+      "startWith": "Start with topics:",
+      "count": "{{count}} suggestions"
+    },
+    
+    "empty": {
+      "title": "AI Health Assistant",
+      "subtitle": "I'm here to support your mental health.\nShare your feelings!",
+      "emotionStatus": "You're feeling {{emotion}}",
+      "confidence": "{{percent}}% confidence"
+    },
+    
+    "emotions": {
+      "joy": "joy",
+      "sadness": "sadness",
+      "anger": "anger",
+      "fear": "fear",
+      "surprise": "surprise",
+      "neutral": "neutral"
+    },
+    
+    "welcome": {
+      "intro": "Based on your emotions, I have some suggestions:",
+      "question": "What would you like to discuss?"
+    },
+    
+    "refresh": "Refresh",
+    "send": "Send"
+  },
+  "conversations": {
+    "title": "Conversations",
+    "searchPlaceholder": "Search conversations...",
+    "empty": {
+      "title": "No conversations yet",
+      "subtitle": "Start a conversation with your friends",
+      "startChatting": "Start Chatting"
+    },
+    "error": {
+      "tryAgain": "Try Again"
+    },
+    "newConversation": "New Conversation",
+    "ai": {
+      "badge": "{{count}} suggestions",
+      "recommendations": "AI Recommendations"
+    },
+    "floating": {
+      "sadness": "You seem {{intensity}} sad, I have some advice for you.",
+      "anger": "You seem {{intensity}} frustrated, let me help you.",
+      "fear": "Are you {{intensity}} worried? I can support you.",
+      "joy": "So happy to see you {{intensity}} joyful! Share more!",
+      "surprise": "Something surprising? I have some suggestions for you.",
+      "neutral": "I have {{count}} AI suggestions for you.",
+      "intensity": {
+        "very": "very",
+        "somewhat": "somewhat",
+        "": ""
+      },
+      "suggestions": "{{count}} suggestions",
+      "tapToView": "Tap to view details"
+    },
+    "messageTypes": {
+      "noMessages": "No messages yet",
+      "image": "📷 Image",
+      "file": "📎 File",
+      "audio": "🎵 Audio",
+      "video": "🎥 Video",
+      "voiceNote": "🎤 Voice message",
+      "location": "📍 Location",
+      "message": "Message"
+    },
+    "messagePrefix": {
+      "you": "You:",
+      "sender": "{{name}}:"
+    },
+    "createModal": {
+      "title": "New Conversation",
+      "cancel": "Cancel",
+      "create": "Create",
+      "creating": "Creating...",
+      "selected": "Selected",
+      "groupName": "Group name (required)",
+      "groupDescription": "Group description (optional)",
+      "searchPlaceholder": "Search friends...",
+      "loading": "Loading friends...",
+      "noFriends": "No friends yet",
+      "noFriendsSubtitle": "Add friends to start chatting",
+      "noResults": "No friends found",
+      "noResultsSubtitle": "Try a different search",
+      "retry": "Retry",
+      "errors": {
+        "selectFriend": "Please select at least one friend",
+        "groupName": "Please enter a group name",
+        "createFailed": "Failed to create conversation. Please try again."
+      }
+    }
+  },
+  "message": {
+    "title": "Messages",
+    "loading": "Loading messages...",
+    "sending": "Sending...",
+    "failed": "Failed to send",
+    "typing": "typing...",
+    "online": "Online",
+    "offline": "Offline",
+    "justNow": "Just now",
+    "minutesAgo": "{{minutes}}m ago",
+    "hoursAgo": "{{hours}}h ago",
+    "daysAgo": "{{days}}d ago",
+    "members": "{{count}} members",
+    "ai": {
+      "toxicWarning": "Inappropriate Content Detected",
+      "toxicMessage": "This message contains potentially offensive content. Please be kind.",
+      "cannotSend": "Cannot Send",
+      "extremelyToxic": "This message is extremely inappropriate and cannot be sent.",
+      "toxicConfirm": "This message may be offensive. Are you sure you want to send it?",
+      "sendAnyway": "Send Anyway",
+      "imageToxicTitle": "Inappropriate Image",
+      "imageToxicMessage": "This image contains inappropriate content: {{categories}}",
+      "checkingImage": "Checking image for inappropriate content...",
+      "cannotEncrypt": "Cannot encrypt"
+    },
+    "encryption": {
+      "initializing": "🔐 Initializing encryption...",
+      "enabled": "✅ End-to-end encryption enabled",
+      "notReady": "Encryption Not Ready",
+      "waitMessage": "Please wait for encryption to initialize before sending messages.",
+      "retryDecryption": "Retry Decryption",
+      "retryTitle": "Retry Decryption",
+      "retryMessage": "Do you want to retry decrypting this message?",
+      "retrySuccess": "Message decrypted successfully!",
+      "retryFailed": "Still unable to decrypt this message. The sender may need to send it again.",
+      "fileDecryptionError": "🔒 Unable to decrypt some attachments",
+      "encryptingFiles": "🔒 Encrypting and uploading files..."
+    },
+    "empty": {
+      "title": "No messages yet",
+      "subtitle": "Send your first encrypted message to start the conversation"
+    },
+    "input": {
+      "placeholder": "Type a message...",
+      "recording": "Recording...",
+      "uploading": "Uploading files..."
+    },
+    "reply": {
+      "replyingTo": "Replying to {{name}}",
+      "cancel": "Cancel"
+    },
+    "actions": {
+      "reply": "Reply",
+      "react": "React",
+      "delete": "Delete",
+      "edit": "Edit",
+      "viewReads": "View Reads",
+      "deleteTitle": "Delete Message",
+      "deleteMessage": "Choose delete option:",
+      "deleteForMe": "Delete for me",
+      "deleteForEveryone": "Delete for everyone",
+      "deleteTitle": "Delete Conversation",
+      "deleteMessage": "Are you sure you want to delete this conversation? Messages will only be deleted on your side.",
+      "leaveGroup": "Leave Group",
+      "leaveGroupConfirm": "Are you sure you want to leave this group?",
+      "leaveGroupSuccess": "Left the group successfully",
+      "removeMember": "Remove Member",
+      "removeMemberConfirm": "Are you sure you want to remove {{name}} from the group?",
+      "remove": "Remove",
+      "removeSuccess": "Member removed successfully",
+      "transferAdmin": "Transfer Admin Rights",
+      "transferAdminConfirm": "Are you sure you want to transfer admin rights to {{name}}?",
+      "transfer": "Transfer",
+      "transferSuccess": "Admin rights transferred successfully",
+      "deleteConversation": "Delete Conversation",
+      "removeFromGroup": "Remove from Group"
+    },
+    "edited": "edited",
+    "readBy": "Read by {{count}}",
+    "call": {
+      "video": {
+        "title": "Start Video Call",
+        "groupMessage": "Do you want to start a video call in {{name}}?",
+        "privateMessage": "Do you want to start a video call with {{name}}?",
+        "failed": "Failed to start video call"
+      },
+      "audio": {
+        "title": "Start Audio Call",
+        "groupMessage": "Do you want to start an audio call in {{name}}?",
+        "privateMessage": "Do you want to start an audio call with {{name}}?",
+        "failed": "Failed to start audio call"
+      },
+      "start": "Start",
+      "cancel": "Cancel"
+    },
+    "attachment": {
+      "camera": "Camera",
+      "takePhoto": "Take Photo",
+      "recordVideo": "Record Video",
+      "permissionRequired": "Permission required",
+      "cameraPermission": "Camera permission is required!",
+      "micPermission": "Microphone permission is required!",
+      "mediaPermission": "Permission to access media library is required!",
+      "pickFailed": "Failed to pick file",
+      "recordingError": "Recording Error",
+      "recordingFailed": "Failed to start recording. Please check microphone permissions in device settings."
+    },
+    "info": {
+      "title": "Info",
+      "unnamed": "Unnamed",
+      "viewProfile": "View Profile",
+      "search": "Search",
+      "muteNotifications": "Mute Notifications",
+      "addMembers": "Add Members",
+      "tabInfo": "Info",
+      "tabMembers": "Members",
+      "tabMedia": "Media",
+      "tabSearch": "Search",
+      "changeGroupAvatar": "Change Group Avatar",
+      "changeGroupName": "Change Group Name",
+      "notifications": "Notifications",
+      "pin": "Pin",
+      "shareContact": "Share Contact Info",
+      "loadingMembers": "Loading members...",
+      "admin": "Admin",
+      "you": "You",
+      "messages": "messages",
+      "media": {
+        "image": "Photos",
+        "video": "Videos",
+        "file": "Files",
+        "audio": "Audio"
+      },
+      "noMedia": "No {{type}} found",
+      "searchPlaceholder": "Enter a keyword to search messages",
+      "noResults": "No results found",
+      "searchMessages": "Search messages..."
+    },
+    "addMembers": {
+      "title": "Add Members",
+      "add": "Add",
+      "selected": "Selected {{count}} people",
+      "searchPlaceholder": "Search friends",
+      "loading": "Loading list...",
+      "alreadyInGroup": "Already in group",
+      "noFriendsFound": "No friends found",
+      "allInGroup": "All friends are already in the group",
+      "success": "Members added successfully",
+      "error": "Error adding members"
+    }
+  },
+  "homeScreen": {
+    "title": "Home Screen",
+    "welcome": "Welcome to your home page"
+  },
+  "privacyScreen": {
+    "title": "Privacy & Permissions",
+    "info": "Manage device feature access permissions. Tap each item to grant or change permissions.",
+    "permissionsTitle": "PERMISSIONS",
+    "permissions": {
+      "camera": {
+        "title": "Camera",
+        "subtitle": "Allow taking photos and videos"
+      },
+      "microphone": {
+        "title": "Microphone",
+        "subtitle": "Allow audio recording and calls"
+      },
+      "photos": {
+        "title": "Photo Library",
+        "subtitle": "Access photos and videos on device"
+      },
+      "location": {
+        "title": "Location",
+        "subtitle": "Access your location"
+      },
+      "notifications": {
+        "title": "Notifications",
+        "subtitle": "Receive notifications from app"
+      }
+    },
+    "status": {
+      "granted": "Granted",
+      "denied": "Denied",
+      "notRequested": "Not Requested"
+    },
+    "alert": {
+      "title": "Permission Required",
+      "message": "Please go to Settings to enable {permission} permission",
+      "openSettings": "Open Settings"
+    },
+    "granted": {
+      "title": "Permission Granted",
+      "message": "{permission} permission has been granted. To change it, please go to System Settings.",
+      "changeInSettings": "Open Settings"
+    },
+    "openSystemSettings": "Open System Settings"
+  },
+  "onboarding": {
+    "language": {
+      "title": "Choose Your Language",
+      "description": "Select your preferred language to continue",
+      "continue": "Continue"
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "getStarted": "Get Started",
+    "slide1": {
+      "title": "End-to-End Encryption",
+      "description": "Your conversations are protected with military-grade encryption. Only you and your contacts can read your messages."
+    },
+    "slide2": {
+      "title": "AI Emotion Analysis",
+      "description": "Our intelligent AI analyzes your emotional state through messages and calls, providing personalized support and insights."
+    },
+    "slide3": {
+      "title": "Emotional Balance Support",
+      "description": "Get real-time counseling and recommendations to maintain your emotional wellbeing throughout your conversations."
+    }
+  },
+  "securityScreen": {
+    "title": "Security",
+    "info": "Manage your account security, password, and active sessions across all devices.",
+    "password": {
+      "title": "PASSWORD",
+      "change": "Change Password",
+      "subtitle": "Update your account password"
+    },
+    "changePassword": {
+      "title": "Change Password",
+      "info": "Choose a strong password to keep your account secure. Make sure it's different from your current password.",
+      "labels": {
+        "current": "Current Password",
+        "new": "New Password",
+        "confirm": "Confirm New Password"
+      },
+      "placeholders": {
+        "current": "Enter current password",
+        "new": "Enter new password",
+        "confirm": "Re-enter new password"
+      },
+      "requirements": {
+        "title": "Password Requirements:",
+        "minLength": "At least 8 characters",
+        "uppercase": "At least one uppercase letter",
+        "lowercase": "At least one lowercase letter",
+        "number": "At least one number"
+      },
+      "validation": {
+        "currentRequired": "Please enter your current password",
+        "newRequired": "Please enter a new password",
+        "minLength": "Password must be at least 8 characters",
+        "uppercase": "Password must contain at least one uppercase letter",
+        "lowercase": "Password must contain at least one lowercase letter",
+        "number": "Password must contain at least one number",
+        "mismatch": "Passwords do not match",
+        "same": "New password must be different from current password"
+      },
+      "success": "Password changed successfully",
+      "error": {
+        "generic": "Failed to change password. Please try again.",
+        "incorrectCurrent": "Current password is incorrect"
+      },
+      "button": "Change Password"
+    },
+    "sessions": {
+      "title": "ACTIVE SESSIONS",
+      "current": "Current",
+      "lastActive": "Last active",
+      "justNow": "Just now",
+      "minutesAgo": "{count} minutes ago",
+      "hoursAgo": "{count} hours ago",
+      "daysAgo": "{count} days ago",
+      "signOut": "Sign Out",
+      "signOutCurrent": {
+        "title": "Sign Out?",
+        "message": "Are you sure you want to sign out from this device? You'll need to sign in again."
+      },
+      "signOutOther": {
+        "title": "End Session?",
+        "message": "This will sign out this device from your account."
+      },
+      "signOutAll": {
+        "title": "Sign Out All Other Devices?",
+        "message": "This will end {count} active sessions on other devices.",
+        "confirm": "Sign Out All",
+        "button": "Sign Out All"
+      },
+      "noOtherSessions": {
+        "title": "No Other Sessions",
+        "message": "You're only signed in on this device."
+      },
+      "signOutSuccess": "Session ended successfully",
+      "signOutError": "Failed to end session. Please try again.",
+      "signOutAllSuccess": "All other sessions ended successfully",
+      "signOutAllError": "Failed to end sessions. Please try again.",
+      "noSessions": "No active sessions found",
+      "loadError": {
+        "title": "Error",
+        "message": "Failed to load sessions. Please try again."
+      }
+    }
+  },
+  "requests": {
+    "title": "Friend Requests",
+    "searchPlaceholder": "Search requests...",
+    "count": "{{count}} pending requests",
+    "resultsCount": "{{count}} results found",
+    "empty": "No friend requests",
+    "emptyDescription": "You don't have any pending friend requests",
+    "noResults": "No requests found",
+    "noResultsDescription": "Try searching with a different name"
+  },
+  "encryption": {
+    "initializing": "Initializing encryption...",
+    "backup": {
+      "title": "Secure Your Messages",
+      "description": "Create a backup password to recover your encrypted messages on other devices or if you reinstall the app.",
+      "passwordLabel": "Backup Password",
+      "passwordPlaceholder": "Create a strong password (min 8 characters)",
+      "confirmPasswordLabel": "Confirm Password",
+      "confirmPasswordPlaceholder": "Re-enter your password",
+      "requirements": "Password Requirements:",
+      "minLength": "At least 8 characters",
+      "hint": "Use a password you won't forget. You'll need it to restore messages.",
+      "creating": "Creating Backup...",
+      "createButton": "Create Secure Backup",
+      "skipButton": "Skip for Now (Not Recommended)",
+      "skipWarning": "Without a backup, you'll lose all messages if you reinstall the app or switch devices.",
+      "passwordTooShort": "Password must be at least 8 characters long",
+      "passwordMismatch": "Passwords do not match",
+      "recommendTitle": "Backup Your Keys",
+      "recommendMessage": "We recommend creating a backup password to protect your encryption keys. This will allow you to recover your messages if you lose your device.",
+      "createNow": "Create Now",
+      "later": "Later",
+      "createForExistingTitle": "Create Backup",
+      "createForExistingDescription": "Create a backup password to protect your existing encryption keys",
+      "alreadyExists": "You already have a backup",
+      "created": "Backup created successfully"
+    },
+    "restore": {
+      "title": "Restore Your Messages",
+      "description": "Enter your backup password to restore your encrypted messages and continue your conversations.",
+      "passwordLabel": "Backup Password",
+      "passwordPlaceholder": "Enter your backup password",
+      "info": "This is the password you created when you first set up encryption. If you've forgotten it, you'll need to start fresh.",
+      "restoring": "Restoring Messages...",
+      "restoreButton": "Restore My Messages",
+      "startFreshButton": "Start Fresh (Lose Old Messages)",
+      "startFreshTitle": "Start Fresh?",
+      "startFreshWarning": "This will create new encryption keys. You won't be able to read your old messages. Are you sure?",
+      "startFreshConfirm": "Start Fresh",
+      "passwordRequired": "Please enter your backup password",
+      "invalidPassword": "Invalid password or corrupted backup data. Please try again.",
+      "success": "Your messages have been restored successfully!"
+    }
+  }
+}

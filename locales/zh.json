@@ -1,0 +1,988 @@
+{
+  "home": "首页",
+  "settings": "设置",
+  "welcome": "欢迎",
+  "greeting": "你好, {{name}}!",
+  "language": "语言",
+  "selectLanguage": "选择语言",
+  "save": "保存",
+  "cancel": "取消",
+  "changeLanguage": "更改语言",
+  "currentLanguage": "当前语言",
+  "next": "下一步",
+  "skip": "跳过",
+  "getStarted": "开始使用",
+  "auth": {
+    "signIn": {
+      "title": "登录",
+      "emailPlaceholder": "手机号或电子邮件",
+      "passwordPlaceholder": "密码",
+      "forgotPassword": "忘记密码？",
+      "resetNow": "立即重置",
+      "signInButton": "登录",
+      "signingIn": "登录中...",
+      "noAccount": "还没有账户？",
+      "signUpLink": "注册",
+      "errors": {
+        "emailRequired": "请输入您的电子邮件或手机号",
+        "passwordRequired": "请输入您的密码",
+        "signInFailed": "登录失败",
+        "incomplete": "请完成所需的其他步骤。",
+        "generic": "登录失败。请重试。"
+      }
+    },
+    "signUp": {
+      "title": "注册",
+      "emailPlaceholder": "输入您的电子邮件",
+      "passwordPlaceholder": "输入密码",
+      "passwordRequirement": "密码必须至少8个字符",
+      "continueButton": "继续",
+      "creatingAccount": "创建账户中...",
+      "haveAccount": "已有账户？",
+      "signInLink": "登录",
+      "verifyEmail": {
+        "title": "验证电子邮件",
+        "description": "我们已将验证码发送到",
+        "codePlaceholder": "输入验证码",
+        "verifyButton": "验证电子邮件",
+        "verifying": "验证中...",
+        "didntReceive": "没有收到验证码？",
+        "goBack": "返回"
+      },
+      "errors": {
+        "emailRequired": "请输入您的电子邮件地址",
+        "passwordRequired": "请输入您的密码",
+        "passwordLength": "密码必须至少8个字符",
+        "signUpFailed": "注册失败",
+        "codeRequired": "请输入验证码",
+        "verifyFailed": "验证失败",
+        "incomplete": "请完成所需的其他步骤。",
+        "generic": "注册失败。请重试。"
+      }
+    },
+    "forgotPassword": {
+      "title": "忘记密码？",
+      "resetTitle": "重置密码",
+      "description": "输入您的电子邮件地址，我们将向您发送重置密码的验证码。",
+      "resetDescription": "输入发送到您电子邮件的验证码和新密码。",
+      "emailPlaceholder": "电子邮件地址",
+      "codePlaceholder": "验证码",
+      "newPasswordPlaceholder": "新密码",
+      "confirmPasswordPlaceholder": "确认新密码",
+      "sendCodeButton": "发送重置码",
+      "sending": "发送中...",
+      "resetButton": "重置密码",
+      "resetting": "重置中...",
+      "didntReceive": "没有收到验证码？",
+      "resend": "重新发送",
+      "codeSentTo": "验证码已发送至：",
+      "requirements": {
+        "title": "密码要求：",
+        "minLength": "• 至少8个字符",
+        "recommended": "• 建议混合使用字母、数字和符号"
+      },
+      "alerts": {
+        "codeSent": {
+          "title": "验证码已发送",
+          "message": "我们已将验证码发送到您的电子邮件。请检查您的收件箱。"
+        },
+        "success": {
+          "title": "成功",
+          "message": "您的密码已成功重置。请使用新密码登录。"
+        },
+        "resendSuccess": "验证码已重新发送到您的电子邮件"
+      },
+      "errors": {
+        "emailRequired": "请输入您的电子邮件地址",
+        "emailInvalid": "请输入有效的电子邮件地址",
+        "codeRequired": "请输入验证码",
+        "passwordRequired": "请输入新密码",
+        "passwordLength": "密码必须至少8个字符",
+        "passwordMismatch": "密码不匹配",
+        "sendFailed": "发送重置码失败。请重试。",
+        "resetFailed": "重置密码失败。请重试。",
+        "incomplete": "密码重置未完成。请重试。",
+        "resendFailed": "重新发送验证码失败。请重试。"
+      }
+    }
+  },
+  "settingsScreen": {
+    "account": {
+      "title": "账户",
+      "security": {
+        "title": "安全",
+        "subtitle": "密码，双因素认证"
+      },
+      "privacy": {
+        "title": "隐私",
+        "subtitle": "屏蔽账户，可见性"
+      }
+    },
+    "preferences": {
+      "title": "偏好设置",
+      "appearance": {
+        "title": "外观",
+        "subtitle": "主题，深色模式"
+      },
+      "language": {
+        "title": "语言",
+        "subtitle": "应用语言"
+      }
+    },
+    "data": {
+      "title": "数据",
+      "storage": {
+        "title": "存储",
+        "subtitle": "管理应用数据"
+      },
+      "devices": {
+        "title": "设备",
+        "subtitle": "活动会话"
+      }
+    },
+    "profile": {
+      "loading": "加载中...",
+      "viewAndEdit": "查看和编辑个人资料"
+    },
+    "signOut": {
+      "title": "退出登录",
+      "message": "您确定要退出登录吗？",
+      "confirm": "退出登录"
+    }
+  },
+  "appearance": {
+    "light": {
+      "title": "浅色",
+      "description": "使用浅色主题"
+    },
+    "dark": {
+      "title": "深色",
+      "description": "使用深色主题"
+    },
+    "system": {
+      "title": "系统",
+      "description": "跟随设备设置"
+    },
+    "currentTheme": {
+      "title": "当前主题",
+      "followingDevice": "跟随您的设备设置",
+      "usingMode": "使用{{mode}}模式"
+    },
+    "chooseTheme": "选择主题",
+    "info": "系统模式将根据您的设备设置自动在浅色和深色之间切换。"
+  },
+  "languageScreen": {
+    "currentLanguage": {
+      "title": "当前语言",
+      "description": "应用界面将以此语言显示"
+    },
+    "availableLanguages": "可用语言",
+    "info": "更改语言将立即更新应用中的所有文本。您的选择将被保存。"
+  },
+  "sidebar": {
+    "menu": "菜单",
+    "user": "用户",
+    "conversations": "对话",
+    "contacts": "联系人",
+    "discover": "发现",
+    "blockedUsers": "已屏蔽用户",
+    "helpSupport": "帮助与支持",
+    "about": "关于"
+  },
+  "loading": "加载中...",
+  "success": "成功",
+  "error": "错误",
+  "ok": "确定",
+  "camera": "相机",
+  "gallery": "相册",
+  "saving": "保存中...",
+  "profile": {
+    "screen": {
+      "title": "个人资料"
+    },
+    "sections": {
+      "general": "通用",
+      "contact": "联系方式",
+      "personal": "个人",
+      "preferences": "偏好",
+      "account": "账户信息"
+    },
+    "labels": {
+      "fullName": "全名",
+      "username": "用户名",
+      "bio": "简介",
+      "bioEmpty": "暂无简介",
+      "gender": "性别",
+      "birthday": "生日",
+      "phone": "电话",
+      "email": "电子邮件",
+      "location": "位置",
+      "website": "网站",
+      "status": "状态",
+      "active": "活跃",
+      "theme": "主题",
+      "joined": "加入时间",
+      "verified": "已验证",
+      "verifiedStatus": {
+        "yes": "已验证",
+        "no": "未验证"
+      },
+      "notSet": "未设置"
+    },
+    "edit": {
+      "imagePicker": {
+        "title": "个人照片",
+        "message": "选择选项"
+      },
+      "removePhoto": "移除照片",
+      "permission": {
+        "title": "需要权限",
+        "message": "请授予访问您的{{source}}的权限"
+      },
+      "imageUpdated": "个人照片更新成功",
+      "imageUpdateFailed": "更新个人照片失败",
+      "imagePickFailed": "选择图像失败",
+      "imageRemoved": "个人照片移除成功",
+      "imageRemoveFailed": "移除个人照片失败",
+      "title": "编辑个人资料",
+      "sections": {
+        "basic": "基本信息",
+        "contact": "联系信息",
+        "personal": "个人信息"
+      },
+      "placeholders": {
+        "fullName": "输入您的全名",
+        "username": "输入您的用户名",
+        "bio": "介绍一下自己...",
+        "phone": "输入您的电话号码",
+        "location": "输入您的位置",
+        "website": "输入您的网站URL",
+        "gender": "选择您的性别",
+        "birthday": "选择您的生日",
+        "status": "选择您的当前状态"
+      },
+      "validation": {
+        "title": "验证错误",
+        "message": "请在保存前修复错误"
+      },
+      "updateSuccess": "个人资料更新成功",
+      "updateFailed": "更新个人资料失败",
+      "unexpectedError": "发生意外错误",
+      "saveChanges": "保存更改",
+      "saving": "正在保存个人资料..."
+    }
+  },
+  "tabs": {
+    "home": "首页",
+    "conversations": "对话",
+    "contacts": "联系人",
+    "emotion": "情绪",
+    "ai": "AI",
+    "setting": "设置"
+  },
+  "friends": {
+    "title": "好友",
+    "searchPlaceholder": "搜索好友...",
+    "searching": "搜索中...",
+    "noUsersFound": "未找到用户",
+    "requests": {
+      "title": "好友请求",
+      "all": "所有请求",
+      "accepted": "已接受好友请求！",
+      "acceptFailed": "接受请求失败",
+      "declineTitle": "拒绝请求",
+      "declineMessage": "确定要拒绝这个好友请求吗？",
+      "decline": "拒绝",
+      "declineFailed": "拒绝请求失败"
+    },
+    "myFriends": "我的好友 ({{count}})",
+    "seeAll": "查看全部",
+    "addFriend": "添加好友",
+    "sent": "已发送",
+    "friends": "好友",
+    "unknownError": "未知错误",
+    "menu": {
+      "title": "选择操作",
+      "viewProfile": "查看资料",
+      "message": "发送消息",
+      "unfriend": "删除好友",
+      "block": "屏蔽用户"
+    },
+    "blocked": {
+      "title": "解除屏蔽",
+      "confirm": "确定要解除对 {{name}} 的屏蔽吗？",
+      "cancel": "取消",
+      "unblock": "解除屏蔽",
+      "on": "屏蔽于 {{date}}",
+      "reason": "原因：{{reason}}"
+    },
+    "request": {
+      "message": "想和你成为好友",
+      "accept": "接受",
+      "decline": "拒绝"
+    },
+    "labels": {
+      "mutual": "{{count}} 个共同好友"
+    },
+    "unfriend": {
+      "title": "删除好友",
+      "message": "确定要删除 {{name}} 好友吗？",
+      "confirm": "删除好友",
+      "success": "已删除 {{name}} 好友",
+      "failed": "删除好友失败"
+    },
+    "block": {
+      "title": "屏蔽用户",
+      "message": "屏蔽 {{name}}？他们将无法联系你或查看你的资料。",
+      "confirm": "屏蔽",
+      "success": "已屏蔽 {{name}}",
+      "failed": "屏蔽用户失败"
+    },
+    "notifications": {
+      "requestReceived": "{{name}} 向你发送了好友请求",
+      "requestAccepted": "{{name}} 接受了你的好友请求",
+      "requestDeclined": "{{name}} 拒绝了你的好友请求",
+      "requestCancelled": "{{name}} 取消了好友请求",
+      "friendRemoved": "{{name}} 已将你从好友中移除",
+      "friendOnline": "{{name}} 现在在线"
+    }
+  },
+  "publicProfile": {
+    "title": "个人资料",
+    "loading": "加载资料中...",
+    "notFound": "未找到资料",
+    "notFoundDescription": "无法加载用户资料",
+    "tryAgain": "重试",
+    "information": "信息",
+    "location": "位置",
+    "website": "网站",
+    "status": "状态",
+    "friends": "好友",
+    "mutual": "共同好友",
+    "online": "在线",
+    "offline": "离线",
+    "recentlyOnline": "刚刚在线",
+    "hoursAgo": "{{hours}}小时前",
+    "daysAgo": "{{days}}天前",
+    "blocked": {
+      "title": "该用户已被屏蔽",
+      "message": "你已屏蔽该用户，无法查看其资料"
+    },
+    "private": {
+      "title": "该资料为私密",
+      "message": "发送好友请求以查看更多详情"
+    },
+    "actions": {
+      "addFriend": "添加好友",
+      "message": "发消息",
+      "requestSent": "已发送请求",
+      "cancelRequest": "取消请求",
+      "unfriend": "删除好友",
+      "shareProfile": "分享资料",
+      "reportUser": "举报用户",
+      "blockUser": "屏蔽用户",
+      "acceptRequest": "接受请求",
+      "declineRequest": "拒绝请求"
+    },
+    "cancelRequest": {
+      "title": "取消请求",
+      "message": "确定要取消这个好友请求吗？",
+      "confirm": "取消请求",
+      "success": "已取消好友请求",
+      "failed": "取消请求失败",
+      "notFound": "未找到好友请求"
+    },
+    "unfriend": {
+      "title": "删除好友",
+      "message": "确定要删除 {{name}} 好友吗？",
+      "confirm": "删除好友",
+      "success": "已删除好友",
+      "failed": "删除好友失败"
+    },
+    "declineRequest": {
+      "title": "拒绝请求",
+      "message": "确定要拒绝这个好友请求吗？",
+      "confirm": "拒绝",
+      "success": "已拒绝好友请求",
+      "failed": "拒绝请求失败"
+    },
+    "block": {
+      "confirmTitle": "屏蔽用户",
+      "confirmMessage": "确定要屏蔽 {{name}} 吗？他们将无法联系你或查看你的资料。",
+      "reasonTitle": "屏蔽原因（可选）",
+      "reasonDescription": "为什么要屏蔽该用户？这将帮助我们改进平台。",
+      "reasonPlaceholder": "输入原因（可选）...",
+      "blocking": "屏蔽中...",
+      "skip": "跳过",
+      "block": "屏蔽",
+      "success": "已屏蔽用户",
+      "failed": "屏蔽用户失败",
+      "unexpectedError": "屏蔽用户时发生错误"
+    },
+    "friendRequest": {
+      "success": "已发送好友请求",
+      "failed": "发送好友请求失败",
+      "accepted": "已接受好友请求",
+      "acceptFailed": "接受请求失败",
+      "declineInfo": "拒绝功能尚未实现",
+      "notFound": "未找到好友请求"
+    },
+    "share": {
+      "info": "分享功能尚未实现"
+    },
+    "report": {
+      "success": "已举报用户"
+    }
+  },
+
+  "emotions": {
+    "joy": "快乐",
+    "sadness": "悲伤",
+    "anger": "愤怒",
+    "fear": "恐惧",
+    "surprise": "惊讶",
+    "neutral": "中性"
+  },
+
+  "emotion": {
+    "title": "我的情绪",
+    "tabs": {
+      "history": "历史",
+      "stats": "统计"
+    },
+    "empty": "没有情绪数据",
+    "tryAgain": "重试",
+
+    "emotions": {
+      "joy": "喜悦",
+      "sadness": "悲伤",
+      "anger": "愤怒",
+      "fear": "恐惧",
+      "surprise": "惊讶",
+      "love": "爱",
+      "neutral": "中性"
+    },
+
+    "stats": {
+      "overview": "概览",
+      "analyses": "分析",
+      "dominantEmotion": "主导情绪",
+      "distribution": "情绪分布",
+      "averageScores": "平均分数",
+      "byContext": "按上下文",
+      "confidence": "{{percent}}% 置信度"
+    }
+  },
+
+   "common": {
+    "cancel": "取消",
+    "delete": "删除",
+    "confirm": "确认",
+    "ok": "确定",
+    "save": "保存",
+    "loading": "加载中...",
+    "success": "成功",
+    "error": "错误",
+    "retry": "重试"
+  },
+
+  "aiChat": {
+    "title": "AI助手",
+    "placeholder": "分享您的想法...",
+    "typing": "AI正在输入",
+    
+    "sidebar": {
+      "newChat": "新对话",
+      "noChats": "暂无对话",
+      "deleteConfirm": {
+        "title": "删除对话",
+        "message": "删除\"{{title}}\"？对话将被永久删除。"
+      }
+    },
+    
+    "newChat": {
+      "confirm": {
+        "title": "新对话",
+        "message": "开始新对话？当前对话将被保存。"
+      }
+    },
+    
+    "suggestions": {
+      "title": "AI为您推荐",
+      "showSuggestions": "显示建议",
+      "startWith": "从话题开始：",
+      "count": "{{count}}条建议"
+    },
+    
+    "empty": {
+      "title": "AI健康助手",
+      "subtitle": "我在这里支持您的心理健康。\n分享您的感受！",
+      "emotionStatus": "您正在感到{{emotion}}",
+      "confidence": "{{percent}}%置信度"
+    },
+    
+    "emotions": {
+      "joy": "快乐",
+      "sadness": "悲伤",
+      "anger": "愤怒",
+      "fear": "恐惧",
+      "surprise": "惊讶",
+      "neutral": "平静"
+    },
+    
+    "welcome": {
+      "intro": "根据您的情绪，我有一些建议：",
+      "question": "您想讨论什么？"
+    },
+    
+    "refresh": "刷新",
+    "send": "发送"
+  },
+  "conversations": {
+    "title": "对话",
+    "searchPlaceholder": "搜索对话...",
+    "empty": {
+      "title": "还没有对话",
+      "subtitle": "与朋友开始对话",
+      "startChatting": "开始聊天"
+    },
+    "error": {
+      "tryAgain": "重试"
+    },
+    "newConversation": "新对话",
+    "ai": {
+      "badge": "{{count}}条建议",
+      "recommendations": "AI推荐"
+    },
+    "floating": {
+      "sadness": "您看起来{{intensity}}难过，我有一些建议给您。",
+      "anger": "您看起来{{intensity}}烦躁，让我帮助您。",
+      "fear": "您{{intensity}}担心吗？我可以支持您。",
+      "joy": "很高兴看到您{{intensity}}快乐！分享更多吧！",
+      "surprise": "有什么惊喜吗？我有一些建议给您。",
+      "neutral": "我有{{count}}条AI建议给您。",
+      "intensity": {
+        "very": "非常",
+        "somewhat": "有点",
+        "": ""
+      },
+      "suggestions": "{{count}}条建议",
+      "tapToView": "点击查看详情"
+    },
+    "messageTypes": {
+      "noMessages": "还没有消息",
+      "image": "📷 图片",
+      "file": "📎 文件",
+      "audio": "🎵 音频",
+      "video": "🎥 视频",
+      "voiceNote": "🎤 语音消息",
+      "location": "📍 位置",
+      "message": "消息"
+    },
+    "messagePrefix": {
+      "you": "你:",
+      "sender": "{{name}}:"
+    },
+    "createModal": {
+      "title": "新对话",
+      "cancel": "取消",
+      "create": "创建",
+      "creating": "创建中...",
+      "selected": "已选择",
+      "groupName": "群组名称（必填）",
+      "groupDescription": "群组描述（可选）",
+      "searchPlaceholder": "搜索朋友...",
+      "loading": "加载朋友中...",
+      "noFriends": "还没有朋友",
+      "noFriendsSubtitle": "添加朋友以开始聊天",
+      "noResults": "未找到朋友",
+      "noResultsSubtitle": "尝试不同的搜索",
+      "retry": "重试",
+      "errors": {
+        "selectFriend": "请至少选择一位朋友",
+        "groupName": "请输入群组名称",
+        "createFailed": "创建对话失败。请重试。"
+      }
+    }
+  },
+  "message": {
+    "title": "消息",
+    "loading": "正在加载消息...",
+    "sending": "发送中...",
+    "failed": "发送失败",
+    "typing": "正在输入...",
+    "online": "在线",
+    "offline": "离线",
+    "justNow": "刚刚",
+    "minutesAgo": "{{minutes}}分钟前",
+    "hoursAgo": "{{hours}}小时前",
+    "daysAgo": "{{days}}天前",
+    "members": "{{count}}名成员",
+    "ai": {
+      "toxicWarning": "检测到不当内容",
+      "toxicMessage": "此消息可能包含冒犯性内容。请保持礼貌。",
+      "cannotSend": "无法发送",
+      "extremelyToxic": "此消息极其不当，无法发送。",
+      "toxicConfirm": "此消息可能具有冒犯性。您确定要发送吗？",
+      "sendAnyway": "仍然发送",
+      "imageToxicTitle": "不当图片",
+      "imageToxicMessage": "图片包含不当内容: {{categories}}",
+      "checkingImage": "正在检查图片内容...",
+      "cannotEncrypt": "无法加密"
+    },
+    "encryption": {
+      "initializing": "🔐 正在初始化加密...",
+      "backup": {
+        "title": "保护您的消息",
+        "description": "创建备份密码以在其他设备或重新安装应用时恢复您的加密消息。",
+        "passwordLabel": "备份密码",
+        "passwordPlaceholder": "创建强密码（至少8个字符）",
+        "confirmPasswordLabel": "确认密码",
+        "confirmPasswordPlaceholder": "重新输入您的密码",
+        "requirements": "密码要求：",
+        "minLength": "至少8个字符",
+        "hint": "使用您不会忘记的密码。您需要它来恢复消息。",
+        "creating": "正在创建备份...",
+        "createButton": "创建安全备份",
+        "skipButton": "暂时跳过（不推荐）",
+        "skipWarning": "没有备份，如果您重新安装应用或更换设备，您将丢失所有消息。",
+        "passwordTooShort": "密码必须至少8个字符",
+        "passwordMismatch": "密码不匹配"
+      },
+      "restore": {
+        "title": "恢复您的消息",
+        "description": "输入您的备份密码以恢复您的加密消息并继续您的对话。",
+        "passwordLabel": "备份密码",
+        "passwordPlaceholder": "输入您的备份密码",
+        "info": "这是您首次设置加密时创建的密码。如果您忘记了，您需要重新开始。",
+        "restoring": "正在恢复消息...",
+        "restoreButton": "恢复我的消息",
+        "startFreshButton": "重新开始（丢失旧消息）",
+        "startFreshTitle": "重新开始？",
+        "startFreshWarning": "这将创建新的加密密钥。您将无法阅读旧消息。您确定吗？",
+        "startFreshConfirm": "重新开始",
+        "passwordRequired": "请输入您的备份密码",
+        "invalidPassword": "密码无效或备份数据损坏。请重试。",
+        "success": "您的消息已成功恢复！"
+      }
+    },
+    "empty": {
+      "title": "还没有消息",
+      "subtitle": "发送您的第一条加密消息以开始对话"
+    },
+    "input": {
+      "placeholder": "输入消息...",
+      "recording": "正在录音...",
+      "uploading": "正在上传文件..."
+    },
+    "reply": {
+      "replyingTo": "回复 {{name}}",
+      "cancel": "取消"
+    },
+    "actions": {
+      "reply": "回复",
+      "react": "反应",
+      "delete": "删除",
+      "edit": "编辑",
+      "viewReads": "查看已读",
+      "deleteTitle": "删除消息",
+      "deleteMessage": "选择删除选项：",
+      "deleteForMe": "为我删除",
+      "deleteForEveryone": "为所有人删除",
+      "deleteTitle": "删除对话",
+      "deleteMessage": "您确定要删除此对话吗？消息仅会在您的侧被删除。",
+      "leaveGroup": "离开群组",
+      "leaveGroupConfirm": "您确定要离开此群组吗？",
+      "leaveGroupSuccess": "已成功离开群组",
+      "removeMember": "移除成员",
+      "removeMemberConfirm": "您确定要将 {{name}} 从群组中移除吗？",
+      "remove": "移除",
+      "removeSuccess": "成员已成功移除",
+      "transferAdmin": "转移管理员权限",
+      "transferAdminConfirm": "您确定要将管理员权限转移给 {{name}} 吗？",
+      "transfer": "转移",
+      "transferSuccess": "管理员权限已成功转移",
+      "deleteConversation": "删除对话",
+      "removeFromGroup": "从群组中移除"
+    },
+    "edited": "已编辑",
+    "readBy": "已读 {{count}}",
+    "call": {
+      "video": {
+        "title": "开始视频通话",
+        "groupMessage": "您想在{{name}}中开始视频通话吗？",
+        "privateMessage": "您想与{{name}}开始视频通话吗？",
+        "failed": "无法开始视频通话"
+      },
+      "audio": {
+        "title": "开始语音通话",
+        "groupMessage": "您想在{{name}}中开始语音通话吗？",
+        "privateMessage": "您想与{{name}}开始语音通话吗？",
+        "failed": "无法开始语音通话"
+      },
+      "start": "开始",
+      "cancel": "取消"
+    },
+    "attachment": {
+      "camera": "相机",
+      "takePhoto": "拍照",
+      "recordVideo": "录制视频",
+      "permissionRequired": "需要权限",
+      "cameraPermission": "需要相机权限！",
+      "micPermission": "需要麦克风权限！",
+      "mediaPermission": "需要访问媒体库的权限！",
+      "pickFailed": "无法选择文件",
+      "recordingError": "录音错误",
+      "recordingFailed": "无法开始录音。请在设备设置中检查麦克风权限。"
+    },
+    "info": {
+      "title": "信息",
+      "unnamed": "未命名",
+      "viewProfile": "查看个人资料",
+      "search": "搜索",
+      "muteNotifications": "静音通知",
+      "addMembers": "添加成员",
+      "tabInfo": "信息",
+      "tabMembers": "成员",
+      "tabMedia": "媒体",
+      "tabSearch": "搜索",
+      "changeGroupAvatar": "更改群组头像",
+      "changeGroupName": "更改群组名称",
+      "notifications": "通知",
+      "pin": "固定",
+      "shareContact": "分享联系信息",
+      "loadingMembers": "正在加载成员列表...",
+      "admin": "管理员",
+      "you": "您",
+      "messages": "消息",
+      "media": {
+        "image": "照片",
+        "video": "视频",
+        "file": "文件",
+        "audio": "音频"
+      },
+      "noMedia": "没有找到 {{type}}",
+      "searchPlaceholder": "输入关键词搜索消息",
+      "noResults": "未找到结果",
+      "searchMessages": "搜索消息..."
+    },
+    "addMembers": {
+      "title": "添加成员",
+      "add": "添加",
+      "selected": "已选择 {{count}} 人",
+      "searchPlaceholder": "搜索朋友",
+      "loading": "正在加载列表...",
+      "alreadyInGroup": "已在群组中",
+      "noFriendsFound": "未找到朋友",
+      "allInGroup": "所有朋友已在群组中",
+      "success": "成员已添加到群组",
+      "error": "添加成员时发生错误"
+    }
+  },
+  "homeScreen": {
+    "title": "首页",
+    "welcome": "欢迎来到您的主页"
+  },
+  "privacyScreen": {
+    "title": "隐私与权限",
+    "info": "管理设备功能访问权限。点击每个项目以授予或更改权限。",
+    "permissionsTitle": "权限",
+    "permissions": {
+      "camera": {
+        "title": "相机",
+        "subtitle": "允许拍照和录像"
+      },
+      "microphone": {
+        "title": "麦克风",
+        "subtitle": "允许录音和通话"
+      },
+      "photos": {
+        "title": "照片库",
+        "subtitle": "访问设备上的照片和视频"
+      },
+      "location": {
+        "title": "位置",
+        "subtitle": "访问您的位置"
+      },
+      "notifications": {
+        "title": "通知",
+        "subtitle": "接收应用通知"
+      }
+    },
+    "status": {
+      "granted": "已授权",
+      "denied": "已拒绝",
+      "notRequested": "未请求"
+    },
+    "alert": {
+      "title": "需要权限",
+      "message": "请前往设置以启用{permission}权限",
+      "openSettings": "打开设置"
+    },
+    "granted": {
+      "title": "权限已授予",
+      "message": "{permission}权限已被授予。要更改它，请前往系统设置。",
+      "changeInSettings": "打开设置"
+    },
+    "openSystemSettings": "打开系统设置"
+  },
+  "onboarding": {
+    "language": {
+      "title": "选择语言",
+      "description": "选择您的首选语言以继续",
+      "continue": "继续"
+    },
+    "skip": "跳过",
+    "next": "下一步",
+    "getStarted": "开始使用",
+    "slide1": {
+      "title": "端到端加密",
+      "description": "您的对话受到军事级加密保护。只有您和您的联系人可以阅读您的消息。"
+    },
+    "slide2": {
+      "title": "AI情绪分析",
+      "description": "我们的智能AI通过消息和通话分析您的情绪状态，提供个性化支持和见解。"
+    },
+    "slide3": {
+      "title": "情绪平衡支持",
+      "description": "获得实时咨询和建议，在整个对话过程中保持情绪健康。"
+    }
+  },
+  "securityScreen": {
+    "title": "安全",
+    "info": "管理您的账户安全、密码和所有设备上的活跃会话。",
+    "password": {
+      "title": "密码",
+      "change": "更改密码",
+      "subtitle": "更新您的账户密码"
+    },
+    "changePassword": {
+      "title": "更改密码",
+      "info": "选择一个强密码来保护您的账户安全。确保它与当前密码不同。",
+      "labels": {
+        "current": "当前密码",
+        "new": "新密码",
+        "confirm": "确认新密码"
+      },
+      "placeholders": {
+        "current": "输入当前密码",
+        "new": "输入新密码",
+        "confirm": "重新输入新密码"
+      },
+      "requirements": {
+        "title": "密码要求：",
+        "minLength": "至少8个字符",
+        "uppercase": "至少一个大写字母",
+        "lowercase": "至少一个小写字母",
+        "number": "至少一个数字"
+      },
+      "validation": {
+        "currentRequired": "请输入当前密码",
+        "newRequired": "请输入新密码",
+        "minLength": "密码必须至少8个字符",
+        "uppercase": "密码必须包含至少一个大写字母",
+        "lowercase": "密码必须包含至少一个小写字母",
+        "number": "密码必须包含至少一个数字",
+        "mismatch": "密码不匹配",
+        "same": "新密码必须与当前密码不同"
+      },
+      "success": "密码更改成功",
+      "error": {
+        "generic": "更改密码失败。请重试。",
+        "incorrectCurrent": "当前密码不正确"
+      },
+      "button": "更改密码"
+    },
+    "sessions": {
+      "title": "活跃会话",
+      "current": "当前",
+      "lastActive": "最后活跃",
+      "justNow": "刚刚",
+      "minutesAgo": "{count}分钟前",
+      "hoursAgo": "{count}小时前",
+      "daysAgo": "{count}天前",
+      "signOut": "登出",
+      "signOutCurrent": {
+        "title": "登出？",
+        "message": "您确定要从此设备登出吗？您需要重新登录。"
+      },
+      "signOutOther": {
+        "title": "结束会话？",
+        "message": "这将从您的账户登出此设备。"
+      },
+      "signOutAll": {
+        "title": "登出所有其他设备？",
+        "message": "这将结束其他设备上的{count}个活跃会话。",
+        "confirm": "全部登出",
+        "button": "全部登出"
+      },
+      "noOtherSessions": {
+        "title": "没有其他会话",
+        "message": "您只在此设备上登录。"
+      },
+      "signOutSuccess": "会话结束成功",
+      "signOutError": "结束会话失败。请重试。",
+      "signOutAllSuccess": "已成功结束所有其他会话",
+      "signOutAllError": "结束会话失败。请重试。",
+      "noSessions": "未找到活跃会话",
+      "loadError": {
+        "title": "错误",
+        "message": "加载会话失败。请重试。"
+      }
+    }
+  },
+  "requests": {
+    "title": "好友请求",
+    "searchPlaceholder": "搜索请求...",
+    "count": "{{count}} 个待处理请求",
+    "resultsCount": "找到 {{count}} 个结果",
+    "empty": "没有好友请求",
+    "emptyDescription": "您没有待处理的好友请求",
+    "noResults": "未找到请求",
+    "noResultsDescription": "尝试使用其他名称搜索"
+  },
+  "encryption": {
+    "initializing": "正在初始化加密...",
+    "backup": {
+      "title": "保护您的消息",
+      "description": "创建备份密码以在其他设备上恢复您的加密消息，或在重新安装应用时使用。",
+      "passwordLabel": "备份密码",
+      "passwordPlaceholder": "创建强密码（至少8个字符）",
+      "confirmPasswordLabel": "确认密码",
+      "confirmPasswordPlaceholder": "重新输入密码",
+      "requirements": "密码要求：",
+      "minLength": "至少8个字符",
+      "hint": "使用您不会忘记的密码。您将需要它来恢复消息。",
+      "creating": "正在创建备份...",
+      "createButton": "创建安全备份",
+      "skipButton": "暂时跳过（不推荐）",
+      "skipWarning": "没有备份，如果重新安装应用或更换设备，您将丢失所有消息。",
+      "passwordTooShort": "密码必须至少8个字符",
+      "passwordMismatch": "密码不匹配",
+      "recommendTitle": "备份您的密钥",
+      "recommendMessage": "我们建议创建备份密码来保护您的加密密钥。这将允许您在丢失设备时恢复消息。",
+      "createNow": "立即创建",
+      "later": "稍后",
+      "createForExistingTitle": "创建备份",
+      "createForExistingDescription": "创建备份密码以保护您现有的加密密钥",
+      "alreadyExists": "您已经有备份了",
+      "created": "备份创建成功"
+    },
+    "restore": {
+      "title": "恢复您的消息",
+      "description": "输入您的备份密码以恢复加密消息并继续对话。",
+      "passwordLabel": "备份密码",
+      "passwordPlaceholder": "输入您的备份密码",
+      "info": "这是您首次设置加密时创建的密码。如果您忘记了，您需要重新开始。",
+      "restoring": "正在恢复消息...",
+      "restoreButton": "恢复我的消息",
+      "startFreshButton": "重新开始（丢失旧消息）",
+      "startFreshTitle": "重新开始？",
+      "startFreshWarning": "这将创建新的加密密钥。您将无法阅读旧消息。您确定吗？",
+      "startFreshConfirm": "重新开始",
+      "passwordRequired": "请输入您的备份密码",
+      "invalidPassword": "密码无效或备份数据损坏。请重试。",
+      "success": "您的消息已成功恢复！"
+    }
+  }
+}
