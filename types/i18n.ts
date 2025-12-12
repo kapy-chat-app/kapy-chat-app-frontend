@@ -403,10 +403,41 @@ export interface TranslationKeys {
       confidence: string;
     };
   };
+  common: {
+    cancel: string;
+    delete: string;
+    confirm: string;
+    ok: string;
+    save: string;
+    loading: string;
+    success: string;
+    error: string;
+    retry: string;
+  };
+
   aiChat: {
     title: string;
     placeholder: string;
     typing: string;
+
+    // ✅ NEW: Sidebar translations
+    sidebar: {
+      newChat: string;
+      noChats: string;
+      deleteConfirm: {
+        title: string;
+        message: string;
+      };
+    };
+
+    // ✅ NEW: New Chat confirmation
+    newChat: {
+      confirm: {
+        title: string;
+        message: string;
+      };
+    };
+
     suggestions: {
       title: string;
       showSuggestions: string;
@@ -475,9 +506,9 @@ export interface TranslationKeys {
       location: string;
       message: string;
     };
-      messagePrefix: {
-      you: string;   
-      sender: string;   
+    messagePrefix: {
+      you: string;
+      sender: string;
     };
     createModal: {
       title: string;
@@ -887,15 +918,61 @@ export interface TranslationKeys {
     };
   };
   requests: {
-  title: string;
-  searchPlaceholder: string;
-  count: string;
-  resultsCount: string;
-  empty: string;
-  emptyDescription: string;
-  noResults: string;
-  noResultsDescription: string;
-};
+    title: string;
+    searchPlaceholder: string;
+    count: string;
+    resultsCount: string;
+    empty: string;
+    emptyDescription: string;
+    noResults: string;
+    noResultsDescription: string;
+  };
+  encryption: {
+    initializing: string;
+    backup: {
+      title: string;
+      description: string;
+      passwordLabel: string;
+      passwordPlaceholder: string;
+      confirmPasswordLabel: string;
+      confirmPasswordPlaceholder: string;
+      requirements: string;
+      minLength: string;
+      hint: string;
+      creating: string;
+      createButton: string;
+      skipButton: string;
+      skipWarning: string;
+      passwordTooShort: string;
+      passwordMismatch: string;
+
+      // ✅ NEW: For old users
+      recommendTitle: string;
+      recommendMessage: string;
+      createNow: string;
+      later: string;
+      createForExistingTitle: string;
+      createForExistingDescription: string;
+      alreadyExists: string;
+      created: string;
+    };
+    restore: {
+      title: string;
+      description: string;
+      passwordLabel: string;
+      passwordPlaceholder: string;
+      info: string;
+      restoring: string;
+      restoreButton: string;
+      startFreshButton: string;
+      startFreshTitle: string;
+      startFreshWarning: string;
+      startFreshConfirm: string;
+      passwordRequired: string;
+      invalidPassword: string;
+      success: string;
+    };
+  };
 }
 
 // Recursive type to generate all nested paths

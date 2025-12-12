@@ -1,8 +1,8 @@
 // components/page/message/MessageMediaGallery.tsx
-// Redesigned with unified gallery style for cleaner appearance
+// ✅ FIXED: Pass onLongPress to media components for action menu
 
-import React, { useEffect } from 'react';
-import { View, Text } from 'react-native';
+import React from 'react';
+import { View } from 'react-native';
 import { ImageGallery } from './media/ImageGallery';
 import { VideoPlayer } from './media/VideoPlayer';
 import { AudioPlayer } from './media/AudioPlayer';
@@ -13,6 +13,7 @@ interface MessageMediaGalleryProps {
   isOwnMessage: boolean;
   isSending: boolean;
   isDark: boolean;
+  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from MessageItem
 }
 
 export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
@@ -20,77 +21,91 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
   isOwnMessage,
   isSending,
   isDark,
+  onLongPress, // ✅ NEW
 }) => {
-  const imageAttachments = message.attachments?.filter((att: any) => 
-    att.file_type?.startsWith('image/')
-  ) || [];
+  // ✅ Better file type detection including file extensions
+  const imageAttachments = message.attachments?.filter((att: any) => {
+    const fileType = att.file_type?.toLowerCase() || '';
+    const fileName = att.file_name?.toLowerCase() || '';
+    return fileType.startsWith('image/') || 
+           fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/);
+  }) || [];
   
-  const videoAttachments = message.attachments?.filter((att: any) => 
-    att.file_type?.startsWith('video/')
-  ) || [];
+  const videoAttachments = message.attachments?.filter((att: any) => {
+    const fileType = att.file_type?.toLowerCase() || '';
+    const fileName = att.file_name?.toLowerCase() || '';
+    
+    return fileType.startsWith('video/') || 
+           fileName.match(/\.(mp4|mov|avi|mkv|webm|m4v|flv|wmv)$/);
+  }) || [];
   
-  const audioAttachments = message.attachments?.filter((att: any) => 
-    att.file_type?.startsWith('audio/')
-  ) || [];
+  const audioAttachments = message.attachments?.filter((att: any) => {
+    const fileType = att.file_type?.toLowerCase() || '';
+    const fileName = att.file_name?.toLowerCase() || '';
+    return fileType.startsWith('audio/') || 
+           fileName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/);
+  }) || [];
   
-  const fileAttachments = message.attachments?.filter((att: any) => 
-    !att.file_type?.startsWith('image/') && 
-    !att.file_type?.startsWith('video/') && 
-    !att.file_type?.startsWith('audio/')
-  ) || [];
-
-  const totalAttachments = message.attachments?.length || 0;
-  const hasMultipleTypes = [
-    imageAttachments.length > 0,
-    videoAttachments.length > 0,
-    audioAttachments.length > 0,
-    fileAttachments.length > 0
-  ].filter(Boolean).length > 1;
+  // ✅ Files are ONLY non-media files
+  const fileAttachments = message.attachments?.filter((att: any) => {
+    const fileType = att.file_type?.toLowerCase() || '';
+    const fileName = att.file_name?.toLowerCase() || '';
+    
+    const isImage = fileType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/);
+    const isVideo = fileType.startsWith('video/') || fileName.match(/\.(mp4|mov|avi|mkv|webm|m4v|flv|wmv)$/);
+    const isAudio = fileType.startsWith('audio/') || fileName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/);
+    
+    return !isImage && !isVideo && !isAudio;
+  }) || [];
 
   return (
-    <View className="overflow-hidden">
-      {/* Images - Full width gallery */}
+    <View>
+      {/* Images */}
       {imageAttachments.length > 0 && (
-        <View className={hasMultipleTypes ? 'mb-1' : ''}>
-          <ImageGallery 
-            images={imageAttachments}
-            localUris={message.localUri}
-            isSending={isSending}
-          />
-        </View>
+        <ImageGallery 
+          images={imageAttachments}
+          localUris={message.localUri}
+          isSending={isSending}
+          onLongPress={onLongPress} // ✅ PASS onLongPress to ImageGallery
+        />
       )}
 
-      {/* Videos - Stacked below images */}
+      {/* Videos */}
       {videoAttachments.length > 0 && (
-        <View className={hasMultipleTypes ? 'mb-1' : ''}>
+        <View className={imageAttachments.length > 0 ? "mt-1" : ""}>
           <VideoPlayer 
             videos={videoAttachments}
             localUris={message.localUri}
             isSending={isSending}
+            onLongPress={onLongPress} // ✅ TODO: Add to VideoPlayer too
           />
         </View>
       )}
 
-      {/* Audio - Compact inline player */}
+      {/* Audio */}
       {audioAttachments.length > 0 && (
-        <View className={hasMultipleTypes ? 'mb-1' : ''}>
+        <View className={(imageAttachments.length > 0 || videoAttachments.length > 0) ? "mt-1" : ""}>
           <AudioPlayer 
             audios={audioAttachments}
             isOwnMessage={isOwnMessage}
             isSending={isSending}
             isDark={isDark}
+            onLongPress={onLongPress} // ✅ TODO: Add to AudioPlayer too
           />
         </View>
       )}
 
-      {/* Files - Clean list */}
+      {/* Files - Only non-media files */}
       {fileAttachments.length > 0 && (
-        <FileAttachment 
-          files={fileAttachments}
-          isOwnMessage={isOwnMessage}
-          isSending={isSending}
-          isDark={isDark}
-        />
+        <View className={(imageAttachments.length > 0 || videoAttachments.length > 0 || audioAttachments.length > 0) ? "mt-1" : ""}>
+          <FileAttachment 
+            files={fileAttachments}
+            isOwnMessage={isOwnMessage}
+            isSending={isSending}
+            isDark={isDark}
+            onLongPress={onLongPress} // ✅ TODO: Add to FileAttachment too
+          />
+        </View>
       )}
     </View>
   );

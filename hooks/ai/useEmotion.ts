@@ -1,7 +1,9 @@
-// hooks/emotion/useEmotion.ts
+// hooks/ai/useEmotion.ts - UPDATED WITH BACKEND AI
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '@clerk/clerk-expo';
+import AIAPIService from '@/lib/ai/AiAPIService';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -69,8 +71,9 @@ export interface EmotionPattern {
 export interface RecommendationData {
   recommendations: string[];
   based_on?: {
-    recent_emotions: string[];
-    dominant_pattern: string;
+    recent_emotions?: string[];
+    dominant_pattern?: string;
+    confidence?: number;
   };
 }
 
@@ -116,6 +119,7 @@ export const CONTEXT_LABELS: { [key: string]: string } = {
 // ============================================
 export const useEmotion = (initialFilters: FilterOptions = {}) => {
   const { getToken } = useAuth();
+  const { language } = useLanguage();
 
   // States
   const [emotions, setEmotions] = useState<EmotionAnalysis[]>([]);
@@ -241,30 +245,42 @@ export const useEmotion = (initialFilters: FilterOptions = {}) => {
   }, [getToken]);
 
   // ============================================
-  // API: GET RECOMMENDATIONS (MỚI THÊM)
+  // ✅ API: GET RECOMMENDATIONS (BACKEND AI)
   // ============================================
   const getRecommendations = useCallback(async (): Promise<RecommendationData | null> => {
     try {
       const token = await getToken();
-      const response = await axios.get(
-        `${API_URL}/api/emotion/recommendations`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      if (!token) return null;
 
-      if (response.data.success) {
-        return response.data.data;
+      // Xác định ngôn ngữ
+      const lang = language === 'vi' ? 'vi' : language === 'zh' ? 'zh' : 'en';
+      
+      // Gọi backend AI thông qua AIAPIService
+      const response = await AIAPIService.getEmotionRecommendation(token, lang);
+
+      if (response.success && response.data) {
+        // Convert backend format sang RecommendationData
+        const recommendations = [
+          response.data.recommendation,
+          response.data.supportMessage,
+          response.data.actionSuggestion,
+        ].filter(Boolean) as string[];
+
+        return {
+          recommendations,
+          based_on: {
+            recent_emotions: [],
+            dominant_pattern: response.data.currentEmotion,
+            confidence: response.data.emotionIntensity,
+          },
+        };
       }
       return null;
     } catch (err: any) {
-      console.error('Error getting recommendations:', err);
+      console.error('Error getting recommendations from backend AI:', err);
       return null;
     }
-  }, [getToken]);
+  }, [getToken, language]);
 
   // ============================================
   // API: DELETE EMOTION ANALYSIS
@@ -474,7 +490,7 @@ export const useEmotion = (initialFilters: FilterOptions = {}) => {
     deleteEmotion,
     analyzeText,
     fetchPatterns,
-    getRecommendations, // ✅ THÊM VÀO ĐÂY
+    getRecommendations, // ✅ Backend AI recommendations
     
     // Computed data
     chartData,

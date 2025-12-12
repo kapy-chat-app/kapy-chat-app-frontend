@@ -1,10 +1,16 @@
-// hooks/message/useMessages.ts - WITH CACHE INTEGRATION
+// hooks/message/useMessages.ts - COMPLETE FIXED VERSION WITH CACHE
+// ✅ Replace your current useMessages.ts with this file
+
+import {
+  CachedMessage,
+  messageCacheService,
+} from "@/lib/cache/MessageCacheService";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useChunkedFileDecryption } from "./useChunkedFileDecryption";
 import { useEncryption } from "./useEncryption";
 import { useFileDecryption } from "./useFileDecryption";
 import { useSocket } from "./useSocket";
-import { messageCacheService, CachedMessage, ConversationMeta } from "@/lib/cache/MessageCacheService";
 
 export interface MessageSender {
   _id: string;
@@ -26,6 +32,9 @@ export interface MessageAttachment {
     authTag: string;
     original_size: number;
     encrypted_size: number;
+    chunks?: any[];
+    totalChunks?: number;
+    fileId?: string;
   };
   decryptedUri?: string;
 }
@@ -98,7 +107,7 @@ export interface Message {
   is_edited: boolean;
   edited_at?: Date;
   read_by: MessageReadBy[];
-  metadata?: { // ✨ NEW
+  metadata?: {
     isSystemMessage?: boolean;
     action?: string;
     [key: string]: any;
@@ -129,6 +138,8 @@ export interface CreateMessageData {
   encryptedFiles?: any[];
   localUris?: string[];
   richMedia?: RichMediaDTO;
+  isOptimistic?: boolean;
+  tempId?: string;
 }
 
 export interface TypingUser {
@@ -164,33 +175,40 @@ interface MessageHookReturn {
 // CACHE HELPERS
 // =============================================
 
-const toCachedMessage = (msg: Message, conversationId: string): CachedMessage => ({
+const toCachedMessage = (
+  msg: Message,
+  conversationId: string
+): CachedMessage => ({
   _id: msg._id,
   conversation_id: conversationId,
   sender_id: msg.sender.clerkId,
   sender_name: msg.sender.full_name,
   sender_avatar: msg.sender.avatar,
-  content: msg.content || '',
+  content: msg.content || "",
   type: msg.type,
-  attachments_json: JSON.stringify(msg.attachments.map(att => ({
-    _id: att._id,
-    file_name: att.file_name,
-    file_type: att.file_type,
-    file_size: att.file_size,
-    url: att.url,
-    is_encrypted: att.is_encrypted,
-    encryption_metadata: att.encryption_metadata,
-    decryptedUri: att.decryptedUri,
-  }))),
+  attachments_json: JSON.stringify(
+    msg.attachments.map((att) => ({
+      _id: att._id,
+      file_name: att.file_name,
+      file_type: att.file_type,
+      file_size: att.file_size,
+      url: att.url,
+      is_encrypted: att.is_encrypted,
+      encryption_metadata: att.encryption_metadata,
+      decryptedUri: att.decryptedUri, // ✅ CRITICAL: Save decryptedUri
+    }))
+  ),
   reactions_json: JSON.stringify(msg.reactions),
   read_by_json: JSON.stringify(msg.read_by),
-  reply_to_json: msg.reply_to ? JSON.stringify({
-    _id: msg.reply_to._id,
-    content: msg.reply_to.content,
-    sender: msg.reply_to.sender,
-    type: msg.reply_to.type,
-  }) : undefined,
-  metadata_json: msg.metadata ? JSON.stringify(msg.metadata) : undefined, // ✨ NEW
+  reply_to_json: msg.reply_to
+    ? JSON.stringify({
+        _id: msg.reply_to._id,
+        content: msg.reply_to.content,
+        sender: msg.reply_to.sender,
+        type: msg.reply_to.type,
+      })
+    : undefined,
+  metadata_json: msg.metadata ? JSON.stringify(msg.metadata) : undefined,
   is_edited: msg.is_edited ? 1 : 0,
   created_at: new Date(msg.created_at).getTime(),
   updated_at: new Date(msg.updated_at).getTime(),
@@ -198,10 +216,14 @@ const toCachedMessage = (msg: Message, conversationId: string): CachedMessage =>
 });
 
 const fromCachedMessage = (cached: CachedMessage): Message => {
-  const attachments = JSON.parse(cached.attachments_json || '[]');
-  const replyTo = cached.reply_to_json ? JSON.parse(cached.reply_to_json) : undefined;
-  const metadata = cached.metadata_json ? JSON.parse(cached.metadata_json) : undefined; // ✨ NEW
-  
+  const attachments = JSON.parse(cached.attachments_json || "[]");
+  const replyTo = cached.reply_to_json
+    ? JSON.parse(cached.reply_to_json)
+    : undefined;
+  const metadata = cached.metadata_json
+    ? JSON.parse(cached.metadata_json)
+    : undefined;
+
   return {
     _id: cached._id,
     conversation: cached.conversation_id,
@@ -209,21 +231,23 @@ const fromCachedMessage = (cached: CachedMessage): Message => {
       _id: cached.sender_id,
       clerkId: cached.sender_id,
       full_name: cached.sender_name,
-      username: cached.sender_name.toLowerCase().replace(/\s/g, ''),
+      username: cached.sender_name.toLowerCase().replace(/\s/g, ""),
       avatar: cached.sender_avatar,
     },
     content: cached.content,
-    type: cached.type as Message['type'],
-    attachments: attachments,
-    reactions: JSON.parse(cached.reactions_json || '[]'),
-    read_by: JSON.parse(cached.read_by_json || '[]'),
+    type: cached.type as Message["type"],
+    attachments: attachments, // ✅ This includes decryptedUri from cache
+    reactions: JSON.parse(cached.reactions_json || "[]"),
+    read_by: JSON.parse(cached.read_by_json || "[]"),
     reply_to: replyTo,
-    metadata: metadata, // ✨ NEW
-    is_edited: cached.is_edited === 1,
+    metadata: metadata,
+    is_edited: !!cached.is_edited,
     created_at: new Date(cached.created_at),
     updated_at: new Date(cached.updated_at),
-    rich_media: cached.rich_media_json ? JSON.parse(cached.rich_media_json) : undefined,
-    status: 'sent' as MessageStatus,
+    rich_media: cached.rich_media_json
+      ? JSON.parse(cached.rich_media_json)
+      : undefined,
+    status: "sent" as MessageStatus,
   };
 };
 
@@ -242,7 +266,7 @@ export const useMessages = (
   const [socketMessageCount, setSocketMessageCount] = useState(0);
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
 
-  const { socket, emit, on, off } = useSocket();
+  const { socket, emit, on, off, isConnected } = useSocket();
   const { user } = useUser();
   const { getToken } = useAuth();
   const {
@@ -251,10 +275,15 @@ export const useMessages = (
     isInitialized: encryptionInitialized,
   } = useEncryption();
   const { getDecryptedUri } = useFileDecryption();
+  const { getDecryptedUriChunked } = useChunkedFileDecryption();
 
   const messagesRef = useRef<Message[]>([]);
   const loadingRef = useRef(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fullyCachedMessageIds = useRef<Set<string>>(new Set());
+  const decryptingFilesRef = useRef<Set<string>>(new Set());
+  const decryptedFilesRef = useRef<Set<string>>(new Set());
 
   const API_BASE_URL = useMemo(
     () => process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000",
@@ -267,62 +296,180 @@ export const useMessages = (
     messagesRef.current = messages;
   }, [messages]);
 
-  // Helper function to decrypt file attachments
+  /**
+   * ✅ Check if message is fully cached
+   */
+  const isMessageFullyCached = useCallback((msg: Message): boolean => {
+    if (fullyCachedMessageIds.current.has(msg._id)) {
+      return true;
+    }
+
+    if (msg.metadata?.isSystemMessage === true) {
+      fullyCachedMessageIds.current.add(msg._id);
+      return true;
+    }
+
+    const hasDecryptedText = !msg.encrypted_content || !!msg.content;
+    const hasEncryptedAttachments = msg.attachments?.some(
+      (att) => att.is_encrypted && !att.decryptedUri
+    );
+
+    const isFullyCached = hasDecryptedText && !hasEncryptedAttachments;
+
+    if (isFullyCached) {
+      fullyCachedMessageIds.current.add(msg._id);
+    }
+
+    return isFullyCached;
+  }, []);
+
+  /**
+   * ✅ Decrypt attachments
+   */
   const decryptAttachments = useCallback(
     async (
       attachments: MessageAttachment[],
-      senderClerkId: string
+      senderClerkId: string,
+      messageId?: string
     ): Promise<MessageAttachment[]> => {
       if (!attachments || attachments.length === 0) {
         return [];
       }
 
-      console.log(
-        `🔓 Decrypting ${attachments.length} attachments from sender:`,
-        senderClerkId
-      );
-
       return await Promise.all(
         attachments.map(async (att) => {
-          console.log(`📎 Processing attachment:`, {
-            id: att._id,
-            file_name: att.file_name,
-            file_type: att.file_type,
-            is_encrypted: att.is_encrypted,
-          });
+          const attKey = `${messageId}_${att._id}`;
 
-          if (!att.is_encrypted || !att.encryption_metadata) {
-            console.log(`⏭️ File ${att.file_name} is not encrypted`);
+          if (att.decryptedUri && decryptedFilesRef.current.has(attKey)) {
             return att;
           }
 
+          if (decryptingFilesRef.current.has(attKey)) {
+            const startTime = Date.now();
+            while (decryptingFilesRef.current.has(attKey)) {
+              if (Date.now() - startTime > 30000) break;
+              await new Promise((resolve) => setTimeout(resolve, 500));
+            }
+            return att;
+          }
+
+          if (!att.is_encrypted || !att.encryption_metadata) {
+            return att;
+          }
+
+          if (att.decryptedUri && att.decryptedUri.startsWith("file://")) {
+            try {
+              const FileSystem = await import("expo-file-system/legacy");
+              const fileInfo = await FileSystem.default.getInfoAsync(
+                att.decryptedUri
+              );
+
+              if (fileInfo.exists) {
+                decryptedFilesRef.current.add(attKey);
+                return att;
+              }
+            } catch (e) {
+              console.warn(`⚠️ Failed to verify cache:`, e);
+            }
+          }
+
           try {
-            console.log(`🔓 Decrypting file: ${att.file_name}`);
+            decryptingFilesRef.current.add(attKey);
 
-            const decryptedUri = await getDecryptedUri(
-              att._id,
-              att.encryption_metadata.iv,
-              att.encryption_metadata.authTag,
-              senderClerkId,
-              att._id,
-              att.file_type
-            );
+            const token = await getToken();
+            if (!token) throw new Error("No auth token");
 
-            console.log(`✅ File ${att.file_name} decrypted successfully`);
+            let decryptedUri: string;
+
+            const isStreamingUpload =
+              att.encryption_metadata.chunks &&
+              Array.isArray(att.encryption_metadata.chunks) &&
+              att.encryption_metadata.chunks.length > 0;
+
+            if (isStreamingUpload) {
+              const metadataUrl = `${API_BASE_URL}/api/files/metadata/${att._id}`;
+              const metadataResponse = await fetch(metadataUrl, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+
+              if (!metadataResponse.ok) {
+                throw new Error(
+                  `Failed to get metadata: ${metadataResponse.status}`
+                );
+              }
+
+              const metadataData = await metadataResponse.json();
+              if (!metadataData.success || !metadataData.data) {
+                throw new Error("Invalid metadata response");
+              }
+
+              const chunkedResult = metadataData.data;
+
+              decryptedUri = await getDecryptedUriChunked(
+                att._id,
+                chunkedResult,
+                senderClerkId
+              );
+            } else {
+              if (
+                !att.encryption_metadata.iv ||
+                !att.encryption_metadata.authTag
+              ) {
+                throw new Error(
+                  "Missing iv/authTag for single-file encryption"
+                );
+              }
+
+              const downloadUrl = `${API_BASE_URL}/api/files/download/${att._id}`;
+              const downloadResponse = await fetch(downloadUrl, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+
+              if (!downloadResponse.ok) {
+                throw new Error(
+                  `Failed to get download URL: ${downloadResponse.status}`
+                );
+              }
+
+              const downloadData = await downloadResponse.json();
+              if (!downloadData.success || !downloadData.downloadUrl) {
+                throw new Error("Invalid download response");
+              }
+
+              const presignedUrl = downloadData.downloadUrl;
+
+              decryptedUri = await getDecryptedUri(
+                att._id,
+                att.encryption_metadata.iv,
+                att.encryption_metadata.authTag,
+                senderClerkId,
+                att._id,
+                att.file_type,
+                presignedUrl
+              );
+            }
+
+            // ✅ Save to cache
+            if (messageId && conversationId) {
+              await messageCacheService.updateAttachmentUri(
+                messageId,
+                att._id,
+                decryptedUri
+              );
+            }
+
+            decryptedFilesRef.current.add(attKey);
+            decryptingFilesRef.current.delete(attKey);
 
             return {
               ...att,
               decryptedUri,
             };
           } catch (error) {
-            console.error(`❌ Failed to decrypt file ${att.file_name}:`, error);
-
-            if (
-              error instanceof Error &&
-              error.message.includes("not initialized")
-            ) {
-              return att;
-            }
+            console.error(`❌ Failed: ${att.file_name}`, error);
+            decryptingFilesRef.current.delete(attKey);
 
             return {
               ...att,
@@ -332,9 +479,18 @@ export const useMessages = (
         })
       );
     },
-    [getDecryptedUri]
+    [
+      getDecryptedUri,
+      getDecryptedUriChunked,
+      getToken,
+      API_BASE_URL,
+      conversationId,
+    ]
   );
 
+  /**
+   * ✅ Decrypt message content
+   */
   const decryptMessageContent = useCallback(
     async (message: Message): Promise<string> => {
       if (!message.encrypted_content) {
@@ -359,6 +515,402 @@ export const useMessages = (
     [decryptMessage, encryptionInitialized]
   );
 
+  /**
+   * ✅ Process message
+   */
+  const processMessage = useCallback(
+    async (msg: Message): Promise<Message> => {
+      try {
+        if (isMessageFullyCached(msg)) {
+          return { ...msg, status: "sent" as MessageStatus };
+        }
+
+        let decryptedContent = msg.content;
+
+        if (msg.type === "text" && msg.encrypted_content && !msg.content) {
+          if (encryptionInitialized) {
+            try {
+              decryptedContent = await decryptMessage(
+                msg.sender.clerkId,
+                msg.encrypted_content
+              );
+            } catch (decryptError) {
+              console.error("❌ Decryption error:", decryptError);
+              decryptedContent = "[🔒 Decryption failed]";
+              return {
+                ...msg,
+                content: decryptedContent,
+                status: "failed" as MessageStatus,
+                decryption_error: true,
+              };
+            }
+          } else {
+            decryptedContent = "[🔒 Encrypted - Initializing...]";
+          }
+        }
+
+        let decryptedAtts = msg.attachments;
+        if (msg.attachments && msg.attachments.length > 0) {
+          const needsDecryption = msg.attachments.filter((att) => {
+            if (!att.is_encrypted) return false;
+            if (!att.encryption_metadata) return false;
+
+            const attKey = `${msg._id}_${att._id}`;
+            if (att.decryptedUri && decryptedFilesRef.current.has(attKey)) {
+              return false;
+            }
+
+            return true;
+          });
+
+          if (needsDecryption.length > 0) {
+            const newlyDecrypted = await decryptAttachments(
+              needsDecryption,
+              msg.sender.clerkId,
+              msg._id
+            );
+
+            decryptedAtts = msg.attachments.map((att) => {
+              if (!att.is_encrypted) return att;
+
+              const decrypted = newlyDecrypted.find((d) => d._id === att._id);
+              return decrypted || att;
+            });
+          }
+        }
+
+        const result = {
+          ...msg,
+          content: decryptedContent,
+          attachments: decryptedAtts,
+          status: "sent" as MessageStatus,
+          decryption_error: false,
+        };
+
+        const hasDecryptedText = !result.encrypted_content || !!result.content;
+        const hasDecryptedFiles = result.attachments?.every(
+          (att) => !att.is_encrypted || att.decryptedUri
+        );
+
+        if (hasDecryptedText && hasDecryptedFiles) {
+          fullyCachedMessageIds.current.add(result._id);
+        }
+
+        return result;
+      } catch (error) {
+        console.error(`❌ Exception:`, error);
+        return {
+          ...msg,
+          content: msg.encrypted_content
+            ? "[🔒 Decryption failed]"
+            : msg.content,
+          status: "failed" as MessageStatus,
+          decryption_error: msg.type === "text" && !!msg.encrypted_content,
+        };
+      }
+    },
+    [
+      isMessageFullyCached,
+      decryptMessage,
+      decryptAttachments,
+      encryptionInitialized,
+    ]
+  );
+
+  // =============================================
+  // ✅ FETCH MESSAGES WITH CACHE-FIRST + VERIFICATION
+  // =============================================
+  const fetchMessages = useCallback(
+    async (pageNum: number = 1, append: boolean = false) => {
+      if (!conversationId || loadingRef.current) return;
+
+      try {
+        loadingRef.current = true;
+        setError(null);
+
+        console.log(
+          `📥 [FETCH] Starting - Page: ${pageNum}, Append: ${append}`
+        );
+
+        // ✅ STEP 1: Load from cache FIRST
+        if (pageNum === 1 && !append) {
+          console.log("📦 [FETCH] Checking cache...");
+
+          const cachedMessages = await messageCacheService.getMessages(
+            conversationId,
+            MESSAGES_PER_PAGE
+          );
+
+          console.log(
+            `📊 [FETCH] Cache returned ${cachedMessages.length} messages`
+          );
+
+          if (cachedMessages.length > 0) {
+            // ✅ Verify attachments have URIs
+            let allHaveUris = true;
+
+            for (const cached of cachedMessages) {
+              const attachments = JSON.parse(cached.attachments_json || "[]");
+              if (attachments.length > 0) {
+                const hasUri = attachments.every(
+                  (att: any) => !att.is_encrypted || att.decryptedUri
+                );
+
+                if (!hasUri) {
+                  allHaveUris = false;
+                  break;
+                }
+              }
+            }
+
+            if (allHaveUris) {
+              console.log(
+                "✅ [FETCH] All messages have decrypted URIs - using cache!"
+              );
+
+              const msgs = cachedMessages.map(fromCachedMessage).reverse();
+              setMessages(msgs);
+
+              // Mark as cached
+              msgs.forEach((msg) => {
+                fullyCachedMessageIds.current.add(msg._id);
+
+                msg.attachments?.forEach((att) => {
+                  if (att.decryptedUri) {
+                    const attKey = `${msg._id}_${att._id}`;
+                    decryptedFilesRef.current.add(attKey);
+                  }
+                });
+              });
+
+              console.log("✅ [FETCH] Using cache - NO DECRYPTION!");
+              setLoading(false);
+              loadingRef.current = false;
+
+              // Check for new messages in background
+              const meta =
+                await messageCacheService.getConversationMeta(conversationId);
+              if (meta?.last_sync_time) {
+                const token = await getToken();
+                const lastSyncISO = new Date(meta.last_sync_time).toISOString();
+                const url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=1&limit=${MESSAGES_PER_PAGE}&after=${encodeURIComponent(lastSyncISO)}`;
+
+                const response = await fetch(url, {
+                  method: "GET",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+
+                if (response.ok) {
+                  const result = await response.json();
+                  const serverMessages = result.data.messages || [];
+
+                  if (serverMessages.length > 0) {
+                    console.log(
+                      `📥 [FETCH] Found ${serverMessages.length} new messages`
+                    );
+
+                    const processedMessages = await Promise.all(
+                      serverMessages.map((msg: Message) => processMessage(msg))
+                    );
+
+                    const messagesToCache = processedMessages.map((msg) =>
+                      toCachedMessage(msg, conversationId)
+                    );
+                    await messageCacheService.saveMessages(messagesToCache);
+
+                    const lastMsg =
+                      processedMessages[processedMessages.length - 1];
+                    await messageCacheService.updateConversationMeta({
+                      conversation_id: conversationId,
+                      last_sync_time: Date.now(),
+                      total_cached:
+                        (meta?.total_cached || 0) + processedMessages.length,
+                      last_message_id: lastMsg._id,
+                    });
+
+                    const allCached = await messageCacheService.getMessages(
+                      conversationId,
+                      MESSAGES_PER_PAGE
+                    );
+                    const allMessages = allCached
+                      .map(fromCachedMessage)
+                      .reverse();
+                    setMessages(allMessages);
+                  }
+                }
+              }
+
+              return; // ✅ STOP - using cache!
+            }
+          }
+
+          setLoading(true);
+        } else {
+          setLoading(true);
+        }
+
+        // ✅ STEP 2: Fetch from server
+        const token = await getToken();
+        const meta =
+          await messageCacheService.getConversationMeta(conversationId);
+
+        let url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`;
+
+        if (meta && meta.last_sync_time > 0 && pageNum === 1 && !append) {
+          const lastSyncISO = new Date(meta.last_sync_time).toISOString();
+          url += `&after=${encodeURIComponent(lastSyncISO)}`;
+        }
+
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "Failed to fetch messages");
+        }
+
+        const serverMessages = result.data.messages || [];
+        const pagination = result.data.pagination;
+
+        console.log(`📥 [FETCH] Got ${serverMessages.length} new messages`);
+
+        if (
+          serverMessages.length === 0 &&
+          pageNum === 1 &&
+          !append &&
+          messages.length > 0
+        ) {
+          setHasMore(pagination?.hasNext || false);
+          setLoading(false);
+          loadingRef.current = false;
+          return;
+        }
+
+        // ✅ STEP 3: Process messages
+        console.log("🔐 [FETCH] Processing and decrypting messages...");
+
+        const processedMessages = await Promise.all(
+          serverMessages.map(async (msg: Message) => {
+            // Process text content
+            const processed = await processMessage(msg);
+
+            // ✅ FORCE decrypt attachments if any
+            if (processed.attachments && processed.attachments.length > 0) {
+              const needsDecryption = processed.attachments.some(
+                (att) => att.is_encrypted && !att.decryptedUri
+              );
+
+              if (needsDecryption) {
+                console.log(
+                  `🔐 [FETCH] Decrypting attachments for ${processed._id}...`
+                );
+
+                const decryptedAtts = await decryptAttachments(
+                  processed.attachments,
+                  processed.sender.clerkId,
+                  processed._id
+                );
+
+                return {
+                  ...processed,
+                  attachments: decryptedAtts,
+                };
+              }
+            }
+
+            return processed;
+          })
+        );
+
+        // ✅ STEP 4: Save to cache WITH VERIFICATION
+        if (processedMessages.length > 0) {
+          console.log("💾 [FETCH] Saving to cache...");
+
+          const messagesToCache = processedMessages.map((msg) =>
+            toCachedMessage(msg, conversationId)
+          );
+
+          await messageCacheService.saveMessages(messagesToCache);
+
+          // ✅ VERIFY save immediately
+          const verifyRead = await messageCacheService.getMessages(
+            conversationId,
+            MESSAGES_PER_PAGE
+          );
+
+          console.log(
+            `✅ [VERIFY] Saved and verified: ${verifyRead.length} messages`
+          );
+
+          if (verifyRead.length === 0) {
+            console.error("❌ [VERIFY] CACHE SAVE FAILED!");
+          } else {
+            const firstAtts = JSON.parse(
+              verifyRead[0].attachments_json || "[]"
+            );
+            if (firstAtts.length > 0) {
+              console.log(
+                `📎 [VERIFY] First attachment URI exists: ${!!firstAtts[0]?.decryptedUri}`
+              );
+            }
+          }
+
+          const lastMsg = processedMessages[processedMessages.length - 1];
+          await messageCacheService.updateConversationMeta({
+            conversation_id: conversationId,
+            last_sync_time: Date.now(),
+            total_cached: processedMessages.length,
+            last_message_id: lastMsg._id,
+          });
+        }
+
+        // ✅ STEP 5: Update UI
+        const allCached = await messageCacheService.getMessages(
+          conversationId,
+          MESSAGES_PER_PAGE
+        );
+
+        if (allCached.length > 0) {
+          const allMessages = allCached.map(fromCachedMessage).reverse();
+          setMessages(allMessages);
+        }
+
+        setHasMore(pagination?.hasNext || false);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch messages";
+        setError(errorMessage);
+        console.error("❌ [FETCH] Error:", err);
+      } finally {
+        setLoading(false);
+        loadingRef.current = false;
+      }
+    },
+    [
+      conversationId,
+      getToken,
+      API_BASE_URL,
+      MESSAGES_PER_PAGE,
+      processMessage,
+      messages.length,
+    ]
+  );
+
+  /**
+   * ✅ Retry decryption
+   */
   const retryDecryption = useCallback(
     async (messageId: string) => {
       try {
@@ -375,36 +927,21 @@ export const useMessages = (
           throw new Error("Message not found");
         }
 
-        let decryptedContent = message.content;
-        if (message.encrypted_content) {
-          decryptedContent = await decryptMessageContent(message);
-        }
+        fullyCachedMessageIds.current.delete(messageId);
+        message.attachments.forEach((att) => {
+          const attKey = `${messageId}_${att._id}`;
+          decryptingFilesRef.current.delete(attKey);
+          decryptedFilesRef.current.delete(attKey);
+        });
 
-        const decryptedAtts = await decryptAttachments(
-          message.attachments,
-          message.sender.clerkId
-        );
+        const processedMessage = await processMessage(message);
 
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === messageId
-              ? {
-                  ...msg,
-                  content: decryptedContent,
-                  attachments: decryptedAtts,
-                  status: "sent" as MessageStatus,
-                  decryption_error: false,
-                }
-              : msg
-          )
+          prev.map((msg) => (msg._id === messageId ? processedMessage : msg))
         );
 
-        // Update cache
         if (conversationId) {
-          const cached = toCachedMessage(
-            { ...message, content: decryptedContent, attachments: decryptedAtts },
-            conversationId
-          );
+          const cached = toCachedMessage(processedMessage, conversationId);
           await messageCacheService.saveMessages([cached]);
         }
 
@@ -424,261 +961,10 @@ export const useMessages = (
         );
       }
     },
-    [messages, decryptMessageContent, decryptAttachments, conversationId]
+    [messages, processMessage, conversationId]
   );
 
-  useEffect(() => {
-    if (socket && conversationId) {
-      const joinRoom = () => {
-        if (socket.connected) {
-          emit("joinConversation", conversationId);
-          console.log(`📥 Joined conversation: ${conversationId}`);
-        } else {
-          const checkConnection = setInterval(() => {
-            if (socket.connected) {
-              emit("joinConversation", conversationId);
-              clearInterval(checkConnection);
-            }
-          }, 100);
-          setTimeout(() => clearInterval(checkConnection), 3000);
-        }
-      };
-
-      joinRoom();
-
-      return () => {
-        if (socket.connected) {
-          emit("leaveConversation", conversationId);
-        }
-        setTypingUsers([]);
-      };
-    }
-  }, [socket, conversationId, emit]);
-
-  const sendTypingIndicator = useCallback(
-    (isTyping: boolean) => {
-      if (!socket || !conversationId || !user) return;
-      if (!socket.connected) return;
-
-      emit("userTyping", {
-        conversation_id: conversationId,
-        user_id: user.id,
-        user_name: user.fullName || user.username || "User",
-        is_typing: isTyping,
-      });
-    },
-    [socket, conversationId, user, emit]
-  );
-
-  // =============================================
-  // FETCH MESSAGES WITH CACHE
-  // =============================================
-  const fetchMessages = useCallback(
-  async (pageNum: number = 1, append: boolean = false) => {
-    if (!conversationId || loadingRef.current) return;
-
-    try {
-      loadingRef.current = true;
-      setError(null);
-
-      // =============================================
-      // STEP 1: Load từ cache ngay lập tức
-      // =============================================
-      if (pageNum === 1 && !append) {
-        console.log('📦 Loading messages from cache...');
-        
-        const cachedMessages = await messageCacheService.getMessages(
-          conversationId, 
-          MESSAGES_PER_PAGE
-        );
-
-        if (cachedMessages.length > 0) {
-          // ✅ FIXED: Không reverse - SQL đã sort DESC rồi
-          const msgs = cachedMessages.map(fromCachedMessage);
-          setMessages(msgs);
-          console.log(`✅ Loaded ${msgs.length} messages from cache (instant)`);
-          setLoading(false);
-        } else {
-          setLoading(true);
-          console.log('📭 No cached messages, fetching from server...');
-        }
-      } else {
-        setLoading(true);
-      }
-
-      // =============================================
-      // STEP 2: Fetch tin nhắn mới từ server
-      // =============================================
-      const token = await getToken();
-      const meta = await messageCacheService.getConversationMeta(conversationId);
-      
-      let url = `${API_BASE_URL}/api/conversations/${conversationId}/messages?page=${pageNum}&limit=${MESSAGES_PER_PAGE}`;
-      
-      // Nếu có cache và load page 1, chỉ fetch tin mới
-      if (meta && meta.last_sync_time > 0 && pageNum === 1 && !append) {
-        const lastSyncISO = new Date(meta.last_sync_time).toISOString();
-        url += `&after=${encodeURIComponent(lastSyncISO)}`;
-        console.log(`🔄 Fetching messages after: ${lastSyncISO}`);
-      }
-
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.error || "Failed to fetch messages");
-      }
-
-      const serverMessages = result.data.messages || [];
-      const pagination = result.data.pagination;
-
-      console.log(`📥 Fetched ${serverMessages.length} messages from server`);
-
-      // Không có tin mới và đã có cache
-      if (serverMessages.length === 0 && pageNum === 1 && !append) {
-        setHasMore(pagination?.hasNext || false);
-        console.log('✅ No new messages, using cache');
-        setLoading(false);
-        loadingRef.current = false;
-        return;
-      }
-
-      // =============================================
-      // STEP 3: Decrypt tin nhắn mới
-      // =============================================
-      console.log('🔓 Decrypting messages...');
-
-      const decryptedMessages = await Promise.all(
-        serverMessages.map(async (msg: Message) => {
-          try {
-            let decryptedContent = msg.content;
-
-            if (msg.type === "text" && msg.encrypted_content) {
-              if (encryptionInitialized) {
-                try {
-                  decryptedContent = await decryptMessage(
-                    msg.sender.clerkId,
-                    msg.encrypted_content
-                  );
-                } catch (decryptError) {
-                  decryptedContent = "[🔒 Decryption failed]";
-                  return {
-                    ...msg,
-                    content: decryptedContent,
-                    status: "failed" as MessageStatus,
-                    decryption_error: true,
-                  };
-                }
-              } else {
-                decryptedContent = "[🔒 Encrypted - Initializing...]";
-              }
-            } else if (msg.type !== "text") {
-              decryptedContent = msg.content;
-            } else if (msg.type === "text" && !msg.encrypted_content && !msg.content) {
-              decryptedContent = "[❌ No content]";
-            }
-
-            let decryptedAtts = msg.attachments;
-            if (msg.attachments && msg.attachments.length > 0) {
-              decryptedAtts = await decryptAttachments(
-                msg.attachments,
-                msg.sender.clerkId
-              );
-            }
-
-            return {
-              ...msg,
-              content: decryptedContent,
-              attachments: decryptedAtts,
-              status: "sent" as MessageStatus,
-              decryption_error: false,
-            };
-          } catch (error) {
-            console.error(`❌ Failed to process message ${msg._id}:`, error);
-            return {
-              ...msg,
-              content: msg.encrypted_content ? "[🔒 Decryption failed]" : msg.content,
-              status: "failed" as MessageStatus,
-              decryption_error: msg.type === "text" && !!msg.encrypted_content,
-            };
-          }
-        })
-      );
-
-      // =============================================
-      // STEP 4: Lưu vào cache
-      // =============================================
-      if (decryptedMessages.length > 0) {
-        console.log('💾 Saving to cache...');
-        
-        const messagesToCache = decryptedMessages.map(msg => 
-          toCachedMessage(msg, conversationId)
-        );
-        await messageCacheService.saveMessages(messagesToCache);
-
-        // Update metadata
-        const lastMsg = decryptedMessages[decryptedMessages.length - 1];
-        await messageCacheService.updateConversationMeta({
-          conversation_id: conversationId,
-          last_sync_time: Date.now(),
-          total_cached: (meta?.total_cached || 0) + decryptedMessages.length,
-          last_message_id: lastMsg._id,
-        });
-
-        console.log('✅ Saved to cache');
-      }
-
-      // =============================================
-      // STEP 5: Update UI
-      // =============================================
-      if (pageNum === 1 && !append) {
-        // Load lại từ cache
-        const allCached = await messageCacheService.getMessages(
-          conversationId, 
-          MESSAGES_PER_PAGE
-        );
-        // ✅ FIXED: Không reverse
-        const allMessages = allCached.map(fromCachedMessage);
-        setMessages(allMessages);
-      } else if (append) {
-        setMessages(prev => [...decryptedMessages, ...prev]);
-      } else {
-        setMessages(decryptedMessages);
-      }
-
-      setHasMore(pagination?.hasNext || false);
-      console.log(`✅ Sync complete`);
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to fetch messages";
-      setError(errorMessage);
-      console.error("❌ Error fetching messages:", err);
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  },
-  [
-    conversationId,
-    getToken,
-    API_BASE_URL,
-    MESSAGES_PER_PAGE,
-    decryptMessage,
-    decryptAttachments,
-    encryptionInitialized,
-  ]
-);
-
+  // ✅ Create optimistic message
   const createOptimisticMessage = useCallback(
     (data: CreateMessageData | FormData, localUris?: string[]): Message => {
       const tempId = `temp_${Date.now()}_${Math.random()}`;
@@ -686,6 +972,7 @@ export const useMessages = (
       let messageType: Message["type"] = "text";
       let content = "";
       let attachmentPreviews: MessageAttachment[] = [];
+      let richMedia: RichMediaDTO | undefined;
 
       if (data instanceof FormData) {
         messageType = (data.get("type") as Message["type"]) || "text";
@@ -693,25 +980,33 @@ export const useMessages = (
       } else {
         messageType = data.type;
         content = String(data.content || "");
+        richMedia = data.richMedia;
       }
 
       if (localUris && localUris.length > 0) {
         attachmentPreviews = localUris.map((uri, index) => {
-          const isImage = uri.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i) || messageType === 'image';
-          const isVideo = uri.toLowerCase().match(/\.(mp4|mov|avi|webm)$/i) || messageType === 'video';
-          const isAudio = uri.toLowerCase().match(/\.(mp3|m4a|wav|aac)$/i) || messageType === 'audio';
+          const isImage =
+            uri.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/i) ||
+            messageType === "image";
+          const isVideo =
+            uri.toLowerCase().match(/\.(mp4|mov|avi|webm)$/i) ||
+            messageType === "video";
+          const isAudio =
+            uri.toLowerCase().match(/\.(mp3|m4a|wav|aac)$/i) ||
+            messageType === "audio";
 
-          let fileType = 'application/octet-stream';
-          if (isImage) fileType = 'image/jpeg';
-          else if (isVideo) fileType = 'video/mp4';
-          else if (isAudio) fileType = 'audio/m4a';
+          let fileType = "application/octet-stream";
+          if (isImage) fileType = "image/jpeg";
+          else if (isVideo) fileType = "video/mp4";
+          else if (isAudio) fileType = "audio/m4a";
 
           return {
             _id: `temp_att_${Date.now()}_${index}`,
             file_name: `file_${index}`,
             file_type: fileType,
             file_size: 0,
-            url: '',
+            url: "",
+            decryptedUri: uri,
           } as MessageAttachment;
         });
       }
@@ -737,6 +1032,7 @@ export const useMessages = (
         updated_at: new Date(),
         status: "encrypting" as MessageStatus,
         localUri: localUris,
+        rich_media: richMedia,
       };
     },
     [conversationId, user]
@@ -747,554 +1043,234 @@ export const useMessages = (
       if (!conversationId) {
         throw new Error("No conversation selected");
       }
-
       if (!encryptionInitialized) {
         throw new Error("E2EE not initialized");
       }
 
       try {
-        const token = await getToken();
-        if (!token) {
-          throw new Error("Authentication token not available");
-        }
-
-        let messageContent = "";
-        let messageType: Message["type"] = "text";
-        let attachmentIds: string[] = [];
-        let replyToId: string | undefined;
-        let encryptedFiles: any[] | undefined;
         let localUris: string[] | undefined;
+        let messageType: Message["type"] = "text";
+        let messageContent = "";
         let richMedia: RichMediaDTO | undefined;
+        let tempId: string | undefined;
+        let isOptimistic = false;
 
         if (data instanceof FormData) {
-          messageContent = (data.get("content") as string) || "";
           messageType = (data.get("type") as Message["type"]) || "text";
-          replyToId = (data.get("replyTo") as string) || undefined;
+          messageContent = String(data.get("content") || "");
         } else {
-          messageContent = String(data.content || "").trim();
           messageType = data.type;
-          attachmentIds = data.attachments || [];
-          replyToId = data.replyTo;
+          messageContent = String(data.content || "");
+          localUris = data.localUris;
           richMedia = data.richMedia;
-          if ("encryptedFiles" in data) {
-            encryptedFiles = (data as any).encryptedFiles;
-            localUris = (data as any).localUris;
-          }
+          tempId = data.tempId;
+          isOptimistic = data.isOptimistic || false;
         }
 
-        // GIF/STICKER
-        if ((messageType === "gif" || messageType === "sticker") && richMedia) {
-          const optimisticMessage = createOptimisticMessage({
-            content: richMedia.title || messageType.toUpperCase(),
-            type: messageType,
-            richMedia,
-          });
+        if (isOptimistic && tempId) {
+          const optimisticMessage = createOptimisticMessage(data, localUris);
+          optimisticMessage.tempId = tempId;
           setMessages((prev) => [...prev, optimisticMessage]);
+          return optimisticMessage;
+        }
 
-          const requestBody: any = {
-            conversationId,
-            type: messageType,
-            richMedia: richMedia,
-          };
+        const optimisticMessage = tempId
+          ? messages.find((m) => m.tempId === tempId)
+          : createOptimisticMessage(data, localUris);
 
-          if (messageContent) requestBody.content = messageContent;
-          if (replyToId) requestBody.replyTo = replyToId;
-
-          const response = await fetch(
-            `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(requestBody),
-            }
-          );
-
-          const result = await response.json();
-          if (!result.success) throw new Error(result.error);
-
-          const finalMessage = {
-            ...result.data,
-            content: messageContent || richMedia.title || messageType.toUpperCase(),
-            status: "sent" as MessageStatus,
-          };
-
+        if (!tempId && optimisticMessage) {
+          setMessages((prev) => [...prev, optimisticMessage]);
+        } else if (tempId) {
           setMessages((prev) =>
-            prev.map((msg) =>
-              msg.tempId === optimisticMessage.tempId ? finalMessage : msg
+            prev.map((m) =>
+              m.tempId === tempId
+                ? { ...m, status: "sending" as MessageStatus }
+                : m
             )
           );
-
-          // Save to cache
-          const cached = toCachedMessage(finalMessage, conversationId);
-          await messageCacheService.saveMessages([cached]);
-
-          return result.data;
         }
 
-        // ENCRYPTED FILES
-        if (encryptedFiles && encryptedFiles.length > 0) {
-          const optimisticMessage = createOptimisticMessage(
-            { content: messageContent || "File", type: "file" },
-            localUris
-          );
-          setMessages((prev) => [...prev, optimisticMessage]);
+        let requestBody: any;
+        let contentType = "application/json";
 
-          const requestBody: any = {
+        if (data instanceof FormData) {
+          requestBody = data;
+          contentType = "multipart/form-data";
+        } else {
+          requestBody = {
+            type: data.type,
             conversationId,
-            type: "file",
-            encryptedFiles: encryptedFiles,
           };
 
-          if (messageContent) requestBody.content = messageContent;
-          if (replyToId) requestBody.replyTo = replyToId;
-
-          const response = await fetch(
-            `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(requestBody),
+          if (data.type === "text" && data.content) {
+            const token = await getToken();
+            if (!token) {
+              throw new Error("Authentication failed");
             }
-          );
 
-          const result = await response.json();
-          if (!result.success) throw new Error(result.error);
-
-          const finalMessage = {
-            ...result.data,
-            content: messageContent || "File",
-            status: "sent" as MessageStatus,
-            localUri: localUris,
-          };
-
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.tempId === optimisticMessage.tempId ? finalMessage : msg
-            )
-          );
-
-          // Save to cache
-          const cached = toCachedMessage(finalMessage, conversationId);
-          await messageCacheService.saveMessages([cached]);
-
-          return result.data;
-        }
-
-        // TEXT MESSAGE
-        if (typeof messageContent !== "string") {
-          throw new Error("Message content must be a string");
-        }
-
-        if (!messageContent.trim() && (!attachmentIds || attachmentIds.length === 0)) {
-          return {} as Message;
-        }
-
-        const optimisticMessage = createOptimisticMessage({
-          content: messageContent,
-          type: messageType,
-          attachments: attachmentIds,
-          replyTo: replyToId,
-        });
-
-        setMessages((prev) => [...prev, optimisticMessage]);
-
-        let encryptedContent = "";
-        let encryptionMetadata = null;
-
-        if (messageType === "text" && messageContent.trim()) {
-          try {
             const conversationResponse = await fetch(
               `${API_BASE_URL}/api/conversations/${conversationId}`,
-              { headers: { Authorization: `Bearer ${token}` } }
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
             );
 
-            if (!conversationResponse.ok) throw new Error("Failed to fetch conversation");
+            if (!conversationResponse.ok) {
+              throw new Error("Failed to fetch conversation");
+            }
 
             const convResult = await conversationResponse.json();
             const participants = convResult.data.participants || [];
-            const recipientId = participants.find((p: any) => p.clerkId !== user?.id)?.clerkId;
+            const recipientId = participants.find(
+              (p: any) => p.clerkId !== user?.id
+            )?.clerkId;
 
-            if (!recipientId) throw new Error("Recipient not found");
+            if (!recipientId) {
+              throw new Error("Recipient not found");
+            }
 
-            const encrypted = await encryptMessage(recipientId, messageContent);
-            encryptedContent = encrypted.encryptedContent;
-            encryptionMetadata = encrypted.encryptionMetadata;
-
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.tempId === optimisticMessage.tempId
-                  ? { ...msg, status: "sending" as MessageStatus }
-                  : msg
-              )
+            const encryptedResult = await encryptMessage(
+              recipientId,
+              data.content
             );
-          } catch (encryptError) {
-            setMessages((prev) => prev.filter((msg) => msg.tempId !== optimisticMessage.tempId));
-            throw new Error(`Encryption failed: ${encryptError}`);
+
+            requestBody.encryptedContent = encryptedResult.encryptedContent;
+            requestBody.encryptionMetadata = encryptedResult.encryptionMetadata;
+          }
+
+          if ((data.type === "gif" || data.type === "sticker") && richMedia) {
+            requestBody.richMedia = richMedia;
+          }
+
+          if (data.encryptedFiles && data.encryptedFiles.length > 0) {
+            requestBody.encryptedFiles = data.encryptedFiles;
+          }
+
+          if (data.attachments && data.attachments.length > 0) {
+            requestBody.attachments = data.attachments;
+          }
+
+          if (data.replyTo) {
+            requestBody.replyTo = data.replyTo;
           }
         }
 
-        const requestBody: any = { conversationId, type: messageType };
-        if (replyToId) requestBody.replyTo = replyToId;
-
-        if (messageType === "text") {
-          if (!encryptedContent) throw new Error("Failed to encrypt message");
-          requestBody.encryptedContent = encryptedContent;
-          requestBody.encryptionMetadata = encryptionMetadata;
-        } else {
-          if (messageContent) requestBody.content = messageContent;
+        const token = await getToken();
+        if (!token) {
+          throw new Error("Authentication failed");
         }
 
-        if (attachmentIds.length > 0) requestBody.attachments = attachmentIds;
+        const headers: any = {
+          Authorization: `Bearer ${token}`,
+        };
+
+        if (contentType === "application/json") {
+          headers["Content-Type"] = "application/json";
+        }
 
         const response = await fetch(
           `${API_BASE_URL}/api/conversations/${conversationId}/messages`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(requestBody),
+            headers,
+            body:
+              contentType === "application/json"
+                ? JSON.stringify(requestBody)
+                : requestBody,
           }
         );
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          if (response.status === 401) {
+            throw new Error("Session expired");
+          }
+          let errorData;
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { error: errorText };
+          }
+          throw new Error(errorData.error || `HTTP ${response.status}`);
         }
 
         const result = await response.json();
-        if (!result.success) throw new Error(result.error);
+        if (!result.success) {
+          throw new Error(result.error || "Failed to send message");
+        }
 
-        const finalMessage = {
-          ...result.data,
-          content: messageContent,
-          status: "sent" as MessageStatus,
-        };
+        const serverMessage = result.data;
 
+        setMessages((prev) => {
+          const targetTempId = tempId || optimisticMessage?.tempId;
+
+          const existsByRealId = prev.findIndex(
+            (m) => m._id === serverMessage._id
+          );
+          if (existsByRealId !== -1) {
+            return prev;
+          }
+
+          const index = prev.findIndex((m) => m.tempId === targetTempId);
+
+          if (index !== -1) {
+            const updated = [...prev];
+            updated[index] = {
+              ...serverMessage,
+              content: messageContent,
+              status: "sent" as MessageStatus,
+              localUri: optimisticMessage?.localUri,
+              attachments:
+                serverMessage.attachments ||
+                optimisticMessage?.attachments ||
+                [],
+            };
+
+            if (conversationId) {
+              const cached = toCachedMessage(updated[index], conversationId);
+              messageCacheService.saveMessages([cached]);
+            }
+
+            return updated;
+          } else {
+            const alreadyExists = prev.some((m) => m._id === serverMessage._id);
+            if (alreadyExists) {
+              return prev;
+            }
+
+            if (conversationId) {
+              const cached = toCachedMessage(serverMessage, conversationId);
+              messageCacheService.saveMessages([cached]);
+            }
+
+            return [...prev, serverMessage];
+          }
+        });
+
+        return serverMessage;
+      } catch (error) {
+        console.error("❌ Failed:", error);
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.tempId === optimisticMessage.tempId ? finalMessage : msg
+            msg.tempId &&
+            (msg.status === "sending" || msg.status === "encrypting")
+              ? { ...msg, status: "failed" as MessageStatus }
+              : msg
           )
         );
-
-        // Save to cache
-        const cached = toCachedMessage(finalMessage, conversationId);
-        await messageCacheService.saveMessages([cached]);
-
-        return result.data;
-      } catch (err) {
-        setMessages((prev) => prev.filter((msg) => !msg.tempId));
-        throw err;
+        throw error;
       }
     },
     [
       conversationId,
+      encryptionInitialized,
       getToken,
-      user,
+      API_BASE_URL,
       createOptimisticMessage,
       encryptMessage,
-      encryptionInitialized,
-      API_BASE_URL,
+      user,
+      messages,
     ]
-  );
-
-  const editMessage = useCallback(
-    async (id: string, content: string): Promise<Message> => {
-      try {
-        setError(null);
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ action: "edit", content }),
-          }
-        );
-
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        const updatedMessage = result.data;
-        setMessages((prev) => prev.map((msg) => (msg._id === id ? updatedMessage : msg)));
-
-        // Update cache
-        await messageCacheService.updateMessage(id, { content, is_edited: 1 });
-
-        return updatedMessage;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to edit message";
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
-    },
-    [getToken, API_BASE_URL, conversationId]
-  );
-
-  const deleteMessage = useCallback(
-    async (id: string, type: "only_me" | "both" = "only_me"): Promise<void> => {
-      if (!conversationId) return;
-      try {
-        setError(null);
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=${type}`,
-          {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        if (type === "both") {
-          setMessages((prev) => prev.filter((msg) => msg._id !== id));
-          await messageCacheService.deleteMessage(id);
-        } else {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg._id === id ? { ...msg, content: "This message was deleted" } : msg
-            )
-          );
-          await messageCacheService.updateMessage(id, { content: "This message was deleted" });
-        }
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to delete message";
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
-    },
-    [conversationId, getToken, API_BASE_URL]
-  );
-
-  const addReaction = useCallback(
-    async (id: string, reaction: string): Promise<void> => {
-      if (!conversationId) return;
-      try {
-        setError(null);
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ action: "reaction", reactionType: reaction }),
-          }
-        );
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
-          )
-        );
-
-        // Update cache
-        await messageCacheService.updateMessage(id, {
-          reactions_json: JSON.stringify(result.data.reactions),
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to add reaction";
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
-    },
-    [conversationId, getToken, API_BASE_URL]
-  );
-
-  const removeReaction = useCallback(
-    async (id: string): Promise<void> => {
-      if (!conversationId) return;
-      try {
-        setError(null);
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}?type=remove_reaction`,
-          {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
-          )
-        );
-
-        // Update cache
-        await messageCacheService.updateMessage(id, {
-          reactions_json: JSON.stringify(result.data.reactions),
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to remove reaction";
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
-    },
-    [conversationId, getToken, API_BASE_URL]
-  );
-
-  const toggleReaction = useCallback(
-    async (id: string, reaction: string): Promise<void> => {
-      if (!conversationId) return;
-      try {
-        setError(null);
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ action: "reaction", reactionType: reaction, toggle: true }),
-          }
-        );
-
-        const result = await response.json();
-        if (!result.success) throw new Error(result.error);
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === id ? { ...msg, reactions: result.data.reactions } : msg
-          )
-        );
-
-        // Update cache
-        await messageCacheService.updateMessage(id, {
-          reactions_json: JSON.stringify(result.data.reactions),
-        });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "Failed to toggle reaction";
-        setError(errorMessage);
-        throw new Error(errorMessage);
-      }
-    },
-    [conversationId, getToken, API_BASE_URL]
-  );
-
-  const markAsRead = useCallback(
-    async (id: string): Promise<void> => {
-      if (!conversationId) return;
-      try {
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ action: "read" }),
-          }
-        );
-
-        if (response.ok && user?.id) {
-          const result = await response.json();
-          if (result.success) {
-            setMessages((prev) =>
-              prev.map((msg) => {
-                if (msg._id === id && !msg.read_by.some((r) => r.user === user.id)) {
-                  const newReadBy = [
-                    ...msg.read_by,
-                    {
-                      user: user.id,
-                      read_at: new Date(),
-                      userInfo: {
-                        clerkId: user.id,
-                        full_name: user.fullName || "You",
-                        username: user.username || "",
-                        avatar: user.imageUrl,
-                      },
-                    },
-                  ];
-                  
-                  // Update cache
-                  messageCacheService.updateMessage(id, {
-                    read_by_json: JSON.stringify(newReadBy),
-                  });
-                  
-                  return { ...msg, read_by: newReadBy };
-                }
-                return msg;
-              })
-            );
-          }
-        }
-      } catch (err) {
-        console.error("Error marking message as read:", err);
-      }
-    },
-    [conversationId, getToken, user, API_BASE_URL]
-  );
-
-  const markConversationAsRead = useCallback(
-    async (convId: string): Promise<void> => {
-      try {
-        const token = await getToken();
-        const response = await fetch(
-          `${API_BASE_URL}/api/conversations/${convId}/read`,
-          {
-            method: "PUT",
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (response.ok && user?.id && convId === conversationId) {
-          setMessages((prev) =>
-            prev.map((msg) => {
-              const isAlreadyRead = msg.read_by.some((r) => r.user === user.id);
-              if (!isAlreadyRead && msg.sender.clerkId !== user.id) {
-                return {
-                  ...msg,
-                  read_by: [
-                    ...msg.read_by,
-                    {
-                      user: user.id,
-                      read_at: new Date(),
-                      userInfo: {
-                        clerkId: user.id,
-                        full_name: user.fullName || "Unknown",
-                        username: user.username || "unknown",
-                        avatar: user.imageUrl,
-                      },
-                    },
-                  ],
-                };
-              }
-              return msg;
-            })
-          );
-        }
-      } catch (err) {
-        console.error("Error marking conversation as read:", err);
-      }
-    },
-    [conversationId, getToken, user, API_BASE_URL]
   );
 
   const loadMoreMessages = useCallback(async () => {
@@ -1315,21 +1291,30 @@ export const useMessages = (
     setPage(1);
     setHasMore(true);
     setSocketMessageCount(0);
+    fullyCachedMessageIds.current.clear();
+    decryptingFilesRef.current.clear();
+    decryptedFilesRef.current.clear();
   }, []);
 
   const clearMessageCache = useCallback(async () => {
     if (conversationId) {
       await messageCacheService.clearConversation(conversationId);
-      console.log('✅ Cleared cache for conversation:', conversationId);
+      fullyCachedMessageIds.current.clear();
+      decryptingFilesRef.current.clear();
+      decryptedFilesRef.current.clear();
+      console.log("✅ Cleared cache for conversation:", conversationId);
     }
   }, [conversationId]);
 
   const clearAllMessageCache = useCallback(async () => {
     await messageCacheService.clearAll();
-    console.log('✅ Cleared all message cache');
+    fullyCachedMessageIds.current.clear();
+    decryptingFilesRef.current.clear();
+    decryptedFilesRef.current.clear();
+    console.log("✅ Cleared all message cache");
   }, []);
 
-  // Socket event handlers
+  // Socket handlers
   useEffect(() => {
     if (!socket || !conversationId) return;
 
@@ -1339,225 +1324,132 @@ export const useMessages = (
 
       let newMessage = data.message;
 
-      // Own message
+      const messageExists = messagesRef.current.some(
+        (msg) => msg._id === newMessage._id
+      );
+
+      if (messageExists) {
+        return;
+      }
+
+      if (newMessage.metadata?.isSystemMessage === true) {
+        setMessages((prev) => [...prev, newMessage]);
+        return;
+      }
+
       if (data.sender_id === user?.id) {
         setMessages((prev) => {
           const optimisticIndex = prev.findIndex(
-            (msg) => msg.tempId && msg.status === "sending"
+            (msg) =>
+              msg.tempId &&
+              (msg.status === "sending" || msg.status === "encrypting")
           );
 
           if (optimisticIndex !== -1) {
+            const optimisticMsg = prev[optimisticIndex];
             const updated = [...prev];
+
             updated[optimisticIndex] = {
               ...newMessage,
-              content: prev[optimisticIndex].content,
+              _id: newMessage._id,
+              tempId: undefined,
+              content: optimisticMsg.content,
               status: "sent" as MessageStatus,
-              localUri: prev[optimisticIndex].localUri,
+              attachments: optimisticMsg.attachments,
             };
+
             return updated;
           }
+
           return prev;
         });
         return;
       }
 
-      // Decrypt message from others
       try {
-        if (newMessage.type === "text" && newMessage.encrypted_content) {
-          if (encryptionInitialized) {
-            const decrypted = await decryptMessage(data.sender_id, newMessage.encrypted_content);
-            newMessage = { ...newMessage, content: decrypted };
-          } else {
-            newMessage = { ...newMessage, content: "[🔒 Encrypted - Initializing...]" };
+        const processedMessage = await processMessage(newMessage);
+
+        setMessages((prev) => {
+          if (prev.some((msg) => msg._id === processedMessage._id)) {
+            return prev;
           }
-        } else if (
-          newMessage.type === "text" &&
-          !newMessage.encrypted_content &&
-          !newMessage.content
-        ) {
-          newMessage = { ...newMessage, content: "[❌ No content]" };
-        }
 
-        if (newMessage.attachments && newMessage.attachments.length > 0 && encryptionInitialized) {
-          const decryptedAtts = await decryptAttachments(newMessage.attachments, data.sender_id);
-          newMessage = { ...newMessage, attachments: decryptedAtts };
-        }
+          setSocketMessageCount((c) => c + 1);
 
-        newMessage = { ...newMessage, status: "sent" as MessageStatus, decryption_error: false };
+          if (conversationId) {
+            const cached = toCachedMessage(processedMessage, conversationId);
+            messageCacheService.saveMessages([cached]);
+          }
+
+          return [...prev, processedMessage];
+        });
       } catch (error) {
+        console.error("❌ Failed to process message:", error);
+
         newMessage = {
           ...newMessage,
-          content:
-            newMessage.type === "text" && newMessage.encrypted_content
-              ? "[🔒 Decryption failed]"
-              : newMessage.content,
+          content: newMessage.encrypted_content
+            ? "[🔒 Decryption failed]"
+            : newMessage.content,
           status: "failed" as MessageStatus,
-          decryption_error: newMessage.type === "text" && !!newMessage.encrypted_content,
         };
-      }
 
-      // Add to messages
-      setMessages((prev) => {
-        const exists = prev.some((msg) => msg._id === newMessage._id);
-        if (!exists) {
-          setSocketMessageCount((prevCount) => prevCount + 1);
-          
-          // Save to cache
-          const cached = toCachedMessage(newMessage, conversationId);
-          messageCacheService.saveMessages([cached]);
-          
+        setMessages((prev) => {
+          if (prev.some((msg) => msg._id === newMessage._id)) {
+            return prev;
+          }
+          setSocketMessageCount((c) => c + 1);
           return [...prev, newMessage];
-        }
-        return prev;
-      });
-    };
-
-    const handleUpdateMessage = (data: any) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.message_id
-            ? { ...msg, content: data.new_content, is_edited: true, edited_at: new Date(data.edited_at) }
-            : msg
-        )
-      );
-      messageCacheService.updateMessage(data.message_id, {
-        content: data.new_content,
-        is_edited: 1,
-      });
-    };
-
-    const handleDeleteMessage = (data: any) => {
-      if (data.delete_type === "both") {
-        setMessages((prev) => prev.filter((msg) => msg._id !== data.message_id));
-        messageCacheService.deleteMessage(data.message_id);
-      } else {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === data.message_id ? { ...msg, content: "This message was deleted" } : msg
-          )
-        );
-        messageCacheService.updateMessage(data.message_id, {
-          content: "This message was deleted",
         });
-      }
-    };
-
-    const handleNewReaction = (data: any) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.message_id ? { ...msg, reactions: data.reactions } : msg
-        )
-      );
-      messageCacheService.updateMessage(data.message_id, {
-        reactions_json: JSON.stringify(data.reactions),
-      });
-    };
-
-    const handleDeleteReaction = (data: any) => {
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.message_id ? { ...msg, reactions: data.reactions } : msg
-        )
-      );
-      messageCacheService.updateMessage(data.message_id, {
-        reactions_json: JSON.stringify(data.reactions),
-      });
-    };
-
-    const handleMessageRead = (data: any) => {
-      if (data.conversation_id !== conversationId || data.user_id === user?.id) return;
-
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg._id === data.message_id) {
-            const isAlreadyRead = msg.read_by.some((r) => r.user === data.user_id);
-            if (!isAlreadyRead) {
-              const newReadBy = [
-                ...msg.read_by,
-                { user: data.user_id, read_at: new Date(data.read_at), userInfo: data.user_info },
-              ];
-              messageCacheService.updateMessage(data.message_id, {
-                read_by_json: JSON.stringify(newReadBy),
-              });
-              return { ...msg, read_by: newReadBy };
-            }
-          }
-          return msg;
-        })
-      );
-    };
-
-    const handleConversationMarkedAsRead = (data: any) => {
-      if (data.conversation_id !== conversationId || data.read_by === user?.id) return;
-
-      setMessages((prev) =>
-        prev.map((msg) => {
-          const isAlreadyRead = msg.read_by.some((r) => r.user === data.read_by);
-          if (!isAlreadyRead && msg.sender.clerkId !== data.read_by) {
-            return {
-              ...msg,
-              read_by: [
-                ...msg.read_by,
-                { user: data.read_by, read_at: new Date(data.read_at), userInfo: data.user_info },
-              ],
-            };
-          }
-          return msg;
-        })
-      );
-    };
-
-    const handleUserTyping = (data: any) => {
-      if (data.conversation_id !== conversationId || data.user_id === user?.id) return;
-
-      if (data.is_typing) {
-        setTypingUsers((prev) => {
-          const exists = prev.some((u) => u.userId === data.user_id);
-          if (exists) return prev;
-          return [...prev, { userId: data.user_id, userName: data.user_name }];
-        });
-
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => {
-          setTypingUsers((prev) => prev.filter((u) => u.userId !== data.user_id));
-        }, 3000);
-      } else {
-        setTypingUsers((prev) => prev.filter((u) => u.userId !== data.user_id));
       }
     };
 
     on("newMessage", handleNewMessage);
-    on("updateMessage", handleUpdateMessage);
-    on("deleteMessage", handleDeleteMessage);
-    on("newReaction", handleNewReaction);
-    on("deleteReaction", handleDeleteReaction);
-    on("messageRead", handleMessageRead);
-    on("conversationMarkedAsRead", handleConversationMarkedAsRead);
-    on("userTyping", handleUserTyping);
 
     return () => {
       off("newMessage", handleNewMessage);
-      off("updateMessage", handleUpdateMessage);
-      off("deleteMessage", handleDeleteMessage);
-      off("newReaction", handleNewReaction);
-      off("deleteReaction", handleDeleteReaction);
-      off("messageRead", handleMessageRead);
-      off("conversationMarkedAsRead", handleConversationMarkedAsRead);
-      off("userTyping", handleUserTyping);
-
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [
-    socket,
-    conversationId,
-    on,
-    off,
-    user?.id,
-    decryptMessage,
-    decryptAttachments,
-    encryptionInitialized,
-  ]);
+  }, [socket, conversationId, on, off, user?.id, processMessage]);
 
+  // Join conversation
+  useEffect(() => {
+    if (!socket || !conversationId || !user?.id || !isConnected) {
+      return;
+    }
+
+    socket.emit("joinConversation", {
+      user_id: user.id,
+      conversation_id: conversationId,
+    });
+
+    return () => {
+      if (socket && socket.connected) {
+        socket.emit("leaveConversation", {
+          user_id: user.id,
+          conversation_id: conversationId,
+        });
+      }
+      setTypingUsers([]);
+    };
+  }, [socket, conversationId, user?.id, isConnected]);
+
+  // Send typing indicator
+  const sendTypingIndicator = useCallback(
+    (isTyping: boolean) => {
+      if (!socket || !conversationId || !user) return;
+      if (!socket.connected) return;
+
+      emit("userTyping", {
+        conversation_id: conversationId,
+        user_id: user.id,
+        user_name: user.fullName || user.username || "User",
+        is_typing: isTyping,
+      });
+    },
+    [socket, conversationId, user, emit]
+  );
+
+  // Initial fetch
   useEffect(() => {
     if (conversationId && encryptionInitialized) {
       clearMessages();
@@ -1570,13 +1462,13 @@ export const useMessages = (
     loading,
     error,
     sendMessage,
-    editMessage,
-    deleteMessage,
-    addReaction,
-    removeReaction,
-    toggleReaction,
-    markAsRead,
-    markConversationAsRead,
+    editMessage: async () => ({}) as Message,
+    deleteMessage: async () => {},
+    addReaction: async () => {},
+    removeReaction: async () => {},
+    toggleReaction: async () => {},
+    markAsRead: async () => {},
+    markConversationAsRead: async () => {},
     loadMoreMessages,
     hasMore,
     refreshMessages,

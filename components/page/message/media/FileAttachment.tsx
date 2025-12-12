@@ -1,5 +1,5 @@
 // components/page/message/media/FileAttachment.tsx
-// Redesigned with cleaner compact list style
+// ✅ FIXED: Added onLongPress support for MessageActionsMenu
 
 import React from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
@@ -14,13 +14,15 @@ interface FileAttachmentProps {
   isOwnMessage: boolean;
   isSending: boolean;
   isDark: boolean;
+  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from parent
 }
 
 export const FileAttachment: React.FC<FileAttachmentProps> = ({ 
   files, 
   isOwnMessage, 
   isSending, 
-  isDark 
+  isDark,
+  onLongPress, // ✅ NEW
 }) => {
   const getFileUri = (attachment: any): string | null => {
     if (attachment.decryptedUri) return attachment.decryptedUri;
@@ -87,6 +89,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
           <TouchableOpacity 
             key={att._id || index}
             onPress={() => fileUri && !hasError && handleDownload(att)}
+            onLongPress={onLongPress} // ✅ FIXED: Add long press
+            delayLongPress={300} // ✅ FIXED: Add delay
             disabled={isSending || !fileUri || hasError}
             activeOpacity={0.7}
             style={{ width: GALLERY_WIDTH }}

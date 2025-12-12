@@ -1,10 +1,17 @@
-// components/page/message/MessageInput.tsx (UPDATED - Simplified encryption)
-/* eslint-disable import/namespace */
+// components/page/message/MessageInput.tsx - TEXT TOXIC ALLOWED, IMAGE TOXIC BLOCKED
+
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useOnDeviceAI } from "@/hooks/ai/useOnDeviceAI";
+import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
+import type { RichMediaDTO } from "@/hooks/message/useGiphy";
+import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import axios from "axios";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,13 +23,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
-import { EncryptionProgress } from "@/lib/encryption/ChunkedEncryptionService";
-import { useAuth } from "@clerk/clerk-expo";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { GiphyPicker } from "./GiphyPicker";
-import type { RichMediaDTO } from "@/hooks/message/useGiphy";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface AttachmentPreview {
   id: string;
@@ -43,6 +46,36 @@ interface MessageInputProps {
   disabled?: boolean;
 }
 
+function getMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+  };
+  return mimeTypes[ext || ""] || "application/octet-stream";
+}
+
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 const MessageInput: React.FC<MessageInputProps> = ({
   conversationId,
   recipientId,
@@ -58,27 +91,59 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [showGiphyPicker, setShowGiphyPicker] = useState(false);
-  
-  // Encryption progress state
-  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgress | null>(null);
-  const [currentFileIndex, setCurrentFileIndex] = useState(0);
-  const [totalFiles, setTotalFiles] = useState(0);
-  
+
+  const [uploadProgress, setUploadProgress] = useState<{
+    phase: "thumbnail" | "encrypting" | "uploading" | "finalizing";
+    percentage: number;
+    chunksEncrypted: number;
+    chunksUploaded: number;
+    totalChunks: number;
+    currentFile: number;
+    totalFiles: number;
+  } | null>(null);
+
+  const [emotionAnalysis, setEmotionAnalysis] = useState<any>(null);
+  const [analyzingImage, setAnalyzingImage] = useState(false);
+
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
   const isDark = actualTheme === "dark";
-  
+
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
   const isSendingRef = useRef(false);
 
-  const { 
-    encryptFile, 
-    isReady: encryptionReady,
-    resetProgress 
-  } = useChunkedFileEncryption();
-  
+  const { encryptAndUploadFile, isReady: encryptionReady } =
+    useChunkedFileEncryption();
+
   const { getToken } = useAuth();
+
+  const {
+    isReady: aiReady,
+    analyzeTextMessage,
+    checkImageToxicity,
+  } = useOnDeviceAI();
+
+  // ============================================
+  // ✅ Analyze text while typing (SILENT - no warnings)
+  // ============================================
+  const analyzeWhileTyping = useCallback(
+    debounce(async (text: string) => {
+      if (!aiReady || text.trim().length < 10) {
+        setEmotionAnalysis(null);
+        return;
+      }
+
+      try {
+        const analysis = await analyzeTextMessage(text);
+        setEmotionAnalysis(analysis);
+        // ✅ NO WARNINGS - just show emotion
+      } catch (error) {
+        console.error("❌ [AI] Analysis error:", error);
+      }
+    }, 2000),
+    [aiReady, analyzeTextMessage]
+  );
 
   const handleTyping = (text: string) => {
     setMessage(text);
@@ -100,6 +165,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
         onTyping(false);
       }
     }, 2000);
+
+    analyzeWhileTyping(text);
   };
 
   useEffect(() => {
@@ -113,9 +180,55 @@ const MessageInput: React.FC<MessageInputProps> = ({
     };
   }, [onTyping]);
 
-  const handleGiphySelect = async (richMedia: RichMediaDTO, type: "gif" | "sticker") => {
-    console.log(`✨ Selected ${type}:`, richMedia.title);
+  // ============================================
+  // ✅ Check images for toxicity - BLOCK IF TOXIC
+  // ============================================
+  const checkImagesBeforeSend = async (
+    attachments: AttachmentPreview[]
+  ): Promise<boolean> => {
+    const images = attachments.filter((att) => att.type === "image");
 
+    if (images.length === 0 || !aiReady) {
+      return true;
+    }
+
+    try {
+      console.log(`🖼️ [AI] Checking ${images.length} images for toxicity...`);
+      setAnalyzingImage(true);
+
+      for (const img of images) {
+        const toxicityCheck = await checkImageToxicity(img.uri);
+
+        if (toxicityCheck.isToxic) {
+          console.log(`⚠️ [AI] Image "${img.name}" is TOXIC - BLOCKING`);
+
+          Alert.alert(
+            "⚠️ " + t("message.ai.imageToxicTitle"),
+            t("message.ai.imageToxicMessage", {
+              categories: toxicityCheck.categories.join(", "),
+            }),
+            [{ text: t("ok") }]
+          );
+
+          setAnalyzingImage(false);
+          return false; // ✅ BLOCK IMAGE
+        }
+      }
+
+      console.log("✅ [AI] All images are safe");
+      setAnalyzingImage(false);
+      return true;
+    } catch (error) {
+      console.error("❌ [AI] Image check error:", error);
+      setAnalyzingImage(false);
+      return true; // ✅ Fallback: allow if error
+    }
+  };
+
+  const handleGiphySelect = async (
+    richMedia: RichMediaDTO,
+    type: "gif" | "sticker"
+  ) => {
     const messageContent = message.trim();
     const currentReplyTo = replyTo?._id;
 
@@ -136,15 +249,18 @@ const MessageInput: React.FC<MessageInputProps> = ({
       console.log(`✅ ${type} message sent`);
     } catch (error: any) {
       console.error(`❌ Failed to send ${type}:`, error);
-      Alert.alert(t('error'), error.message || `Failed to send ${type}`);
+      Alert.alert(t("error"), error.message || `Failed to send ${type}`);
     }
   };
 
+  // ============================================
+  // ✅ HANDLE SEND - TEXT TOXIC ALLOWED, IMAGE TOXIC BLOCKED
+  // ============================================
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
-    
-    if (isSendingRef.current || uploadingFiles) {
-      console.log("⏭️ Already sending, skipping...");
+
+    if (isSendingRef.current || uploadingFiles || analyzingImage) {
+      console.log("⏭️ Already processing, skipping...");
       return;
     }
 
@@ -161,98 +277,134 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const currentAttachments = [...attachments];
     const currentReplyTo = replyTo?._id;
 
+    // ✅ STEP 1: ONLY Check images for toxicity (BLOCK IF TOXIC)
+    const imagesAreSafe = await checkImagesBeforeSend(currentAttachments);
+    if (!imagesAreSafe) {
+      console.log("🚫 [AI] Images contain toxic content - BLOCKED!");
+      return; // ✅ STOP - don't send
+    }
+
+    // ✅ STEP 2: Analyze text for emotion ONLY (no blocking, no warnings)
+    let emotionData: any = null;
+    if (messageContent && aiReady) {
+      try {
+        const analysis = await analyzeTextMessage(messageContent);
+        emotionData = analysis;
+        // ✅ NO BLOCKING, NO WARNINGS - just save emotion data
+      } catch (error) {
+        console.error("❌ [AI] Text analysis failed:", error);
+      }
+    }
+
+    // ✅ STEP 3: Clear UI IMMEDIATELY
     setMessage("");
     setAttachments([]);
+    setEmotionAnalysis(null);
     if (onCancelReply) {
       onCancelReply();
     }
 
     try {
       isSendingRef.current = true;
-      const shouldEncryptFiles = encryptionReady && recipientId && currentAttachments.length > 0;
+      setUploadingFiles(true);
+
+      const shouldEncryptFiles =
+        encryptionReady && recipientId && currentAttachments.length > 0;
 
       if (shouldEncryptFiles) {
-        console.log('🔒 Encrypting files before sending...');
-        setUploadingFiles(true);
-        setTotalFiles(currentAttachments.length);
-        setEncryptionProgress(null);
+        console.log("🚀 [SEND] Starting STREAMING encrypt + upload...");
+
+        const firstAttachment = currentAttachments[0];
+        let messageType: "image" | "video" | "audio" | "file" = "file";
+
+        if (firstAttachment.type === "image") messageType = "image";
+        else if (firstAttachment.type === "video") messageType = "video";
+        else if (firstAttachment.type === "audio") messageType = "audio";
+
+        const localUris = currentAttachments.map((att) => att.uri);
+        const tempId = `temp_${Date.now()}_${Math.random()}`;
+
+        onSendMessage({
+          tempId,
+          type: messageType,
+          content: messageContent || undefined,
+          localUris: localUris,
+          replyTo: currentReplyTo,
+          isOptimistic: true,
+        });
+
+        console.log("✅ [SEND] Optimistic message created locally");
 
         const encryptedFiles: any[] = [];
-        const localUris: string[] = [];
+        const totalFiles = currentAttachments.length;
 
         for (let i = 0; i < currentAttachments.length; i++) {
           const att = currentAttachments[i];
-          setCurrentFileIndex(i + 1);
-          
-          try {
-            console.log(`🔒 Encrypting file ${i + 1}/${currentAttachments.length}: ${att.name}`);
 
-            const result = await encryptFile(
-              att.uri,
-              att.name,
-              recipientId,
-              {
-                onProgress: (progress) => {
-                  setEncryptionProgress(progress);
-                },
-              }
-            );
+          console.log(`🔒 [ENCRYPT] File ${i + 1}/${totalFiles}: ${att.name}`);
 
-            // ✅ Now result always has same format (no more chunkedResult)
-            encryptedFiles.push({
-              encryptedBase64: result.encryptedBase64,
-              originalFileName: att.name,
-              originalFileType: att.mimeType || result.metadata.file_type,
-              encryptionMetadata: {
-                iv: result.metadata.iv,
-                authTag: result.metadata.authTag,
-                original_size: result.metadata.original_size,
-                encrypted_size: result.metadata.encrypted_size,
+          const result = await encryptAndUploadFile(
+            att.uri,
+            att.name,
+            conversationId!,
+            recipientId,
+            {
+              onProgress: (progress) => {
+                setUploadProgress({
+                  phase: progress.phase,
+                  percentage: progress.percentage,
+                  chunksEncrypted: progress.chunksEncrypted || 0,
+                  chunksUploaded: progress.chunksUploaded || 0,
+                  totalChunks: progress.totalChunks || 1,
+                  currentFile: i + 1,
+                  totalFiles,
+                });
               },
-            });
+            }
+          );
 
-            localUris.push(att.uri);
-            console.log('✅ File encrypted:', att.name, result.isLargeFile ? '(large file)' : '(small file)');
-          } catch (error: any) {
-            console.error('❌ Failed to encrypt file:', att.name, error);
-            setUploadingFiles(false);
-            setEncryptionProgress(null);
-            isSendingRef.current = false;
-            
-            Alert.alert(
-              t('error'), 
-              `Không thể mã hóa ${att.name}: ${error.message || 'Unknown error'}`
-            );
-            return;
-          }
+          encryptedFiles.push({
+            encryptedFileId: result.fileId,
+            isLargeFile: true,
+            originalFileName: att.name,
+            originalFileType: att.mimeType || getMimeType(att.name),
+            encryptionMetadata: {
+              iv: result.masterIv,
+              authTag: result.masterAuthTag,
+              original_size: result.originalSize,
+              encrypted_size: result.encryptedSize,
+              chunks: result.chunks,
+              totalChunks: result.totalChunks,
+              fileId: result.fileId,
+            },
+          });
+
+          console.log(`✅ [UPLOAD] File uploaded: ${att.name}`);
         }
 
+        setUploadProgress(null);
+
+        onSendMessage({
+          content: messageContent || undefined,
+          type: messageType,
+          encryptedFiles: encryptedFiles,
+          replyTo: currentReplyTo,
+          tempId: tempId,
+        });
+
+        console.log("✅ [SEND] Message sent with streaming encrypted files");
         setUploadingFiles(false);
-        setEncryptionProgress(null);
-        resetProgress();
+        isSendingRef.current = false;
 
-        if (messageContent || encryptedFiles.length > 0) {
-          const messageData = {
-            content: messageContent || undefined,
-            type: 'file' as const,
-            encryptedFiles: encryptedFiles,
-            localUris: localUris,
-            replyTo: currentReplyTo,
-          };
-
-          onSendMessage(messageData);
+        // ✅ Save emotion to backend (BACKGROUND)
+        if (messageContent && conversationId && emotionData) {
+          saveEmotionInBackground(messageContent, conversationId, emotionData);
         }
 
-        isSendingRef.current = false;
         return;
       }
 
-      // Fallback: Non-encrypted file handling
-      const mediaFiles = currentAttachments.filter((att) =>
-        ["image", "video", "audio"].includes(att.type)
-      );
-      const documentFiles = currentAttachments.filter((att) => att.type === "file");
-
+      // Handle text-only or non-encrypted files
       if (currentAttachments.length === 0 && messageContent) {
         const textData = {
           content: messageContent,
@@ -260,28 +412,37 @@ const MessageInput: React.FC<MessageInputProps> = ({
           replyTo: currentReplyTo,
         };
         onSendMessage(textData);
-      } else if (mediaFiles.length > 0) {
-        const mediaFormData = new FormData();
-        const firstMediaType = mediaFiles[0].type;
-        mediaFormData.append("type", firstMediaType);
+      } else if (currentAttachments.length > 0) {
+        const mediaFiles = currentAttachments.filter((att) =>
+          ["image", "video", "audio"].includes(att.type)
+        );
+        const documentFiles = currentAttachments.filter(
+          (att) => att.type === "file"
+        );
 
-        if (messageContent) {
-          mediaFormData.append("content", messageContent);
+        if (mediaFiles.length > 0) {
+          const mediaFormData = new FormData();
+          const firstMediaType = mediaFiles[0].type;
+          mediaFormData.append("type", firstMediaType);
+
+          if (messageContent) {
+            mediaFormData.append("content", messageContent);
+          }
+
+          if (currentReplyTo) {
+            mediaFormData.append("replyTo", currentReplyTo);
+          }
+
+          mediaFiles.forEach((att) => {
+            mediaFormData.append("files", {
+              uri: att.uri,
+              type: att.mimeType || "application/octet-stream",
+              name: att.name,
+            } as any);
+          });
+
+          onSendMessage(mediaFormData);
         }
-
-        if (currentReplyTo) {
-          mediaFormData.append("replyTo", currentReplyTo);
-        }
-
-        mediaFiles.forEach((att) => {
-          mediaFormData.append("files", {
-            uri: att.uri,
-            type: att.mimeType || "application/octet-stream",
-            name: att.name,
-          } as any);
-        });
-
-        onSendMessage(mediaFormData);
 
         if (documentFiles.length > 0) {
           const docFormData = new FormData();
@@ -289,6 +450,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           if (messageContent) {
             docFormData.append("content", messageContent);
+          }
+
+          if (currentReplyTo) {
+            docFormData.append("replyTo", currentReplyTo);
           }
 
           documentFiles.forEach((att) => {
@@ -301,46 +466,78 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
           onSendMessage(docFormData);
         }
-      } else if (documentFiles.length > 0) {
-        const docFormData = new FormData();
-        docFormData.append("type", "file");
-
-        if (messageContent) {
-          docFormData.append("content", messageContent);
-        }
-
-        if (currentReplyTo) {
-          docFormData.append("replyTo", currentReplyTo);
-        }
-
-        documentFiles.forEach((att) => {
-          docFormData.append("files", {
-            uri: att.uri,
-            type: att.mimeType || "application/octet-stream",
-            name: att.name,
-          } as any);
-        });
-
-        onSendMessage(docFormData);
       }
-      
-      isSendingRef.current = false;
-    } catch (error: any) {
-      console.error("Send error:", error);
+
       setUploadingFiles(false);
-      setEncryptionProgress(null);
       isSendingRef.current = false;
-      Alert.alert(t('error'), error.message || t('message.failed'));
+
+      // ✅ Save emotion to backend (BACKGROUND)
+      if (messageContent && conversationId && emotionData) {
+        saveEmotionInBackground(messageContent, conversationId, emotionData);
+      }
+    } catch (error: any) {
+      console.error("❌ [SEND] Error:", error);
+      setUploadingFiles(false);
+      setUploadProgress(null);
+      isSendingRef.current = false;
+      Alert.alert(t("error"), error.message || t("message.failed"));
     }
   };
 
+  // ============================================
+  // ✅ Save emotion to backend (OPTIMIZED)
+  // ============================================
+  const saveEmotionInBackground = async (
+    text: string,
+    convId: string,
+    analysis?: any
+  ) => {
+    setTimeout(async () => {
+      try {
+        console.log("🔍 [Background] Saving emotion to backend...");
+
+        let emotionData = analysis;
+
+        if (!emotionData) {
+          emotionData = await analyzeTextMessage(text);
+        }
+
+        const token = await getToken();
+        await axios.post(
+          `${API_URL}/api/emotion/save`,
+          {
+            conversationId: convId,
+            textAnalyzed: text,
+            emotionScores: emotionData.scores,
+            dominantEmotion: emotionData.emotion,
+            confidenceScore: emotionData.confidence,
+            context: "message",
+            isToxic: emotionData.isToxic,
+            toxicityScore: emotionData.toxicityScore,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        console.log("✅ [Background] Emotion saved to backend");
+      } catch (error) {
+        console.error("❌ [Background] Failed to save emotion:", error);
+      }
+    }, 0);
+  };
+
   const handleImagePicker = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
       Alert.alert(
-        t('message.attachment.permissionRequired'),
-        t('message.attachment.mediaPermission')
+        t("message.attachment.permissionRequired"),
+        t("message.attachment.mediaPermission")
       );
       return;
     }
@@ -390,7 +587,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
         setAttachments([...attachments, ...newAttachments]);
       }
     } catch (error) {
-      Alert.alert(t('error'), t('message.attachment.pickFailed'));
+      Alert.alert(t("error"), t("message.attachment.pickFailed"));
     }
   };
 
@@ -399,60 +596,64 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
     if (!permissionResult.granted) {
       Alert.alert(
-        t('message.attachment.permissionRequired'),
-        t('message.attachment.cameraPermission')
+        t("message.attachment.permissionRequired"),
+        t("message.attachment.cameraPermission")
       );
       return;
     }
 
-    Alert.alert(t('message.attachment.camera'), t('message.attachment.camera'), [
-      {
-        text: t('message.attachment.takePhoto'),
-        onPress: async () => {
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-            allowsEditing: true,
-          });
+    Alert.alert(
+      t("message.attachment.camera"),
+      t("message.attachment.camera"),
+      [
+        {
+          text: t("message.attachment.takePhoto"),
+          onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.8,
+              allowsEditing: true,
+            });
 
-          if (!result.canceled) {
-            const photo: AttachmentPreview = {
-              id: `${Date.now()}`,
-              uri: result.assets[0].uri,
-              type: "image",
-              name: `photo-${Date.now()}.jpg`,
-              mimeType: "image/jpeg",
-            };
-            setAttachments([...attachments, photo]);
-          }
+            if (!result.canceled) {
+              const photo: AttachmentPreview = {
+                id: `${Date.now()}`,
+                uri: result.assets[0].uri,
+                type: "image",
+                name: `photo-${Date.now()}.jpg`,
+                mimeType: "image/jpeg",
+              };
+              setAttachments([...attachments, photo]);
+            }
+          },
         },
-      },
-      {
-        text: t('message.attachment.recordVideo'),
-        onPress: async () => {
-          const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-            quality: 0.8,
-            videoMaxDuration: 60,
-          });
+        {
+          text: t("message.attachment.recordVideo"),
+          onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              quality: 0.8,
+              videoMaxDuration: 60,
+            });
 
-          if (!result.canceled) {
-            const video: AttachmentPreview = {
-              id: `${Date.now()}`,
-              uri: result.assets[0].uri,
-              type: "video",
-              name: `video-${Date.now()}.mp4`,
-              mimeType: "video/mp4",
-            };
-            setAttachments([...attachments, video]);
-          }
+            if (!result.canceled) {
+              const video: AttachmentPreview = {
+                id: `${Date.now()}`,
+                uri: result.assets[0].uri,
+                type: "video",
+                name: `video-${Date.now()}.mp4`,
+                mimeType: "video/mp4",
+              };
+              setAttachments([...attachments, video]);
+            }
+          },
         },
-      },
-      {
-        text: t('cancel'),
-        style: "cancel",
-      },
-    ]);
+        {
+          text: t("cancel"),
+          style: "cancel",
+        },
+      ]
+    );
   };
 
   const startRecording = async () => {
@@ -460,8 +661,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          t('message.attachment.permissionRequired'),
-          t('message.attachment.micPermission')
+          t("message.attachment.permissionRequired"),
+          t("message.attachment.micPermission")
         );
         return;
       }
@@ -483,8 +684,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } catch (error: any) {
       console.error("Recording error:", error);
       Alert.alert(
-        t('message.attachment.recordingError'),
-        error?.message || t('message.attachment.recordingFailed')
+        t("message.attachment.recordingError"),
+        error?.message || t("message.attachment.recordingFailed")
       );
     }
   };
@@ -520,7 +721,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       setRecording(null);
     } catch (error: any) {
       console.error("Stop recording error:", error);
-      Alert.alert(t('error'), t('message.attachment.recordingFailed'));
+      Alert.alert(t("error"), t("message.attachment.recordingFailed"));
       setRecording(null);
     }
   };
@@ -596,30 +797,114 @@ const MessageInput: React.FC<MessageInputProps> = ({
     </View>
   );
 
-  const getProgressText = () => {
-    if (!encryptionProgress) {
-      return t('message.encryption.encryptingFiles');
-    }
+  const renderUploadProgress = () => {
+    if (!uploadProgress) return null;
 
-    const { phase, percentage } = encryptionProgress;
-    
-    if (totalFiles > 1) {
-      return `Đang mã hóa ${currentFileIndex}/${totalFiles}: ${percentage.toFixed(0)}%`;
-    }
+    const {
+      phase,
+      percentage,
+      chunksEncrypted,
+      chunksUploaded,
+      totalChunks,
+      currentFile,
+      totalFiles,
+    } = uploadProgress;
+
+    let statusText = "";
+    let statusIcon = "";
 
     switch (phase) {
-      case 'reading':
-        return `Đang đọc file... ${percentage.toFixed(0)}%`;
-      case 'encrypting':
-        return `Đang mã hóa: ${percentage.toFixed(0)}%`;
-      case 'finalizing':
-        return 'Hoàn tất...';
-      default:
-        return `${percentage.toFixed(0)}%`;
+      case "thumbnail":
+        statusText = t("message.encryption.generatingThumbnail");
+        statusIcon = "🖼️";
+        break;
+      case "encrypting":
+        statusText = `${t("message.encryption.encrypting")}: ${chunksEncrypted}/${totalChunks} chunks`;
+        statusIcon = "🔒";
+        break;
+      case "uploading":
+        statusText = `${t("message.encryption.uploading")}: ${chunksUploaded}/${totalChunks} chunks`;
+        statusIcon = "📤";
+        break;
+      case "finalizing":
+        statusText = t("message.encryption.finalizing");
+        statusIcon = "✅";
+        break;
     }
+
+    if (totalFiles > 1) {
+      statusText = `${statusIcon} File ${currentFile}/${totalFiles}: ${statusText}`;
+    } else {
+      statusText = `${statusIcon} ${statusText}`;
+    }
+
+    return (
+      <View style={styles.uploadingContainer}>
+        <View style={styles.progressHeader}>
+          <ActivityIndicator size="small" color="#f97316" />
+          <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
+            {statusText}
+          </Text>
+        </View>
+        <View style={styles.progressBarContainer}>
+          <View style={styles.progressBarBackground}>
+            <View
+              style={[styles.progressBarFill, { width: `${percentage}%` }]}
+            />
+          </View>
+          <Text style={styles.progressDetail}>{percentage.toFixed(0)}%</Text>
+        </View>
+      </View>
+    );
   };
 
-  const isSendDisabled = uploadingFiles || disabled || (!message.trim() && attachments.length === 0);
+  // ✅ Render emotion indicator (NO toxicity badge for text)
+  const renderEmotionIndicator = () => {
+    if (!emotionAnalysis || !message.trim()) return null;
+
+    const emotionEmojis = {
+      joy: "😊",
+      sadness: "😢",
+      anger: "😠",
+      fear: "😨",
+      surprise: "😮",
+      love: "❤️",
+    };
+
+    const emotionColors = {
+      joy: "#10B981",
+      sadness: "#3B82F6",
+      anger: "#EF4444",
+      fear: "#8B5CF6",
+      surprise: "#F59E0B",
+      love: "#EC4899",
+    };
+
+    return (
+      <View style={styles.emotionIndicator}>
+        <Text style={{ fontSize: 16 }}>
+          {emotionEmojis[emotionAnalysis.emotion]}
+        </Text>
+        <Text
+          style={[
+            styles.emotionText,
+            { color: emotionColors[emotionAnalysis.emotion] },
+          ]}
+        >
+          {t(`emotions.${emotionAnalysis.emotion}`)}
+        </Text>
+        <Text style={[styles.emotionConfidence, isDark && styles.textGray400]}>
+          {(emotionAnalysis.confidence * 100).toFixed(0)}%
+        </Text>
+      </View>
+    );
+  };
+
+  const isSendDisabled =
+    uploadingFiles ||
+    analyzingImage ||
+    disabled ||
+    (!message.trim() && attachments.length === 0);
 
   return (
     <View
@@ -637,7 +922,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
         >
           <View style={styles.replyContent}>
             <Text style={styles.replyLabel}>
-              {t('message.reply.replyingTo', { name: replyTo.sender?.full_name })}
+              {t("message.reply.replyingTo", {
+                name: replyTo.sender?.full_name,
+              })}
             </Text>
             <Text
               style={[
@@ -667,91 +954,101 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </View>
       )}
 
-      {uploadingFiles && (
+      {analyzingImage && (
         <View style={styles.uploadingContainer}>
           <View style={styles.progressHeader}>
             <ActivityIndicator size="small" color="#f97316" />
             <Text style={[styles.uploadingText, isDark && styles.textWhite]}>
-              {getProgressText()}
+              {t("message.ai.checkingImage")}
             </Text>
           </View>
-          
-          <View style={styles.progressBarContainer}>
-            <View style={styles.progressBarBackground}>
-              <View 
-                style={[
-                  styles.progressBarFill, 
-                  { width: `${encryptionProgress?.percentage || 0}%` }
-                ]} 
-              />
-            </View>
-          </View>
-          
-          {encryptionProgress && encryptionProgress.totalBytes > 0 && (
-            <Text style={[styles.progressDetail, isDark && styles.textGray400]}>
-              {(encryptionProgress.bytesProcessed / 1024 / 1024).toFixed(1)} / {(encryptionProgress.totalBytes / 1024 / 1024).toFixed(1)} MB
-            </Text>
-          )}
         </View>
       )}
 
+      {renderUploadProgress()}
+      {renderEmotionIndicator()}
+
       <View style={styles.inputRow}>
-        <TouchableOpacity 
-          onPress={handleCamera} 
+        <TouchableOpacity
+          onPress={handleCamera}
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
-          <Ionicons 
-            name="camera" 
-            size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          <Ionicons
+            name="camera"
+            size={24}
+            color={
+              uploadingFiles || disabled || analyzingImage
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#666"
+            }
           />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={handleImagePicker} 
+        <TouchableOpacity
+          onPress={handleImagePicker}
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
-          <Ionicons 
-            name="image" 
-            size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          <Ionicons
+            name="image"
+            size={24}
+            color={
+              uploadingFiles || disabled || analyzingImage
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#666"
+            }
           />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={handleFilePicker} 
+        <TouchableOpacity
+          onPress={handleFilePicker}
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
-          <Ionicons 
-            name="attach" 
-            size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          <Ionicons
+            name="attach"
+            size={24}
+            color={
+              uploadingFiles || disabled || analyzingImage
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#666"
+            }
           />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          onPress={() => setShowGiphyPicker(true)} 
+        <TouchableOpacity
+          onPress={() => setShowGiphyPicker(true)}
           style={styles.iconButton}
-          disabled={uploadingFiles || disabled}
+          disabled={uploadingFiles || disabled || analyzingImage}
         >
-          <Ionicons 
-            name="happy-outline" 
-            size={24} 
-            color={(uploadingFiles || disabled) ? "#ccc" : (isDark ? "#fff" : "#666")} 
+          <Ionicons
+            name="happy-outline"
+            size={24}
+            color={
+              uploadingFiles || disabled || analyzingImage
+                ? "#ccc"
+                : isDark
+                  ? "#fff"
+                  : "#666"
+            }
           />
         </TouchableOpacity>
 
         <TextInput
           value={message}
           onChangeText={handleTyping}
-          placeholder={t('message.input.placeholder')}
+          placeholder={t("message.input.placeholder")}
           placeholderTextColor={isDark ? "#999" : "#666"}
           multiline
           maxLength={5000}
-          editable={!uploadingFiles && !disabled}
+          editable={!uploadingFiles && !disabled && !analyzingImage}
           style={[
             styles.textInput,
             isDark ? styles.inputDark : styles.inputLight,
@@ -765,7 +1062,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               styles.actionButton,
               isRecording ? styles.bgRed : styles.bgOrange,
             ]}
-            disabled={uploadingFiles || disabled}
+            disabled={uploadingFiles || disabled || analyzingImage}
           >
             <Ionicons
               name={isRecording ? "stop" : "mic"}
@@ -783,7 +1080,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
             ]}
             disabled={isSendDisabled}
           >
-            {uploadingFiles ? (
+            {uploadingFiles || analyzingImage ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
               <Ionicons name="send" size={20} color="white" />
@@ -806,7 +1103,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               isDark ? styles.textRed400 : styles.textRed600,
             ]}
           >
-            {t('message.input.recording')}
+            {t("message.input.recording")}
           </Text>
         </View>
       )}
@@ -924,38 +1221,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   progressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 8,
   },
   uploadingText: {
     marginLeft: 8,
     fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '500',
+    color: "#6b7280",
+    fontWeight: "500",
   },
   textWhite: {
-    color: '#ffffff',
+    color: "#ffffff",
   },
   progressBarContainer: {
     marginBottom: 4,
   },
   progressBarBackground: {
     height: 6,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: "#e5e7eb",
     borderRadius: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressBarFill: {
-    height: '100%',
-    backgroundColor: '#f97316',
+    height: "100%",
+    backgroundColor: "#f97316",
     borderRadius: 3,
   },
   progressDetail: {
     fontSize: 11,
-    color: '#9ca3af',
-    textAlign: 'center',
+    color: "#9ca3af",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  emotionIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  emotionText: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  emotionConfidence: {
+    fontSize: 11,
+    marginLeft: 6,
+    color: "#9ca3af",
   },
   inputRow: {
     flexDirection: "row",

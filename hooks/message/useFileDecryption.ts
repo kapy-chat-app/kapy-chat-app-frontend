@@ -1,14 +1,24 @@
-// hooks/message/useFileDecryption.ts - FIXED for Expo SDK 52+
-import { nativeEncryptionService } from "@/lib/encryption/NativeEncryptionService";
+// hooks/message/useFileDecryption.ts - UPDATED WITH UnifiedEncryptionService
+import { UnifiedEncryptionService } from "@/lib/encryption/UnifiedEncryptionService";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useRef } from "react";
-import { Buffer } from "buffer";
-// ✅ FIXED: Import from legacy for SDK 52+
 import * as FileSystem from "expo-file-system/legacy";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
-const TEMP_FILE_THRESHOLD = 1 * 1024 * 1024; // 1MB
+// Helper: Convert blob to base64
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64data = reader.result as string;
+      const base64String = base64data.split(',')[1];
+      resolve(base64String);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
 
 export const useFileDecryption = () => {
   const { getToken } = useAuth();
@@ -32,166 +42,133 @@ export const useFileDecryption = () => {
   };
 
   const getDecryptedUri = useCallback(
-    async (
-      encryptedDataOrFileId: string,
-      iv: string,
-      authTag: string,
-      senderUserId: string,
-      fileId: string,
-      fileType?: string
-    ): Promise<string> => {
-      const cached = decryptedUrisRef.current.get(fileId);
-      if (cached) {
-        console.log("✅ Using cached decrypted URI for:", fileId);
-        return cached;
+  async (
+    encryptedDataOrFileId: string,
+    iv: string,
+    authTag: string,
+    senderUserId: string,
+    fileId: string,
+    fileType?: string,
+    presignedUrl?: string,
+    chunks?: any[] // ✅ ADD THIS
+  ): Promise<string> => {
+    // Check cache first
+    const cached = decryptedUrisRef.current.get(fileId);
+    if (cached) {
+      console.log("✅ Using cached decrypted URI for:", fileId);
+      return cached;
+    }
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("No auth token available");
       }
 
-      try {
-        let encryptedBase64 = encryptedDataOrFileId;
-        let mimeType = fileType || "application/octet-stream";
+      // ✅ Get sender's public key FIRST
+      console.log("🔑 Fetching sender's public key...");
+      const keyResponse = await fetch(
+        `${API_BASE_URL}/api/keys/${senderUserId}`, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-        const token = await getToken();
-        if (!token) {
-          throw new Error("No auth token available");
-        }
+      if (!keyResponse.ok) {
+        throw new Error(`Failed to get sender key: ${keyResponse.status}`);
+      }
 
-        // Download from server if fileId
-        const isFileId = !encryptedDataOrFileId.includes("/") && 
-                        encryptedDataOrFileId.length < 100;
-        
-        if (isFileId) {
-          console.log("📥 Downloading encrypted file:", fileId);
+      const keyResult = await keyResponse.json();
+      if (!keyResult.success) {
+        throw new Error(keyResult.error || "Failed to get sender key");
+      }
 
-          const response = await fetch(
+      const senderKeyBase64 = keyResult.data.publicKey;
+
+      // ✅ Prepare output path
+      const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      if (!baseDir) {
+        throw new Error("No FileSystem directory available");
+      }
+
+      const decryptedDir = `${baseDir}decrypted/`;
+      const dirInfo = await FileSystem.getInfoAsync(decryptedDir);
+      
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(decryptedDir, { 
+          intermediates: true 
+        });
+      }
+
+      const mimeType = fileType || "application/octet-stream";
+      const extension = getExtensionFromMimeType(mimeType);
+      const tempFileName = `${fileId}_${Date.now()}.${extension}`;
+      const outputPath = `${decryptedDir}${tempFileName}`;
+
+      // ✅ FIX: Check if we have presignedUrl
+      let encryptedDataSource = encryptedDataOrFileId;
+
+      const isFileId = !encryptedDataOrFileId.includes("/") && 
+                      encryptedDataOrFileId.length < 100;
+
+      if (isFileId) {
+        if (presignedUrl) {
+          // ✅ USE PRESIGNED URL DIRECTLY - NO DOWNLOAD!
+          console.log("🌊 [DECRYPT] Using presigned URL for TRUE STREAMING");
+          encryptedDataSource = presignedUrl; // ✅ Pass URL, not base64!
+        } else {
+          // Get presigned URL from server
+          const downloadInfoResponse = await fetch(
             `${API_BASE_URL}/api/files/download/${fileId}`,
             {
+              method: 'GET',
               headers: { Authorization: `Bearer ${token}` },
             }
           );
 
-          if (!response.ok) {
-            throw new Error(`Download failed: ${response.status}`);
+          if (!downloadInfoResponse.ok) {
+            throw new Error(`Failed to get download URL: ${downloadInfoResponse.status}`);
           }
 
-          const result = await response.json();
-          if (!result.success) {
-            throw new Error(result.error || "Download failed");
-          }
-
-          encryptedBase64 = result.data.encryptedData;
+          const downloadInfo = await downloadInfoResponse.json();
           
-          const serverMimeType = result.data.file_type || result.data.fileType;
-          if (!fileType && serverMimeType) {
-            mimeType = serverMimeType;
+          if (!downloadInfo.success) {
+            throw new Error(downloadInfo.error || "Failed to get download URL");
           }
 
-          console.log("✅ Downloaded:", {
-            fileId,
-            size: `${(encryptedBase64.length / 1024 / 1024).toFixed(2)} MB`,
-            mimeType,
-          });
+          encryptedDataSource = downloadInfo.data.downloadUrl; // ✅ Use URL!
         }
-
-        // Get sender's public key
-        const keyResponse = await fetch(`${API_BASE_URL}/api/keys/${senderUserId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!keyResponse.ok) {
-          throw new Error(`Failed to get sender key: ${keyResponse.status}`);
-        }
-
-        const keyResult = await keyResponse.json();
-        if (!keyResult.success) {
-          throw new Error(keyResult.error || "Failed to get sender key");
-        }
-
-        const senderKeyBase64 = keyResult.data.publicKey;
-
-        // Decrypt
-        console.log("🔓 Decrypting file:", fileId);
-        const decryptedBuffer = await nativeEncryptionService.decryptFile(
-          encryptedBase64,
-          iv,
-          authTag,
-          senderKeyBase64
-        );
-
-        const decryptedSize = decryptedBuffer.length;
-        console.log("✅ Decrypted:", {
-          fileId,
-          size: `${(decryptedSize / 1024 / 1024).toFixed(2)} MB`,
-          mimeType,
-        });
-
-        let resultUri: string;
-
-        const isVideo = mimeType.startsWith("video/");
-        const isLargeFile = decryptedSize > TEMP_FILE_THRESHOLD;
-
-        if (isVideo || isLargeFile) {
-          // Try cacheDirectory first, then documentDirectory
-          let baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
-          
-          if (!baseDir) {
-            console.error("❌ No FileSystem directory available");
-            // Fallback to data URI
-            const base64Data = decryptedBuffer.toString("base64");
-            resultUri = `data:${mimeType};base64,${base64Data}`;
-            console.log("⚠️ Using data URI as fallback");
-          } else {
-            // Create decrypted folder
-            const decryptedDir = `${baseDir}decrypted/`;
-            const dirInfo = await FileSystem.getInfoAsync(decryptedDir);
-            if (!dirInfo.exists) {
-              await FileSystem.makeDirectoryAsync(decryptedDir, { intermediates: true });
-            }
-
-            const extension = getExtensionFromMimeType(mimeType);
-            const tempFileName = `${fileId}_${Date.now()}.${extension}`;
-            const tempFilePath = `${decryptedDir}${tempFileName}`;
-
-            console.log("💾 Saving to temp file:", tempFilePath);
-
-            const base64Data = decryptedBuffer.toString("base64");
-            
-            await FileSystem.writeAsStringAsync(
-              tempFilePath,
-              base64Data,
-              { encoding: FileSystem.EncodingType.Base64 }
-            );
-
-            // Verify file
-            const fileInfo = await FileSystem.getInfoAsync(tempFilePath);
-            if (!fileInfo.exists) {
-              throw new Error("Failed to write temp file");
-            }
-
-            console.log("✅ Temp file saved:", {
-              path: tempFilePath,
-              size: (fileInfo as any).size,
-            });
-
-            resultUri = tempFilePath;
-          }
-        } else {
-          // For small files, use data URI
-          const base64Data = decryptedBuffer.toString("base64");
-          resultUri = `data:${mimeType};base64,${base64Data}`;
-          console.log("✅ Data URI created for small file");
-        }
-
-        decryptedUrisRef.current.set(fileId, resultUri);
-        return resultUri;
-      } catch (error) {
-        console.error("❌ Failed to decrypt file:", fileId, error);
-        throw error;
       }
-    },
-    [getToken]
-  );
+
+      // ✅ Call UnifiedEncryptionService with URL or base64
+      console.log("🔓 Decrypting file with UnifiedEncryptionService...");
+      
+      const resultUri = await UnifiedEncryptionService.decryptFile(
+        encryptedDataSource, // ✅ Can be URL or base64
+        iv,
+        authTag,
+        senderKeyBase64,
+        outputPath,
+        chunks // ✅ Pass chunks if available
+      );
+
+      console.log("✅ Decryption complete:", {
+        fileId,
+        uriType: resultUri.startsWith('file://') ? 'FILE' : 'DATA_URI',
+      });
+
+      decryptedUrisRef.current.set(fileId, resultUri);
+      return resultUri;
+      
+    } catch (error) {
+      console.error("❌ Failed to decrypt file:", fileId, error);
+      throw error;
+    }
+  },
+  [getToken]
+);
 
   const clearCache = useCallback(async () => {
+    console.log("🧹 Clearing decryption cache...");
+    
     const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
     if (baseDir) {
       const decryptedDir = `${baseDir}decrypted/`;
@@ -199,15 +176,14 @@ export const useFileDecryption = () => {
         const dirInfo = await FileSystem.getInfoAsync(decryptedDir);
         if (dirInfo.exists) {
           await FileSystem.deleteAsync(decryptedDir, { idempotent: true });
-          console.log("🗑️ Deleted decrypted folder");
         }
       } catch (e) {
-        // Ignore
+        console.warn("⚠️ Failed to delete decrypted folder:", e);
       }
     }
     
     decryptedUrisRef.current.clear();
-    console.log("🧹 Cache cleared");
+    console.log("✅ Cache cleared");
   }, []);
 
   return {
