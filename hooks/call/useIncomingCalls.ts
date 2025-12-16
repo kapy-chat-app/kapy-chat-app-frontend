@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-// hooks/useIncomingCalls.ts - Enhanced for Group Calls
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@clerk/clerk-expo';
-import io, { Socket } from 'socket.io-client';
-import axios from 'axios';
-=======
 // hooks/call/useIncomingCalls.ts - COMPLETE UNIFIED VERSION
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
@@ -13,16 +6,12 @@ import axios from 'axios';
 import * as Notifications from 'expo-notifications';
 import { AppState, AppStateStatus, Platform, NativeModules } from 'react-native';
 import { Audio } from 'expo-av';
->>>>>>> rebuild-super-clean
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-<<<<<<< HEAD
-=======
 const { CallNotification } = NativeModules;
 
->>>>>>> rebuild-super-clean
 interface IncomingCallData {
   call_id: string;
   caller_id: string;
@@ -37,8 +26,6 @@ interface IncomingCallData {
   participants_count?: number;
 }
 
-<<<<<<< HEAD
-=======
 interface CallNotificationData {
   type: string;
   action?: string;
@@ -55,20 +42,11 @@ interface CallNotificationData {
   participants_count?: number;
 }
 
->>>>>>> rebuild-super-clean
 export const useIncomingCalls = () => {
   const { userId, getToken } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [showIncomingCall, setShowIncomingCall] = useState(false);
-<<<<<<< HEAD
-
-  // Initialize socket connection
-  useEffect(() => {
-    if (!userId) return;
-
-    console.log('📞 Connecting to socket for incoming calls, userId:', userId);
-=======
   const [ringtoneSound, setRingtoneSound] = useState<Audio.Sound | null>(null);
   
   const isHandlingNotification = useRef(false);
@@ -312,7 +290,6 @@ export const useIncomingCalls = () => {
     if (!userId) return;
 
     console.log('📞 Connecting to socket for incoming calls');
->>>>>>> rebuild-super-clean
     
     const newSocket = io(SOCKET_URL, {
       transports: ['websocket'],
@@ -324,35 +301,10 @@ export const useIncomingCalls = () => {
     newSocket.on('connect', () => {
       console.log('📞 Socket connected, ID:', newSocket.id);
       
-<<<<<<< HEAD
-      // Join personal room
-=======
->>>>>>> rebuild-super-clean
       const personalRoom = `user:${userId}`;
       newSocket.emit('join', personalRoom);
       console.log(`📞 Joined personal room: ${personalRoom}`);
       
-<<<<<<< HEAD
-      // Legacy support
-      newSocket.emit('addNewUsers', {
-        _id: userId,
-      });
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('📞 Socket disconnected');
-    });
-
-    newSocket.on('roomJoined', (room: string) => {
-      console.log(`✅ Successfully joined room: ${room}`);
-    });
-
-    // Listen for incoming calls
-    newSocket.on('incomingCall', (data: IncomingCallData) => {
-      console.log('📞 Incoming call received:', data);
-      
-      // Don't show incoming call if I'm the caller
-=======
       newSocket.emit('addNewUsers', { _id: userId });
     });
 
@@ -360,57 +312,11 @@ export const useIncomingCalls = () => {
     newSocket.on('incomingCall', async (data: IncomingCallData) => {
       console.log('📞 Incoming call received via socket:', data);
       
->>>>>>> rebuild-super-clean
       if (data.caller_id === userId) {
         console.log('📞 Ignoring incoming call from self');
         return;
       }
       
-<<<<<<< HEAD
-      // For group calls, show additional info
-      if (data.conversation_type === 'group') {
-        console.log(`📞 Group call from ${data.caller_name} in ${data.conversation_name}`);
-        console.log(`📞 ${data.participants_count || 0} participants already in call`);
-      }
-      
-      setIncomingCall(data);
-      setShowIncomingCall(true);
-    });
-
-    // Listen for call answered
-    newSocket.on('callAnswered', (data: any) => {
-      console.log('📞 Call answered event received:', data);
-      
-      // For group calls, multiple people can answer
-      // Don't hide the incoming call dialog automatically
-      if (data.conversation_type !== 'group' && data.answered_by !== userId) {
-        // For 1-1 calls, if someone else answered, hide dialog
-        console.log('📞 Someone else answered the 1-1 call');
-        setShowIncomingCall(false);
-        setIncomingCall(null);
-      }
-    });
-
-    // Listen for call rejected
-    newSocket.on('callRejected', (data: any) => {
-      console.log('📞 Call rejected event received:', data);
-      
-      // Only hide if I rejected
-      if (data.rejected_by === userId) {
-        setIncomingCall(null);
-        setShowIncomingCall(false);
-      }
-    });
-
-    // Listen for call ended
-    newSocket.on('callEnded', (data: any) => {
-      console.log('📞 Call ended event received:', data);
-      setIncomingCall(null);
-      setShowIncomingCall(false);
-    });
-
-    // Listen for participant updates in group calls
-=======
       await handleIncomingCallFromNotification(data);
     });
 
@@ -460,17 +366,10 @@ export const useIncomingCalls = () => {
       }
     });
 
->>>>>>> rebuild-super-clean
     newSocket.on('callParticipantsUpdated', (data: { 
       call_id: string, 
       participants_count: number 
     }) => {
-<<<<<<< HEAD
-      console.log('📞 Participants count updated:', data);
-      
-      // Update current incoming call data if it matches
-=======
->>>>>>> rebuild-super-clean
       if (incomingCall && incomingCall.call_id === data.call_id) {
         setIncomingCall(prev => prev ? {
           ...prev,
@@ -482,18 +381,6 @@ export const useIncomingCalls = () => {
     setSocket(newSocket);
 
     return () => {
-<<<<<<< HEAD
-      console.log('📞 Cleaning up socket connection');
-      if (newSocket) {
-        newSocket.disconnect();
-      }
-    };
-  }, [userId]);
-
-  // Answer call
-  const answerCall = useCallback(async (callId: string) => {
-    try {
-=======
       stopRingtone();
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
@@ -511,7 +398,6 @@ export const useIncomingCalls = () => {
         clearTimeout(callTimeoutRef.current);
       }
 
->>>>>>> rebuild-super-clean
       const token = await getToken();
       const response = await axios.post(
         `${API_URL}/api/calls/${callId}/answer`,
@@ -523,21 +409,6 @@ export const useIncomingCalls = () => {
         }
       );
 
-<<<<<<< HEAD
-      console.log('✅ Call answered successfully:', response.data);
-      
-      // Hide incoming call dialog after answering
-      setShowIncomingCall(false);
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error answering call:', error.response?.data || error.message);
-      
-      // If already in call (group call scenario), still proceed
-      if (error.response?.data?.message === "Already in call") {
-        console.log('✅ Already in call, proceeding...');
-        setShowIncomingCall(false);
-=======
       console.log('✅ Call answered successfully');
       setShowIncomingCall(false);
       currentCallIdRef.current = null;
@@ -550,21 +421,11 @@ export const useIncomingCalls = () => {
         console.log('✅ Already in call, proceeding...');
         setShowIncomingCall(false);
         currentCallIdRef.current = null;
->>>>>>> rebuild-super-clean
         return error.response.data;
       }
       
       throw error;
     }
-<<<<<<< HEAD
-  }, [getToken]);
-
-  // Reject call
-  const rejectCall = useCallback(async (callId: string) => {
-    try {
-      const token = await getToken();
-      const response = await axios.post(
-=======
   }, [getToken, stopRingtone]);
 
   // ⭐ Reject call
@@ -578,7 +439,6 @@ export const useIncomingCalls = () => {
 
       const token = await getToken();
       await axios.post(
->>>>>>> rebuild-super-clean
         `${API_URL}/api/calls/${callId}/reject`,
         {},
         {
@@ -588,18 +448,6 @@ export const useIncomingCalls = () => {
         }
       );
 
-<<<<<<< HEAD
-      console.log('✅ Call rejected successfully:', response.data);
-      setIncomingCall(null);
-      setShowIncomingCall(false);
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('❌ Error rejecting call:', error.response?.data || error.message);
-      throw error;
-    }
-  }, [getToken]);
-=======
       console.log('✅ Call rejected successfully');
       setIncomingCall(null);
       setShowIncomingCall(false);
@@ -621,7 +469,6 @@ export const useIncomingCalls = () => {
       }
     };
   }, [stopRingtone]);
->>>>>>> rebuild-super-clean
 
   return {
     incomingCall,
@@ -629,9 +476,6 @@ export const useIncomingCalls = () => {
     answerCall,
     rejectCall,
     socket,
-<<<<<<< HEAD
-=======
     handleIncomingCallFromNotification,
->>>>>>> rebuild-super-clean
   };
 };

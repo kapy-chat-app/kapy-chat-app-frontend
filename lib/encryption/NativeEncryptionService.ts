@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-// lib/encryption/NativeEncryptionService.ts
-// High-performance encryption using react-native-quick-crypto
-// Requires: npm install react-native-quick-crypto && eas build
-
-import QuickCrypto from 'react-native-quick-crypto';
-import * as FileSystem from 'expo-file-system/legacy';
-=======
 // lib/encryption/NativeEncryptionService.ts - STREAMING VERSION
 // ✅ Backward compatible with old messages
 // ✅ Support backup password for cross-device restore
@@ -14,7 +6,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import QuickCrypto from 'react-native-quick-crypto';
 import RNFS from 'react-native-fs';
->>>>>>> rebuild-super-clean
 import * as SecureStore from 'expo-secure-store';
 import { Buffer } from 'buffer';
 
@@ -45,8 +36,6 @@ export interface EncryptionProgress {
 
 export type ProgressCallback = (progress: EncryptionProgress) => void;
 
-<<<<<<< HEAD
-=======
 export interface KeyBackupData {
   encryptedMasterKey: string;
   salt: string;
@@ -56,18 +45,13 @@ export interface KeyBackupData {
   createdAt: string;
 }
 
->>>>>>> rebuild-super-clean
 // =============================================
 // CONSTANTS
 // =============================================
 
-<<<<<<< HEAD
-const ENCRYPTION_KEY_STORE = "e2ee_encryption_key";
-=======
 const ENCRYPTION_KEY_STORE = "e2ee_master_key";
 const KEY_VERSION = 1;
 const CHUNK_SIZE = 512 * 1024; // 512KB chunks - safe for all devices
->>>>>>> rebuild-super-clean
 
 // =============================================
 // NATIVE ENCRYPTION SERVICE
@@ -75,8 +59,6 @@ const CHUNK_SIZE = 512 * 1024; // 512KB chunks - safe for all devices
 
 export class NativeEncryptionService {
   private keyCache: Map<string, Buffer> = new Map();
-<<<<<<< HEAD
-=======
   private readonly KEY_VERSION = KEY_VERSION;
   private readonly CHUNK_SIZE = CHUNK_SIZE;
 
@@ -102,7 +84,6 @@ export class NativeEncryptionService {
       );
     });
   }
->>>>>>> rebuild-super-clean
 
   /**
    * Get MIME type from filename
@@ -110,33 +91,6 @@ export class NativeEncryptionService {
   private getMimeType(fileName: string): string {
     const ext = fileName.split(".").pop()?.toLowerCase();
     const mimeTypes: Record<string, string> = {
-<<<<<<< HEAD
-      // Video
-      mp4: "video/mp4",
-      mov: "video/quicktime",
-      avi: "video/x-msvideo",
-      mkv: "video/x-matroska",
-      webm: "video/webm",
-      m4v: "video/x-m4v",
-      "3gp": "video/3gpp",
-      // Audio
-      mp3: "audio/mpeg",
-      wav: "audio/wav",
-      m4a: "audio/mp4",
-      aac: "audio/aac",
-      ogg: "audio/ogg",
-      flac: "audio/flac",
-      // Images
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
-      svg: "image/svg+xml",
-      heic: "image/heic",
-      // Documents
-      pdf: "application/pdf",
-=======
       mp4: "video/mp4", mov: "video/quicktime", avi: "video/x-msvideo",
       mkv: "video/x-matroska", webm: "video/webm", m4v: "video/x-m4v",
       "3gp": "video/3gpp", mp3: "audio/mpeg", wav: "audio/wav",
@@ -144,35 +98,21 @@ export class NativeEncryptionService {
       flac: "audio/flac", jpg: "image/jpeg", jpeg: "image/jpeg",
       png: "image/png", gif: "image/gif", webp: "image/webp",
       svg: "image/svg+xml", heic: "image/heic", pdf: "application/pdf",
->>>>>>> rebuild-super-clean
       doc: "application/msword",
       docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       xls: "application/vnd.ms-excel",
       xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       ppt: "application/vnd.ms-powerpoint",
       pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-<<<<<<< HEAD
-      txt: "text/plain",
-      // Archives
-      zip: "application/zip",
-      rar: "application/x-rar-compressed",
-      "7z": "application/x-7z-compressed",
-      tar: "application/x-tar",
-      gz: "application/gzip",
-=======
       txt: "text/plain", zip: "application/zip",
       rar: "application/x-rar-compressed",
       "7z": "application/x-7z-compressed",
       tar: "application/x-tar", gz: "application/gzip",
->>>>>>> rebuild-super-clean
     };
     return mimeTypes[ext || ""] || "application/octet-stream";
   }
 
   /**
-<<<<<<< HEAD
-   * Get my encryption key from secure storage
-=======
    * Normalize file URI for react-native-fs
    */
   private normalizeFileUri(fileUri: string): string {
@@ -185,7 +125,6 @@ export class NativeEncryptionService {
   /**
    * ✅ BACKWARD COMPATIBLE: Get my encryption key (SAME AS OLD VERSION)
    * This ensures old messages can still be decrypted
->>>>>>> rebuild-super-clean
    */
   private async getMyEncryptionKey(): Promise<Buffer> {
     const cached = this.keyCache.get('my_key');
@@ -196,24 +135,14 @@ export class NativeEncryptionService {
       throw new Error("Encryption key not found. Please initialize E2EE first.");
     }
 
-<<<<<<< HEAD
-    // Derive 32-byte key using SHA256
-    const hash = QuickCrypto.createHash('sha256');
-    hash.update(keyBase64);
-=======
     // ✅ CRITICAL: Keep the SAME derivation as old version
     // Hash the BASE64 STRING (not the decoded bytes)
     const hash = QuickCrypto.createHash('sha256');
     hash.update(keyBase64); // Hash base64 string directly
->>>>>>> rebuild-super-clean
     const derivedKey = hash.digest() as Buffer;
 
     this.keyCache.set('my_key', derivedKey);
     
-<<<<<<< HEAD
-    // Log key hash for debugging
-=======
->>>>>>> rebuild-super-clean
     const keyHash = QuickCrypto.createHash('sha256').update(derivedKey).digest('hex');
     console.log("🔑 My derived key SHA256:", keyHash);
 
@@ -228,10 +157,6 @@ export class NativeEncryptionService {
     hash.update(senderKeyBase64);
     const derivedKey = hash.digest() as Buffer;
 
-<<<<<<< HEAD
-    // Log key hash for debugging
-=======
->>>>>>> rebuild-super-clean
     const keyHash = QuickCrypto.createHash('sha256').update(derivedKey).digest('hex');
     console.log("🔑 Sender derived key SHA256:", keyHash);
 
@@ -239,20 +164,6 @@ export class NativeEncryptionService {
   }
 
   /**
-<<<<<<< HEAD
-   * Get file size
-   */
-  async getFileSize(fileUri: string): Promise<number> {
-    const fileInfo = await FileSystem.getInfoAsync(fileUri);
-    if (!fileInfo.exists) {
-      throw new Error("File not found: " + fileUri);
-    }
-    return (fileInfo as any).size || 0;
-  }
-
-  /**
-   * Encrypt file using AES-256-GCM (native, high-performance)
-=======
    * Initialize keys with optional password for server backup
    */
   async initializeKeys(backupPassword?: string): Promise<{ 
@@ -411,7 +322,6 @@ export class NativeEncryptionService {
   /**
    * ✅ STREAMING ENCRYPTION - NO MORE OOM
    * Encrypt file using AES-256-GCM with chunked reading
->>>>>>> rebuild-super-clean
    */
   async encryptFile(
     fileUri: string,
@@ -419,24 +329,6 @@ export class NativeEncryptionService {
     onProgress?: ProgressCallback
   ): Promise<NativeEncryptionResult> {
     try {
-<<<<<<< HEAD
-      console.log("🔒 Native encrypting:", fileName);
-
-      // Get file info
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (!fileInfo.exists) {
-        throw new Error("File not found: " + fileUri);
-      }
-
-      const fileSize = (fileInfo as any).size || 0;
-      const fileType = this.getMimeType(fileName);
-
-      console.log(`📦 File: ${fileName}`);
-      console.log(`   Size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`   Type: ${fileType}`);
-
-      // Phase 1: Reading
-=======
       console.log("🔒 Streaming encrypt:", fileName);
 
       // Normalize URI
@@ -449,7 +341,6 @@ export class NativeEncryptionService {
 
       console.log(`📦 File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
->>>>>>> rebuild-super-clean
       onProgress?.({
         phase: 'reading',
         percentage: 0,
@@ -457,47 +348,6 @@ export class NativeEncryptionService {
         totalBytes: fileSize,
       });
 
-<<<<<<< HEAD
-      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const fileBuffer = Buffer.from(fileBase64, 'base64');
-
-      console.log("✅ File read complete");
-
-      // Phase 2: Encrypting
-      onProgress?.({
-        phase: 'encrypting',
-        percentage: 30,
-        bytesProcessed: fileSize * 0.3,
-        totalBytes: fileSize,
-      });
-
-      const key = await this.getMyEncryptionKey();
-      const iv = QuickCrypto.randomBytes(12) as Buffer; // 12 bytes for GCM
-
-      console.log("🔐 Starting AES-256-GCM encryption...");
-
-      // Encrypt using AES-256-GCM
-      const cipher = QuickCrypto.createCipheriv('aes-256-gcm', key, iv);
-      const encrypted = Buffer.concat([
-        cipher.update(fileBuffer) as Buffer,
-        cipher.final() as Buffer
-      ]);
-      const authTag = cipher.getAuthTag() as Buffer;
-
-      onProgress?.({
-        phase: 'encrypting',
-        percentage: 90,
-        bytesProcessed: fileSize * 0.9,
-        totalBytes: fileSize,
-      });
-
-      const encryptedBase64 = encrypted.toString('base64');
-      const encryptedSize = encrypted.length;
-
-      // Phase 3: Finalizing
-=======
       // Initialize cipher
       const key = await this.getMyEncryptionKey();
       const iv = QuickCrypto.randomBytes(12) as Buffer;
@@ -553,7 +403,6 @@ export class NativeEncryptionService {
       // Concatenate all chunks
       const encryptedBuffer = Buffer.concat(encryptedChunks);
 
->>>>>>> rebuild-super-clean
       onProgress?.({
         phase: 'finalizing',
         percentage: 100,
@@ -561,51 +410,30 @@ export class NativeEncryptionService {
         totalBytes: fileSize,
       });
 
-<<<<<<< HEAD
-      console.log("✅ Native encryption complete");
-      console.log(`   Original: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`   Encrypted: ${(encryptedSize / 1024 / 1024).toFixed(2)} MB`);
-
-      return {
-        encryptedBase64,
-=======
       console.log("✅ Streaming encryption complete");
       console.log(`   Original: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
       console.log(`   Encrypted: ${(encryptedBuffer.length / 1024 / 1024).toFixed(2)} MB`);
 
       return {
         encryptedBase64: encryptedBuffer.toString('base64'),
->>>>>>> rebuild-super-clean
         metadata: {
           iv: iv.toString('base64'),
           authTag: authTag.toString('base64'),
           original_size: fileSize,
-<<<<<<< HEAD
-          encrypted_size: encryptedSize,
-=======
           encrypted_size: encryptedBuffer.length,
->>>>>>> rebuild-super-clean
           file_name: fileName,
           file_type: fileType,
         },
       };
     } catch (error) {
-<<<<<<< HEAD
-      console.error("❌ Native encryption failed:", error);
-=======
       console.error("❌ Streaming encryption failed:", error);
->>>>>>> rebuild-super-clean
       throw error;
     }
   }
 
   /**
-<<<<<<< HEAD
-   * Decrypt file using AES-256-GCM (native, high-performance)
-=======
    * ✅ STREAMING DECRYPTION
    * Decrypt file using AES-256-GCM
->>>>>>> rebuild-super-clean
    */
   async decryptFile(
     encryptedBase64: string,
@@ -614,37 +442,11 @@ export class NativeEncryptionService {
     senderKeyBase64: string
   ): Promise<Buffer> {
     try {
-<<<<<<< HEAD
-      console.log("🔓 Native decrypting...");
-      console.log(`📦 Encrypted size: ${(encryptedBase64.length / 1024 / 1024).toFixed(2)} MB`);
-=======
       console.log("🔓 Decrypting file...");
->>>>>>> rebuild-super-clean
 
       const key = this.deriveSenderKey(senderKeyBase64);
       const ivBuffer = Buffer.from(iv, 'base64');
       const authTagBuffer = Buffer.from(authTag, 'base64');
-<<<<<<< HEAD
-      const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
-
-      console.log("🔐 Starting AES-256-GCM decryption...");
-
-      // Decrypt using AES-256-GCM
-      const decipher = QuickCrypto.createDecipheriv('aes-256-gcm', key, ivBuffer);
-      decipher.setAuthTag(authTagBuffer);
-
-      const decrypted = Buffer.concat([
-        decipher.update(encryptedBuffer) as Buffer,
-        decipher.final() as Buffer
-      ]);
-
-      console.log("✅ Native decryption complete");
-      console.log(`   Decrypted size: ${(decrypted.length / 1024 / 1024).toFixed(2)} MB`);
-
-      return decrypted;
-    } catch (error) {
-      console.error("❌ Native decryption failed:", error);
-=======
       
       // For small files (<10MB), decrypt directly
       const encryptedSize = (encryptedBase64.length * 3) / 4; // Approximate decoded size
@@ -668,58 +470,11 @@ export class NativeEncryptionService {
       return this.decryptFileStreaming(encryptedBase64, ivBuffer, authTagBuffer, key);
     } catch (error) {
       console.error("❌ Decryption failed:", error);
->>>>>>> rebuild-super-clean
       throw error;
     }
   }
 
   /**
-<<<<<<< HEAD
-   * Encrypt text message using AES-256-GCM
-   */
-  /**
- * Encrypt text message using AES-256-GCM
- * Output format compatible with existing backend
- */
-async encryptMessage(message: string): Promise<{
-  encryptedContent: string;
-  encryptionMetadata: {
-    iv: string;
-    authTag: string;
-  };
-}> {
-  try {
-    const key = await this.getMyEncryptionKey();
-    const iv = QuickCrypto.randomBytes(12) as Buffer;
-    const messageBuffer = Buffer.from(message, 'utf-8');
-
-    const cipher = QuickCrypto.createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([
-      cipher.update(messageBuffer) as Buffer,
-      cipher.final() as Buffer
-    ]);
-    const authTag = cipher.getAuthTag() as Buffer;
-
-    // Format compatible with both old and new decryption
-    const encryptedContent = JSON.stringify({
-      iv: iv.toString('base64'),
-      authTag: authTag.toString('base64'),
-      data: encrypted.toString('base64'),
-    });
-
-    return {
-      encryptedContent,
-      encryptionMetadata: {
-        iv: iv.toString('base64'),
-        authTag: authTag.toString('base64'),
-      },
-    };
-  } catch (error) {
-    console.error("❌ Message encryption failed:", error);
-    throw error;
-  }
-}
-=======
    * Helper: Streaming decryption for large files
    */
   private async decryptFileStreaming(
@@ -795,7 +550,6 @@ async encryptMessage(message: string): Promise<{
       throw error;
     }
   }
->>>>>>> rebuild-super-clean
 
   /**
    * Decrypt text message using AES-256-GCM
@@ -828,58 +582,6 @@ async encryptMessage(message: string): Promise<{
   }
 
   /**
-<<<<<<< HEAD
-   * Initialize keys (generate if not exists)
-   */
-  async initializeKeys(): Promise<{ publicKey: string }> {
-    try {
-      const existingKey = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
-      
-      if (existingKey) {
-        console.log("✅ Using existing encryption key");
-        return { publicKey: existingKey };
-      }
-
-      // Generate new random key
-      const randomBytes = QuickCrypto.randomBytes(32) as Buffer;
-      const encryptionKey = randomBytes.toString('base64');
-
-      await SecureStore.setItemAsync(ENCRYPTION_KEY_STORE, encryptionKey);
-
-      console.log("✅ New encryption key generated");
-      return { publicKey: encryptionKey };
-    } catch (error) {
-      console.error("❌ Failed to initialize keys:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if keys are initialized
-   */
-  async isInitialized(): Promise<boolean> {
-    try {
-      const key = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
-      return key !== null;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  /**
-   * Get public key (for sharing with others)
-   */
-  async getPublicKey(): Promise<string> {
-    const key = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
-    if (!key) {
-      throw new Error("Encryption key not found");
-    }
-    return key;
-  }
-
-  /**
-=======
->>>>>>> rebuild-super-clean
    * Clear key cache
    */
   clearCache(): void {

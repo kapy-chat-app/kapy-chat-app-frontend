@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// components/IncomingCallModal.tsx - Group Call Support
-=======
 // components/IncomingCallModal.tsx - WITH NAVIGATION FIX
->>>>>>> rebuild-super-clean
 import React, { useEffect, useState } from 'react';
 import {
   Modal,
@@ -13,15 +9,9 @@ import {
   StyleSheet,
   Animated,
   Vibration,
-<<<<<<< HEAD
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
-=======
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
->>>>>>> rebuild-super-clean
 import { useRouter } from 'expo-router';
 
 interface IncomingCallProps {
@@ -39,13 +29,8 @@ interface IncomingCallProps {
     conversation_avatar?: string;
     participants_count?: number;
   } | null;
-<<<<<<< HEAD
-  onAnswer: (callId: string) => void;
-  onReject: (callId: string) => void;
-=======
   onAnswer: (callId: string) => Promise<any>;
   onReject: (callId: string) => Promise<void>;
->>>>>>> rebuild-super-clean
 }
 
 export default function IncomingCallModal({
@@ -55,18 +40,6 @@ export default function IncomingCallModal({
   onReject,
 }: IncomingCallProps) {
   const router = useRouter();
-<<<<<<< HEAD
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const pulseAnim = useState(new Animated.Value(1))[0];
-
-  useEffect(() => {
-    if (visible && callData) {
-      playRingtone();
-      startVibration();
-      startPulseAnimation();
-    } else {
-      stopRingtone();
-=======
   const pulseAnim = useState(new Animated.Value(1))[0];
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -75,42 +48,14 @@ export default function IncomingCallModal({
       startVibration();
       startPulseAnimation();
     } else {
->>>>>>> rebuild-super-clean
       stopVibration();
     }
 
     return () => {
-<<<<<<< HEAD
-      stopRingtone();
-=======
->>>>>>> rebuild-super-clean
       stopVibration();
     };
   }, [visible, callData]);
 
-<<<<<<< HEAD
-  const playRingtone = async () => {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('@/assets/sounds/ringtone.mp3'),
-        { shouldPlay: true, isLooping: true }
-      );
-      setSound(sound);
-    } catch (error) {
-      console.error('Error playing ringtone:', error);
-    }
-  };
-
-  const stopRingtone = async () => {
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
-    }
-  };
-
-=======
->>>>>>> rebuild-super-clean
   const startVibration = () => {
     const pattern = [0, 1000, 500, 1000];
     Vibration.vibrate(pattern, true);
@@ -137,14 +82,6 @@ export default function IncomingCallModal({
     ).start();
   };
 
-<<<<<<< HEAD
-  const handleAnswer = () => {
-    if (callData) {
-      stopRingtone();
-      stopVibration();
-      onAnswer(callData.call_id);
-      
-=======
   const handleAnswer = async () => {
     if (!callData || isProcessing) return;
 
@@ -158,7 +95,6 @@ export default function IncomingCallModal({
       console.log('✅ onAnswer completed, navigating to call screen...');
 
       // Navigate to call screen
->>>>>>> rebuild-super-clean
       router.push({
         pathname: '/call/[id]' as any,
         params: {
@@ -166,18 +102,6 @@ export default function IncomingCallModal({
           channelName: callData.channel_name,
           conversationId: callData.conversation_id,
           callType: callData.call_type,
-<<<<<<< HEAD
-        },
-      });
-    }
-  };
-
-  const handleReject = () => {
-    if (callData) {
-      stopRingtone();
-      stopVibration();
-      onReject(callData.call_id);
-=======
           conversationType: callData.conversation_type || 'private',
         },
       });
@@ -203,7 +127,6 @@ export default function IncomingCallModal({
       console.error('❌ Error in handleReject:', error);
     } finally {
       setIsProcessing(false);
->>>>>>> rebuild-super-clean
     }
   };
 
@@ -211,10 +134,6 @@ export default function IncomingCallModal({
 
   const isGroupCall = callData.conversation_type === 'group';
   
-<<<<<<< HEAD
-  // Determine what to display
-=======
->>>>>>> rebuild-super-clean
   const displayAvatar = isGroupCall 
     ? callData.conversation_avatar 
     : callData.caller_avatar;
@@ -232,10 +151,6 @@ export default function IncomingCallModal({
     >
       <View style={styles.overlay}>
         <View style={styles.container}>
-<<<<<<< HEAD
-          {/* Avatar */}
-=======
->>>>>>> rebuild-super-clean
           <Animated.View 
             style={[
               styles.avatarContainer,
@@ -257,10 +172,6 @@ export default function IncomingCallModal({
               </View>
             )}
             
-<<<<<<< HEAD
-            {/* Group Call Badge */}
-=======
->>>>>>> rebuild-super-clean
             {isGroupCall && (
               <View style={styles.groupBadge}>
                 <Ionicons name="people" size={16} color="#fff" />
@@ -273,18 +184,9 @@ export default function IncomingCallModal({
             )}
           </Animated.View>
 
-<<<<<<< HEAD
-          {/* Call Info */}
-          <View style={styles.infoContainer}>
-            {/* Group name or caller name */}
-            <Text style={styles.primaryName}>{displayName}</Text>
-            
-            {/* For group calls, show caller name below */}
-=======
           <View style={styles.infoContainer}>
             <Text style={styles.primaryName}>{displayName}</Text>
             
->>>>>>> rebuild-super-clean
             {isGroupCall && (
               <View style={styles.callerInfoContainer}>
                 <Ionicons name="person-circle-outline" size={18} color="#9ca3af" />
@@ -293,10 +195,6 @@ export default function IncomingCallModal({
             )}
           </View>
 
-<<<<<<< HEAD
-          {/* Call Type */}
-=======
->>>>>>> rebuild-super-clean
           <View style={styles.callTypeContainer}>
             <Ionicons
               name={callData.call_type === 'video' ? 'videocam' : 'call'}
@@ -308,10 +206,6 @@ export default function IncomingCallModal({
             </Text>
           </View>
 
-<<<<<<< HEAD
-          {/* Additional Info for Group Calls */}
-=======
->>>>>>> rebuild-super-clean
           {isGroupCall && callData.participants_count && callData.participants_count > 0 && (
             <View style={styles.participantsInfoContainer}>
               <Ionicons name="people-outline" size={16} color="#9ca3af" />
@@ -321,35 +215,19 @@ export default function IncomingCallModal({
             </View>
           )}
 
-<<<<<<< HEAD
-          {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
-            {/* Reject Button */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
-              onPress={handleReject}
-=======
           <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
               onPress={handleReject}
               disabled={isProcessing}
->>>>>>> rebuild-super-clean
             >
               <Ionicons name="close" size={32} color="#fff" />
             </TouchableOpacity>
 
-<<<<<<< HEAD
-            {/* Answer Button */}
-            <TouchableOpacity
-              style={[styles.actionButton, styles.answerButton]}
-              onPress={handleAnswer}
-=======
             <TouchableOpacity
               style={[styles.actionButton, styles.answerButton]}
               onPress={handleAnswer}
               disabled={isProcessing}
->>>>>>> rebuild-super-clean
             >
               <Ionicons name="call" size={32} color="#fff" />
             </TouchableOpacity>
@@ -359,8 +237,6 @@ export default function IncomingCallModal({
             <Text style={styles.label}>Decline</Text>
             <Text style={styles.label}>{isGroupCall ? 'Join' : 'Answer'}</Text>
           </View>
-<<<<<<< HEAD
-=======
 
           {/* Loading overlay */}
           {isProcessing && (
@@ -369,7 +245,6 @@ export default function IncomingCallModal({
               <Text style={styles.loadingText}>Joining...</Text>
             </View>
           )}
->>>>>>> rebuild-super-clean
         </View>
       </View>
     </Modal>
@@ -513,8 +388,6 @@ const styles = StyleSheet.create({
     width: 70,
     textAlign: 'center',
   },
-<<<<<<< HEAD
-=======
   loadingOverlay: {
     position: 'absolute',
     top: 0,
@@ -532,5 +405,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
   },
->>>>>>> rebuild-super-clean
 });
