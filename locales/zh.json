@@ -278,7 +278,52 @@
     "contacts": "联系人",
     "emotion": "情绪",
     "ai": "AI",
-    "setting": "设置"
+    "setting": "设置",
+    "game": "游戏"
+  },
+  "game": {
+    "title": "游戏",
+    "empty": "没有可用游戏",
+    "loading": "正在加载游戏...",
+    "loadingGame": "正在加载游戏...",
+    "initializingSDK": "正在初始化...",
+    "fetchError": "无法加载游戏列表",
+    "loadError": "无法加载游戏",
+    "webviewError": "加载游戏时出错",
+    "loginRequired": "请登录以玩游戏",
+    "tryAgain": "重试",
+    "retry": "重试",
+    "close": "关闭",
+    "refresh": "刷新",
+    "search": "搜索游戏...",
+    "categories": {
+      "all": "全部",
+      "Arcade": "街机",
+      "Matching": "配对",
+      "Multiplayer": "多人",
+      "Climb": "攀爬",
+      "Racing": "竞速",
+      "Casual": "休闲",
+      "Sport": "体育",
+      "Puzzle": "益智",
+      "Agility": "敏捷",
+      "Dress-up": "换装",
+      "Cooking": "烹饪"
+    },
+    "player": {
+      "loadingGame": "正在加载游戏...",
+      "failedToLoad": "无法加载游戏",
+      "checkConnection": "无法加载游戏。请检查您的网络连接。",
+      "retry": "重试",
+      "close": "关闭"
+    },
+    "error": {
+      "title": "错误",
+      "loadFailed": "无法加载游戏。请重试。",
+      "noConnection": "没有网络连接",
+      "timeout": "请求超时",
+      "unknown": "发生未知错误"
+    }
   },
   "friends": {
     "title": "好友",
@@ -474,7 +519,7 @@
     }
   },
 
-   "common": {
+  "common": {
     "cancel": "取消",
     "delete": "删除",
     "confirm": "确认",
@@ -490,7 +535,7 @@
     "title": "AI助手",
     "placeholder": "分享您的想法...",
     "typing": "AI正在输入",
-    
+
     "sidebar": {
       "newChat": "新对话",
       "noChats": "暂无对话",
@@ -499,28 +544,28 @@
         "message": "删除\"{{title}}\"？对话将被永久删除。"
       }
     },
-    
+
     "newChat": {
       "confirm": {
         "title": "新对话",
         "message": "开始新对话？当前对话将被保存。"
       }
     },
-    
+
     "suggestions": {
       "title": "AI为您推荐",
       "showSuggestions": "显示建议",
       "startWith": "从话题开始：",
       "count": "{{count}}条建议"
     },
-    
+
     "empty": {
       "title": "AI健康助手",
       "subtitle": "我在这里支持您的心理健康。\n分享您的感受！",
       "emotionStatus": "您正在感到{{emotion}}",
       "confidence": "{{percent}}%置信度"
     },
-    
+
     "emotions": {
       "joy": "快乐",
       "sadness": "悲伤",
@@ -529,12 +574,12 @@
       "surprise": "惊讶",
       "neutral": "平静"
     },
-    
+
     "welcome": {
       "intro": "根据您的情绪，我有一些建议：",
       "question": "您想讨论什么？"
     },
-    
+
     "refresh": "刷新",
     "send": "发送"
   },

@@ -278,7 +278,8 @@
     "contacts": "Contacts",
     "emotion": "Emotion",
     "ai": "AI",
-    "setting": "Setting"
+    "setting": "Setting",
+    "game": "Games"
   },
   "friends": {
     "title": "Friends",
@@ -450,6 +451,51 @@
     "neutral": "Neutral"
   },
 
+  "game": {
+    "title": "Games",
+    "empty": "No games available",
+    "loading": "Loading games...",
+    "loadingGame": "Loading game...",
+    "initializingSDK": "Initializing...",
+    "fetchError": "Failed to load games",
+    "loadError": "Failed to load game",
+    "webviewError": "Error loading game",
+    "loginRequired": "Please login to play games",
+    "tryAgain": "Try Again",
+    "retry": "Retry",
+    "close": "Close",
+    "refresh": "Refresh",
+    "search": "Search games...",
+    "categories": {
+      "all": "All",
+      "Arcade": "Arcade",
+      "Matching": "Matching",
+      "Multiplayer": "Multiplayer",
+      "Climb": "Climb",
+      "Racing": "Racing",
+      "Casual": "Casual",
+      "Sport": "Sport",
+      "Puzzle": "Puzzle",
+      "Agility": "Agility",
+      "Dress-up": "Dress-up",
+      "Cooking": "Cooking"
+    },
+    "player": {
+      "loadingGame": "Loading game...",
+      "failedToLoad": "Failed to load game",
+      "checkConnection": "Failed to load game. Please check your internet connection.",
+      "retry": "Retry",
+      "close": "Close"
+    },
+    "error": {
+      "title": "Error",
+      "loadFailed": "Failed to load game. Please try again.",
+      "noConnection": "No internet connection",
+      "timeout": "Request timeout",
+      "unknown": "An unknown error occurred"
+    }
+  },
+
   "emotion": {
     "title": "My Emotions",
     "tabs": {
@@ -491,11 +537,11 @@
     "retry": "Retry"
   },
 
-   "aiChat": {
+  "aiChat": {
     "title": "AI Assistant",
     "placeholder": "Share your thoughts...",
     "typing": "AI is typing",
-    
+
     "sidebar": {
       "newChat": "New Chat",
       "noChats": "No conversations yet",
@@ -504,28 +550,28 @@
         "message": "Delete \"{{title}}\"? This will permanently remove the conversation."
       }
     },
-    
+
     "newChat": {
       "confirm": {
         "title": "New Chat",
         "message": "Start a new conversation? Current chat will be saved."
       }
     },
-    
+
     "suggestions": {
       "title": "AI Suggestions for You",
       "showSuggestions": "Show Suggestions",
       "startWith": "Start with topics:",
       "count": "{{count}} suggestions"
     },
-    
+
     "empty": {
       "title": "AI Health Assistant",
       "subtitle": "I'm here to support your mental health.\nShare your feelings!",
       "emotionStatus": "You're feeling {{emotion}}",
       "confidence": "{{percent}}% confidence"
     },
-    
+
     "emotions": {
       "joy": "joy",
       "sadness": "sadness",
@@ -534,12 +580,12 @@
       "surprise": "surprise",
       "neutral": "neutral"
     },
-    
+
     "welcome": {
       "intro": "Based on your emotions, I have some suggestions:",
       "question": "What would you like to discuss?"
     },
-    
+
     "refresh": "Refresh",
     "send": "Send"
   },

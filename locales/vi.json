@@ -278,7 +278,52 @@
     "contacts": "Danh bạ",
     "emotion": "Cảm xúc",
     "ai": "AI",
-    "setting": "Cài đặt"
+    "setting": "Cài đặt",
+    "game": "Trò chơi"
+  },
+  "game": {
+    "title": "Trò chơi",
+    "empty": "Không có trò chơi",
+    "loading": "Đang tải trò chơi...",
+    "loadingGame": "Đang tải game...",
+    "initializingSDK": "Đang khởi tạo...",
+    "fetchError": "Không thể tải danh sách trò chơi",
+    "loadError": "Không thể tải trò chơi",
+    "webviewError": "Lỗi khi tải trò chơi",
+    "loginRequired": "Vui lòng đăng nhập để chơi game",
+    "tryAgain": "Thử lại",
+    "retry": "Thử lại",
+    "close": "Đóng",
+    "refresh": "Làm mới",
+    "search": "Tìm kiếm trò chơi...",
+    "categories": {
+      "all": "Tất cả",
+      "Arcade": "Arcade",
+      "Matching": "Ghép đôi",
+      "Multiplayer": "Nhiều người",
+      "Climb": "Leo trèo",
+      "Racing": "Đua xe",
+      "Casual": "Giải trí",
+      "Sport": "Thể thao",
+      "Puzzle": "Trí tuệ",
+      "Agility": "Nhanh nhẹn",
+      "Dress-up": "Thời trang",
+      "Cooking": "Nấu ăn"
+    },
+    "player": {
+      "loadingGame": "Đang tải game...",
+      "failedToLoad": "Không thể tải trò chơi",
+      "checkConnection": "Không thể tải game. Vui lòng kiểm tra kết nối internet.",
+      "retry": "Thử lại",
+      "close": "Đóng"
+    },
+    "error": {
+      "title": "Lỗi",
+      "loadFailed": "Không thể tải trò chơi. Vui lòng thử lại.",
+      "noConnection": "Không có kết nối internet",
+      "timeout": "Hết thời gian chờ",
+      "unknown": "Đã xảy ra lỗi không xác định"
+    }
   },
   "friends": {
     "title": "Bạn bè",
@@ -495,7 +540,7 @@
     "title": "Trợ lý AI",
     "placeholder": "Chia sẻ suy nghĩ của bạn...",
     "typing": "AI đang gõ",
-    
+
     "sidebar": {
       "newChat": "Trò chuyện mới",
       "noChats": "Chưa có cuộc trò chuyện nào",
@@ -504,28 +549,28 @@
         "message": "Xóa \"{{title}}\"? Cuộc trò chuyện sẽ bị xóa vĩnh viễn."
       }
     },
-    
+
     "newChat": {
       "confirm": {
         "title": "Trò chuyện mới",
         "message": "Bắt đầu cuộc trò chuyện mới? Cuộc trò chuyện hiện tại sẽ được lưu."
       }
     },
-    
+
     "suggestions": {
       "title": "Gợi ý AI cho bạn",
       "showSuggestions": "Hiển thị gợi ý",
       "startWith": "Bắt đầu với các chủ đề:",
       "count": "{{count}} gợi ý"
     },
-    
+
     "empty": {
       "title": "Trợ lý sức khỏe tinh thần AI",
       "subtitle": "Tôi ở đây để hỗ trợ sức khỏe tinh thần của bạn.\nHãy chia sẻ cảm xúc của bạn!",
       "emotionStatus": "Bạn đang cảm thấy {{emotion}}",
       "confidence": "{{percent}}% độ tin cậy"
     },
-    
+
     "emotions": {
       "joy": "vui vẻ",
       "sadness": "buồn bã",
@@ -534,12 +579,12 @@
       "surprise": "ngạc nhiên",
       "neutral": "bình thường"
     },
-    
+
     "welcome": {
       "intro": "Dựa trên cảm xúc của bạn, tôi có một số gợi ý:",
       "question": "Bạn muốn thảo luận về điều gì?"
     },
-    
+
     "refresh": "Làm mới",
     "send": "Gửi"
   },
