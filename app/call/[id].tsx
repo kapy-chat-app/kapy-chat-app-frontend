@@ -101,6 +101,10 @@ export default function VideoCallScreen() {
   const [endingMessage, setEndingMessage] = useState("");
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  const [aiAdvice, setAiAdvice] = useState<string | null>(null);
+  const [showAdvice, setShowAdvice] = useState(false);
+  const adviceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const isGroupCall = conversationType === "group";
 
   // ⭐ EMOTION CAPTURE HOOK - Captures every 10s
@@ -131,7 +135,6 @@ export default function VideoCallScreen() {
   const requestPermissions = async () => {
     if (Platform.OS === "android") {
       try {
-          
         const permissions = [
           PermissionsAndroid.PERMISSIONS.CAMERA,
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
@@ -239,7 +242,13 @@ export default function VideoCallScreen() {
       console.error("❌ Failed to setup remote video:", error);
     }
   };
-
+  useEffect(() => {
+    return () => {
+      if (adviceTimeoutRef.current) {
+        clearTimeout(adviceTimeoutRef.current);
+      }
+    };
+  }, []);
   // Initialize Socket Connection
   useEffect(() => {
     if (!userId || !conversationId) return;
@@ -363,20 +372,106 @@ export default function VideoCallScreen() {
         confidence: number;
         emotion_scores: any;
         timestamp: string;
+        ai_advice?: string;
+        transcription?: string;
       }) => {
-        if (data.call_id !== callId) return;
+        // ⭐ DEBUG: Log toàn bộ data nhận được
+        console.log("🔥 ==========================================");
+        console.log("🔥 RAW callEmotionUpdate EVENT RECEIVED");
+        console.log("🔥 ==========================================");
+        console.log("🔥 Full data:", JSON.stringify(data, null, 2));
+        console.log("🔥 call_id:", data.call_id);
+        console.log("🔥 user_id:", data.user_id);
+        console.log("🔥 emotion:", data.emotion);
+        console.log("🔥 confidence:", data.confidence);
+        console.log("🔥 ai_advice:", data.ai_advice);
+        console.log("🔥 transcription:", data.transcription);
+        console.log("🔥 ==========================================");
+        console.log("🔥 VALIDATION:");
+        console.log("🔥 Current callId:", callId);
+        console.log("🔥 Current userId:", userId);
+        console.log("🔥 callId match?", data.call_id === callId);
+        console.log("🔥 userId match?", data.user_id === userId);
+        console.log("🔥 Has ai_advice?", !!data.ai_advice);
+        console.log("🔥 Advice length:", data.ai_advice?.length || 0);
+        console.log("🔥 ==========================================");
 
-        console.log("🎭 Received emotion update:", data);
+        // Check callId match
+        if (data.call_id !== callId) {
+          console.log("❌ Call ID mismatch, ignoring event");
+          console.log("❌ Expected:", callId);
+          console.log("❌ Received:", data.call_id);
+          return;
+        }
+
+        console.log("✅ Call ID matched, processing emotion update");
 
         // Update own emotion
         if (data.user_id === userId) {
+          console.log("🎯 ==========================================");
+          console.log("🎯 THIS IS MY EMOTION UPDATE");
+          console.log("🎯 ==========================================");
+
           setMyCurrentEmotion(data.emotion);
           setMyEmotionConfidence(data.confidence);
+
+          console.log("🎯 Updated myCurrentEmotion to:", data.emotion);
+          console.log("🎯 Updated myEmotionConfidence to:", data.confidence);
+
+          // ⭐ Show AI advice if available
+          if (data.ai_advice && data.ai_advice.trim().length > 0) {
+            console.log("🤖 ==========================================");
+            console.log("🤖 AI ADVICE DETECTED!");
+            console.log("🤖 ==========================================");
+            console.log("🤖 Advice content:", data.ai_advice);
+            console.log("🤖 Advice length:", data.ai_advice.length);
+            console.log("🤖 Trimmed length:", data.ai_advice.trim().length);
+
+            // Clear existing timeout
+            if (adviceTimeoutRef.current) {
+              console.log("🤖 Clearing previous advice timeout");
+              clearTimeout(adviceTimeoutRef.current);
+            }
+
+            // Show advice
+            console.log("🤖 Setting aiAdvice state...");
+            setAiAdvice(data.ai_advice);
+
+            console.log("🤖 Setting showAdvice to true...");
+            setShowAdvice(true);
+
+            console.log("🤖 Setting 10s auto-hide timer...");
+            adviceTimeoutRef.current = setTimeout(() => {
+              console.log("⏰ 10 seconds elapsed, hiding advice");
+              setShowAdvice(false);
+            }, 10000);
+
+            console.log("🤖 ✅ AI Advice UI should now be visible!");
+            console.log("🤖 ==========================================");
+          } else {
+            console.log("⚠️ ==========================================");
+            console.log("⚠️ NO AI ADVICE IN THIS UPDATE");
+            console.log("⚠️ ==========================================");
+            console.log("⚠️ ai_advice value:", data.ai_advice);
+            console.log("⚠️ ai_advice type:", typeof data.ai_advice);
+            console.log("⚠️ ai_advice is null?", data.ai_advice === null);
+            console.log(
+              "⚠️ ai_advice is undefined?",
+              data.ai_advice === undefined
+            );
+            console.log("⚠️ ai_advice is empty string?", data.ai_advice === "");
+            console.log("⚠️ ==========================================");
+          }
+        } else {
+          console.log("ℹ️ This is another participant's emotion update");
+          console.log("ℹ️ Their userId:", data.user_id);
+          console.log("ℹ️ My userId:", userId);
         }
 
         // Update participant emotion
-        setParticipants((prev) =>
-          prev.map((p) =>
+        console.log("👥 Updating participants list with new emotion...");
+        setParticipants((prev) => {
+          const updated = prev.map((p) =>
             p.userId === data.user_id
               ? {
                   ...p,
@@ -384,12 +479,15 @@ export default function VideoCallScreen() {
                   emotionConfidence: data.confidence,
                 }
               : p
-          )
-        );
+          );
+          console.log("👥 Participants updated");
+          return updated;
+        });
 
         // Update main participant if needed
         setMainParticipant((prev) => {
           if (prev?.userId === data.user_id) {
+            console.log("🎬 Updating main participant emotion");
             return {
               ...prev,
               currentEmotion: data.emotion,
@@ -398,6 +496,9 @@ export default function VideoCallScreen() {
           }
           return prev;
         });
+
+        console.log("✅ callEmotionUpdate processing complete");
+        console.log("==========================================");
       }
     );
 
@@ -1246,6 +1347,34 @@ export default function VideoCallScreen() {
             <Text style={styles.myEmotionLabel}>You: {myCurrentEmotion}</Text>
           </View>
         )}
+        {showAdvice && aiAdvice && (
+          <Animated.View
+            style={[
+              styles.aiAdviceCard,
+              {
+                opacity: showAdvice ? 1 : 0,
+              },
+            ]}
+          >
+            <View style={styles.aiAdviceHeader}>
+              <Ionicons name="bulb" size={20} color="#f59e0b" />
+              <Text style={styles.aiAdviceTitle}>Emotional Wellness Tip</Text>
+              <TouchableOpacity
+                onPress={() => setShowAdvice(false)}
+                style={styles.aiAdviceClose}
+              >
+                <Ionicons name="close" size={20} color="#9ca3af" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.aiAdviceText}>{aiAdvice}</Text>
+
+            <View style={styles.aiAdviceFooter}>
+              <Ionicons name="sparkles" size={14} color="#8b5cf6" />
+              <Text style={styles.aiAdviceLabel}>Powered by Gemini AI</Text>
+            </View>
+          </Animated.View>
+        )}
 
         {/* ❌ REMOVED: RECORDING INDICATOR */}
         {/* ❌ REMOVED: EMOTION ANALYZING INDICATOR */}
@@ -1790,5 +1919,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  // ❌ REMOVED: recordingIndicator, recordingDot, recordingText, analyzingIndicator, analyzingText
+  aiAdviceCard: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 150 : 160,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(17, 24, 39, 0.95)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(139, 92, 246, 0.3)",
+    padding: 16,
+    shadowColor: "#8b5cf6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 200,
+  },
+  aiAdviceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 8,
+  },
+  aiAdviceTitle: {
+    color: "#f59e0b",
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+  },
+  aiAdviceClose: {
+    padding: 4,
+  },
+  aiAdviceText: {
+    color: "#fff",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  aiAdviceFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+  },
+  aiAdviceLabel: {
+    color: "#8b5cf6",
+    fontSize: 12,
+    fontWeight: "500",
+  },
 });
