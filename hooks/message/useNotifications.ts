@@ -161,7 +161,7 @@ export const useNotifications = (): UseNotificationsReturn => {
     try {
       setError(null);
 
-      const response = await fetch(`${API_BASE_URL}/api/notifications/read-al`l, {
+      const response = await fetch(`${API_BASE_URL}/api/notifications/read-al`, {
         method: "PUT",
       });
 
