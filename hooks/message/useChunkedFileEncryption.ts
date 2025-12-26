@@ -1,4 +1,4 @@
-// hooks/message/useChunkedFileEncryption.ts - FIXED: Pass recipientKeys to native
+// hooks/message/useChunkedFileEncryption.ts - FIXED: Add skipMessageCreation flag
 
 import { NativeEncryptionBridge } from "@/lib/encryption/NativeEncryptionBridge";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -19,6 +19,7 @@ export interface StreamingUploadResult {
   originalSize: number;
   encryptedSize: number;
   fileName: string;
+  skipMessageCreation?: boolean;  // ✅ NEW: Flag to prevent duplicate message creation
   recipientKeys?: {
     userId: string;
     encryptedSymmetricKey: string;
@@ -82,7 +83,7 @@ export const useChunkedFileEncryption = () => {
         throw error;
       }
     },
-    [getToken, API_BASE_URL]
+    [getToken]
   );
 
   const getParticipantKeys = useCallback(
@@ -126,11 +127,11 @@ export const useChunkedFileEncryption = () => {
 
       return keyMap;
     },
-    [getToken, API_BASE_URL]
+    [getToken]
   );
 
   /**
-   * ✅ FIXED: Pass recipientKeys as JSON string to native method
+   * ✅ COMPLETE FIX: Native upload with skipMessageCreation flag
    */
   const encryptAndUploadFileNew = useCallback(
     async (
@@ -142,6 +143,7 @@ export const useChunkedFileEncryption = () => {
       console.log("🚀 [ENCRYPT] Starting OPTIMIZED NATIVE upload flow");
       console.log(`   File: ${fileName}`);
       console.log(`   URI: ${fileUri}`);
+      console.log(`   API URL: ${API_BASE_URL}`);
 
       const token = await getToken();
       if (!token) throw new Error("No auth token");
@@ -202,22 +204,21 @@ export const useChunkedFileEncryption = () => {
         throw new Error("Native upload method not available - rebuild app");
       }
 
-      // ✅ STEP 6: Call native method WITH recipientKeys
+      // STEP 6: Call native method
       console.log("🚀 [ENCRYPT] STEP 6: Calling NATIVE encrypt + upload...");
       console.log(`   📦 Passing ${recipientKeys.length} recipientKeys to native`);
-      console.log("   ⚠️ IF YOU SEE JS LOGS BELOW, NATIVE FAILED!");
-      console.log("   ✅ IF YOU SEE KOTLIN LOGS, NATIVE WORKING!");
+      console.log(`   🌐 API URL: ${API_BASE_URL}`);
 
       let result;
       try {
-        // ✅ CRITICAL FIX: Pass recipientKeys as 6th parameter (JSON string)
         result = await KapyEncryption.encryptAndUploadFileStreamingWithSymmetricKey(
-          fileUri,              // 1. File URI
-          fileName,             // 2. File name
-          conversationId,       // 3. Conversation ID
-          symmetricKey,         // 4. Symmetric key (base64)
-          JSON.stringify(recipientKeys), // 5. ✅ recipientKeys as JSON string
-          token                 // 6. Auth token
+          fileUri,
+          fileName,
+          conversationId,
+          symmetricKey,
+          JSON.stringify(recipientKeys),
+          API_BASE_URL,
+          token
         );
 
         console.log("✅ [ENCRYPT] Native method returned!");
@@ -234,9 +235,9 @@ export const useChunkedFileEncryption = () => {
 
       console.log("🎉 [ENCRYPT] COMPLETE!");
       console.log(`   Upload time: ${result.uploadTimeSeconds?.toFixed(1)}s`);
-      console.log(`   Avg speed: ~${result.avgSpeedMBps}MB/s`);
       console.log(`   Recipients saved: ${recipientKeys.length}`);
 
+      // ✅ CRITICAL: Return with skipMessageCreation flag
       return {
         fileId: result.fileId,
         messageId: result.messageId,
@@ -247,10 +248,11 @@ export const useChunkedFileEncryption = () => {
         originalSize: result.originalSize,
         encryptedSize: result.encryptedSize,
         fileName,
-        recipientKeys, // ✅ Return recipientKeys for reference
+        recipientKeys,
+        skipMessageCreation: true,  // ✅ NEW: Tell caller not to create duplicate message
       };
     },
-    [getToken, getConversationParticipants, getParticipantKeys, API_BASE_URL]
+    [getToken, getConversationParticipants, getParticipantKeys]
   );
 
   /**
@@ -363,7 +365,7 @@ export const useChunkedFileEncryption = () => {
               file_name: fileName,
               file_type: getMimeType(fileName),
               chunks: encryptedFile.chunks,
-              recipientKeys, // ✅ Include recipientKeys
+              recipientKeys,
             },
           }),
         }
@@ -386,9 +388,10 @@ export const useChunkedFileEncryption = () => {
         encryptedSize: encryptedFile.encryptedSize,
         fileName,
         recipientKeys,
+        skipMessageCreation: false,  // ✅ Fallback doesn't create message
       };
     },
-    [getToken, getConversationParticipants, getParticipantKeys, API_BASE_URL]
+    [getToken, getConversationParticipants, getParticipantKeys]
   );
 
   const encryptAndUploadFile = useCallback(

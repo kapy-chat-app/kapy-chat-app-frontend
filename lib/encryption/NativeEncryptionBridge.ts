@@ -1,8 +1,5 @@
 // lib/encryption/NativeEncryptionBridge.ts
-// ✅ FIXED VERSION - Enhanced logging and type conversion for cache
-// ✅ Bridge to native Android encryption module
-// ✅ 5-10x faster than JavaScript implementation
-// ✅ Streaming support for large files
+// ✅ CACHE-FIRST VERSION - Enhanced với helper methods
 
 import { NativeEventEmitter, NativeModules, Platform } from "react-native";
 
@@ -76,10 +73,6 @@ export interface EncryptedSymmetricKey {
 
 export type ProgressCallback = (progress: EncryptionProgress) => void;
 
-// =============================================
-// EVENT EMITTER
-// =============================================
-
 const eventEmitter = new NativeEventEmitter(KapyEncryption);
 
 // =============================================
@@ -90,15 +83,10 @@ export class NativeEncryptionBridge {
   private static progressListeners: Map<string, ProgressCallback> = new Map();
   private static subscriptions: any[] = [];
 
-  /**
-   * Initialize the bridge
-   */
   static initialize(): void {
-    // Subscribe to progress events
     const subscription = eventEmitter.addListener(
       "KapyEncryptionProgress",
       (progress: EncryptionProgress) => {
-        // Notify all active listeners
         this.progressListeners.forEach((callback) => {
           callback(progress);
         });
@@ -109,22 +97,12 @@ export class NativeEncryptionBridge {
     console.log("✅ NativeEncryptionBridge initialized");
   }
 
-  /**
-   * Cleanup
-   */
   static cleanup(): void {
     this.subscriptions.forEach((sub) => sub.remove());
     this.subscriptions = [];
     this.progressListeners.clear();
   }
 
-  // ============================================
-  // KEY MANAGEMENT
-  // ============================================
-
-  /**
-   * Generate encryption key
-   */
   static async generateKey(): Promise<string> {
     if (Platform.OS !== "android") {
       throw new Error("Native encryption only available on Android");
@@ -132,9 +110,6 @@ export class NativeEncryptionBridge {
     return await KapyEncryption.generateKey();
   }
 
-  /**
-   * Derive key from base64 string
-   */
   static async deriveKey(keyBase64: string): Promise<string> {
     if (Platform.OS !== "android") {
       throw new Error("Native encryption only available on Android");
@@ -142,21 +117,11 @@ export class NativeEncryptionBridge {
     return await KapyEncryption.deriveKey(keyBase64);
   }
 
-  /**
-   * Clear key cache
-   */
   static async clearKeyCache(): Promise<void> {
     if (Platform.OS !== "android") return;
     await KapyEncryption.clearKeyCache();
   }
 
-  // ============================================
-  // TEXT MESSAGE ENCRYPTION
-  // ============================================
-
-  /**
-   * Encrypt text message
-   */
   static async encryptMessage(
     message: string,
     keyBase64: string
@@ -174,9 +139,6 @@ export class NativeEncryptionBridge {
     };
   }
 
-  /**
-   * Decrypt text message
-   */
   static async decryptMessage(
     encryptedBase64: string,
     ivBase64: string,
@@ -195,13 +157,6 @@ export class NativeEncryptionBridge {
     );
   }
 
-  // ============================================
-  // FILE ENCRYPTION - STREAMING
-  // ============================================
-
-  /**
-   * Encrypt file with streaming (for large files)
-   */
   static async encryptFileStreaming(
     fileUri: string,
     fileName: string,
@@ -212,7 +167,6 @@ export class NativeEncryptionBridge {
       throw new Error("Native encryption only available on Android");
     }
 
-    // Register progress callback
     const listenerId = `encrypt_${Date.now()}`;
     if (onProgress) {
       this.progressListeners.set(listenerId, onProgress);
@@ -227,15 +181,10 @@ export class NativeEncryptionBridge {
 
       return result as EncryptedFileResult;
     } finally {
-      // Cleanup listener
       this.progressListeners.delete(listenerId);
     }
   }
 
-  /**
-   * ✅ Decrypt file directly (single-pass, no chunks)
-   * Best for small files (<1MB) or when data is already in memory
-   */
   static async decryptFileDirect(
     encryptedBase64: string,
     iv: string,
@@ -256,9 +205,6 @@ export class NativeEncryptionBridge {
     );
   }
 
-  /**
-   * Decrypt file with streaming (OLD - requires full base64 in memory)
-   */
   static async decryptFileStreaming(
     encryptedBase64: string,
     chunks: ChunkInfo[],
@@ -271,7 +217,6 @@ export class NativeEncryptionBridge {
       throw new Error("Native encryption only available on Android");
     }
 
-    // Register progress callback
     const listenerId = `decrypt_${Date.now()}`;
     if (onProgress) {
       this.progressListeners.set(listenerId, onProgress);
@@ -288,15 +233,10 @@ export class NativeEncryptionBridge {
 
       return resultPath;
     } finally {
-      // Cleanup listener
       this.progressListeners.delete(listenerId);
     }
   }
 
-  /**
-   * ✅ NEW: Decrypt file streaming from S3 URL (TRUE STREAMING)
-   * Downloads and decrypts simultaneously - minimal RAM usage
-   */
   static async decryptFileStreamingFromUrl(
     s3Url: string,
     chunks: ChunkInfo[],
@@ -329,29 +269,15 @@ export class NativeEncryptionBridge {
     }
   }
 
-  // ============================================
-  // FALLBACK DETECTION
-  // ============================================
-
-  /**
-   * Check if native encryption is available
-   */
   static isAvailable(): boolean {
     const available = Platform.OS === "android" && !!KapyEncryption;
     return available;
   }
 
-  /**
-   * Get performance estimate
-   */
   static getPerformanceMultiplier(): number {
-    // Native is ~5-10x faster than JS
     return this.isAvailable() ? 7 : 1;
   }
 
-  /**
-   * Generate random symmetric key for file encryption
-   */
   static async generateSymmetricKey(): Promise<string> {
     if (Platform.OS !== "android") {
       throw new Error("Native encryption only available on Android");
@@ -359,11 +285,6 @@ export class NativeEncryptionBridge {
     return await KapyEncryption.generateSymmetricKey();
   }
 
-  /**
-   * Encrypt symmetric key với public key của recipient
-   * @param symmetricKey - Base64 symmetric key
-   * @param recipientPublicKey - Base64 public key của recipient
-   */
   static async encryptSymmetricKey(
     symmetricKey: string,
     recipientPublicKey: string
@@ -384,13 +305,6 @@ export class NativeEncryptionBridge {
     };
   }
 
-  /**
-   * Decrypt symmetric key bằng own private key
-   * @param encryptedKey - Encrypted symmetric key
-   * @param keyIv - IV used for key encryption
-   * @param keyAuthTag - Auth tag for key encryption
-   * @param senderPublicKey - Sender's public key (để derive shared secret)
-   */
   static async decryptSymmetricKey(
     encryptedKey: string,
     keyIv: string,
@@ -409,9 +323,6 @@ export class NativeEncryptionBridge {
     );
   }
 
-  /**
-   * ✅ NEW: Encrypt file với symmetric key (thay vì recipient's public key)
-   */
   static async encryptFileWithSymmetricKey(
     fileUri: string,
     fileName: string,
@@ -440,9 +351,6 @@ export class NativeEncryptionBridge {
     }
   }
 
-  /**
-   * ✅ NEW: Decrypt file với symmetric key
-   */
   static async decryptFileWithSymmetricKey(
     s3Url: string,
     chunks: ChunkInfo[],
@@ -455,7 +363,6 @@ export class NativeEncryptionBridge {
       throw new Error("Native encryption only available on Android");
     }
 
-    // ✅ CRITICAL: Validate chunks array
     if (!chunks || !Array.isArray(chunks)) {
       console.error("❌ [Bridge] chunks is null or not array:", chunks);
       throw new Error("chunks parameter is null or not an array");
@@ -466,13 +373,6 @@ export class NativeEncryptionBridge {
       throw new Error("chunks array is empty");
     }
 
-    console.log("🔍 [Bridge] Chunks validation:");
-    console.log(`   Type: ${typeof chunks}`);
-    console.log(`   Is Array: ${Array.isArray(chunks)}`);
-    console.log(`   Length: ${chunks.length}`);
-    console.log(`   First chunk:`, chunks[0]);
-
-    // ✅ Ensure chunks have required fields
     const validatedChunks = chunks.map((chunk, index) => {
       if (
         !chunk.iv ||
@@ -489,8 +389,6 @@ export class NativeEncryptionBridge {
       }
       return chunk;
     });
-
-    console.log(`✅ [Bridge] Validated ${validatedChunks.length} chunks`);
 
     const listenerId = `decrypt_stream_${Date.now()}`;
     if (onProgress) {
@@ -548,7 +446,7 @@ export class NativeEncryptionBridge {
 }
 
 // =============================================
-// NATIVE CACHE BRIDGE - FIXED VERSION
+// NATIVE CACHE BRIDGE
 // =============================================
 
 export interface CachedMessage {
@@ -564,7 +462,7 @@ export interface CachedMessage {
   read_by_json: string;
   reply_to_json?: string;
   metadata_json?: string;
-  is_edited: number; // ✅ Changed to number for proper Kotlin compatibility
+  is_edited: number;
   created_at: number;
   updated_at: number;
   rich_media_json?: string;
@@ -572,23 +470,95 @@ export interface CachedMessage {
 
 export class NativeCacheBridge {
   /**
-   * ✅ Save messages to cache - FIXED with proper type conversion
+   * ✅ NEW: Check if messages exist (fast check)
    */
-  static async saveMessages(messages: CachedMessage[]): Promise<void> {
+  static async hasMessages(conversationId: string): Promise<boolean> {
+    if (Platform.OS !== "android") return false;
+    
+    if (!KapyCache) {
+      console.error("❌ [Bridge] KapyCache module not found!");
+      return false;
+    }
+
+    try {
+      const result = await KapyCache.hasMessages(conversationId);
+      return result === true;
+    } catch (error) {
+      console.error("❌ [Bridge] hasMessages error:", error);
+      return false;
+    }
+  }
+
+  /**
+   * ✅ NEW: Get message count
+   */
+  static async getMessageCount(conversationId: string): Promise<number> {
+    if (Platform.OS !== "android") return 0;
+    
+    if (!KapyCache) {
+      console.error("❌ [Bridge] KapyCache module not found!");
+      return 0;
+    }
+
+    try {
+      const count = await KapyCache.getMessageCount(conversationId);
+      return count || 0;
+    } catch (error) {
+      console.error("❌ [Bridge] getMessageCount error:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * ✅ Get messages với pagination support
+   */
+  static async getMessages(
+    conversationId: string,
+    limit: number,
+    beforeTimestamp?: number
+  ): Promise<CachedMessage[]> {
     if (Platform.OS !== "android") {
-      console.warn("⚠️ [NativeBridge] Not on Android, skipping save");
-      return;
+      return [];
     }
     
     if (!KapyCache) {
-      console.error("❌ [NativeBridge] KapyCache module not found!");
+      console.error("❌ [Bridge] KapyCache module not found!");
+      return [];
+    }
+
+    try {
+      const result = await KapyCache.getMessages(
+        conversationId,
+        limit,
+        beforeTimestamp || null
+      );
+
+      if (!result || !Array.isArray(result)) {
+        return [];
+      }
+
+      return result as CachedMessage[];
+      
+    } catch (error) {
+      console.error("❌ [Bridge] getMessages error:", error);
+      return [];
+    }
+  }
+
+  /**
+   * ✅ Save messages returns count
+   */
+  static async saveMessages(messages: CachedMessage[]): Promise<number> {
+    if (Platform.OS !== "android") {
+      return 0;
+    }
+    
+    if (!KapyCache) {
+      console.error("❌ [Bridge] KapyCache module not found!");
       throw new Error("KapyCache module not available");
     }
 
-    console.log(`📲 [NativeBridge] saveMessages called with ${messages.length} messages`);
-
     try {
-      // ✅ Normalize messages for Kotlin
       const normalized = messages.map(msg => ({
         _id: msg._id,
         conversation_id: msg.conversation_id,
@@ -602,112 +572,22 @@ export class NativeCacheBridge {
         read_by_json: msg.read_by_json || "[]",
         reply_to_json: msg.reply_to_json || "",
         metadata_json: msg.metadata_json || "",
-        is_edited: msg.is_edited ? 1 : 0, // ✅ Ensure integer
-        created_at: Math.floor(msg.created_at), // ✅ Ensure integer
-        updated_at: Math.floor(msg.updated_at), // ✅ Ensure integer
+        is_edited: msg.is_edited ? 1 : 0,
+        created_at: Math.floor(msg.created_at),
+        updated_at: Math.floor(msg.updated_at),
         rich_media_json: msg.rich_media_json || "",
       }));
 
-      console.log(`✅ [NativeBridge] Normalized ${normalized.length} messages`);
-      console.log(`📦 [NativeBridge] First message:`, {
-        _id: normalized[0]._id,
-        conversation_id: normalized[0].conversation_id,
-        type: normalized[0].type,
-        has_content: !!normalized[0].content,
-        has_attachments: normalized[0].attachments_json !== "[]",
-      });
-
-      // ✅ Call native module
-      await KapyCache.saveMessages(normalized);
+      const savedCount = await KapyCache.saveMessages(normalized);
       
-      console.log(`✅ [NativeBridge] Native saveMessages completed successfully`);
+      return savedCount || 0;
       
     } catch (error) {
-      console.error("❌ [NativeBridge] saveMessages error:", error);
-      if (error instanceof Error) {
-        console.error("  Error name:", error.name);
-        console.error("  Error message:", error.message);
-        console.error("  Error stack:", error.stack);
-      }
+      console.error("❌ [Bridge] saveMessages error:", error);
       throw error;
     }
   }
 
-  /**
-   * ✅ Get messages from cache - FIXED with enhanced logging
-   */
-  static async getMessages(
-    conversationId: string,
-    limit: number,
-    beforeTimestamp?: number
-  ): Promise<CachedMessage[]> {
-    if (Platform.OS !== "android") {
-      console.warn("⚠️ [NativeBridge] Not on Android, returning empty array");
-      return [];
-    }
-    
-    if (!KapyCache) {
-      console.error("❌ [NativeBridge] KapyCache module not found!");
-      return [];
-    }
-
-    console.log(`📲 [NativeBridge] getMessages called:`, {
-      conversationId,
-      limit,
-      beforeTimestamp,
-    });
-
-    try {
-      // ✅ Call native module
-      const result = await KapyCache.getMessages(
-        conversationId,
-        limit,
-        beforeTimestamp
-      );
-
-      console.log(`✅ [NativeBridge] Native getMessages returned: ${result?.length || 0} messages`);
-
-      // ✅ Handle empty or invalid result
-      if (!result) {
-        console.warn("⚠️ [NativeBridge] Result is null/undefined");
-        return [];
-      }
-
-      if (!Array.isArray(result)) {
-        console.error("❌ [NativeBridge] Result is not an array:", typeof result);
-        return [];
-      }
-
-      if (result.length === 0) {
-        console.log("📭 [NativeBridge] No messages found in cache");
-        return [];
-      }
-
-      // ✅ Log first message for debugging
-      const first = result[0];
-      console.log(`📦 [NativeBridge] First cached message:`, {
-        _id: first._id,
-        conversation_id: first.conversation_id,
-        type: first.type,
-        has_content: !!first.content,
-        attachments: first.attachments_json ? JSON.parse(first.attachments_json).length : 0,
-      });
-
-      return result as CachedMessage[];
-      
-    } catch (error) {
-      console.error("❌ [NativeBridge] getMessages error:", error);
-      if (error instanceof Error) {
-        console.error("  Error name:", error.name);
-        console.error("  Error message:", error.message);
-      }
-      return [];
-    }
-  }
-
-  /**
-   * ✅ Update attachment URI in cache
-   */
   static async updateAttachmentUri(
     messageId: string,
     attachmentId: string,
@@ -716,7 +596,7 @@ export class NativeCacheBridge {
     if (Platform.OS !== "android") return false;
     
     if (!KapyCache) {
-      console.error("❌ [NativeBridge] KapyCache module not found!");
+      console.error("❌ [Bridge] KapyCache module not found!");
       return false;
     }
 
@@ -730,116 +610,95 @@ export class NativeCacheBridge {
       return result === true;
       
     } catch (error) {
-      console.error("❌ [NativeBridge] updateAttachmentUri error:", error);
+      console.error("❌ [Bridge] updateAttachmentUri error:", error);
       return false;
     }
   }
 
-  /**
-   * ✅ Clear conversation cache
-   */
   static async clearConversation(conversationId: string): Promise<void> {
     if (Platform.OS !== "android") return;
     
     if (!KapyCache) {
-      console.error("❌ [NativeBridge] KapyCache module not found!");
+      console.error("❌ [Bridge] KapyCache module not found!");
       return;
     }
 
     try {
       await KapyCache.clearConversation(conversationId);
-      console.log(`✅ [NativeBridge] Cleared conversation: ${conversationId}`);
     } catch (error) {
-      console.error("❌ [NativeBridge] clearConversation error:", error);
+      console.error("❌ [Bridge] clearConversation error:", error);
       throw error;
     }
   }
 
-  /**
- * ✅ Get conversation metadata from SQLite
- */
-static async getConversationMeta(conversationId: string): Promise<{
-  conversation_id: string;
-  last_sync_time: number;
-  total_cached: number;
-  last_message_id?: string;
-} | null> {
-  if (Platform.OS !== "android") return null;
-  
-  if (!KapyCache) {
-    console.error("❌ [NativeBridge] KapyCache module not found!");
-    return null;
+  static async getConversationMeta(conversationId: string): Promise<{
+    conversation_id: string;
+    last_sync_time: number;
+    total_cached: number;
+    last_message_id?: string;
+  } | null> {
+    if (Platform.OS !== "android") return null;
+    
+    if (!KapyCache) {
+      console.error("❌ [Bridge] KapyCache module not found!");
+      return null;
+    }
+
+    try {
+      const result = await KapyCache.getConversationMeta(conversationId);
+      return result;
+    } catch (error) {
+      console.error("❌ [Bridge] getConversationMeta error:", error);
+      return null;
+    }
   }
 
-  try {
-    const result = await KapyCache.getConversationMeta(conversationId);
-    return result;
-  } catch (error) {
-    console.error("❌ [NativeBridge] getConversationMeta error:", error);
-    return null;
-  }
-}
+  static async updateConversationMeta(
+    conversationId: string,
+    lastSyncTime: number,
+    totalCached: number,
+    lastMessageId?: string
+  ): Promise<void> {
+    if (Platform.OS !== "android") return;
+    
+    if (!KapyCache) {
+      console.error("❌ [Bridge] KapyCache module not found!");
+      return;
+    }
 
-/**
- * ✅ Update conversation metadata in SQLite
- */
-static async updateConversationMeta(
-  conversationId: string,
-  lastSyncTime: number,
-  totalCached: number,
-  lastMessageId?: string
-): Promise<void> {
-  if (Platform.OS !== "android") return;
-  
-  if (!KapyCache) {
-    console.error("❌ [NativeBridge] KapyCache module not found!");
-    return;
+    try {
+      await KapyCache.updateConversationMeta(
+        conversationId,
+        lastSyncTime,
+        totalCached,
+        lastMessageId || null
+      );
+    } catch (error) {
+      console.error("❌ [Bridge] updateConversationMeta error:", error);
+      throw error;
+    }
   }
 
-  try {
-    await KapyCache.updateConversationMeta(
-      conversationId,
-      lastSyncTime,
-      totalCached,
-      lastMessageId || null
-    );
-  } catch (error) {
-    console.error("❌ [NativeBridge] updateConversationMeta error:", error);
-    throw error;
-  }
-}
-
-  /**
-   * ✅ Clear all cache
-   */
   static async clearAll(): Promise<void> {
     if (Platform.OS !== "android") return;
     
     if (!KapyCache) {
-      console.error("❌ [NativeBridge] KapyCache module not found!");
+      console.error("❌ [Bridge] KapyCache module not found!");
       return;
     }
 
     try {
       await KapyCache.clearAll();
-      console.log(`✅ [NativeBridge] Cleared all cache`);
     } catch (error) {
-      console.error("❌ [NativeBridge] clearAll error:", error);
+      console.error("❌ [Bridge] clearAll error:", error);
       throw error;
     }
   }
 
-  /**
-   * ✅ Check if native cache is available
-   */
   static isAvailable(): boolean {
     const available = Platform.OS === "android" && !!KapyCache;
-    console.log("🔍 [NativeBridge] Cache available:", available);
-    console.log("🔍 [NativeBridge] Platform:", Platform.OS);
-    console.log("🔍 [NativeBridge] KapyCache module:", !!KapyCache);
     return available;
   }
 }
 
-// Auto-initialize
 NativeEncryptionBridge.initialize();

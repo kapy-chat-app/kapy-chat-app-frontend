@@ -1,9 +1,13 @@
-// components/page/message/MessageInput.tsx - TEXT TOXIC ALLOWED, IMAGE TOXIC BLOCKED
+// components/page/message/MessageInput.tsx - FINAL FIX
+// ✅ Fixed useEncryption return format
+// ✅ Fixed typing indicator
+// ✅ TEXT MESSAGES NOW WORK WITH E2EE
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useOnDeviceAI } from "@/hooks/ai/useOnDeviceAI";
 import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
+import { useEncryption } from "@/hooks/message/useEncryption";
 import type { RichMediaDTO } from "@/hooks/message/useGiphy";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
@@ -116,6 +120,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const { encryptAndUploadFile, isReady: encryptionReady } =
     useChunkedFileEncryption();
 
+  const { encryptMessage, isInitialized: encryptionInitialized } =
+    useEncryption();
+
   const { getToken } = useAuth();
 
   const {
@@ -125,46 +132,36 @@ const MessageInput: React.FC<MessageInputProps> = ({
   } = useOnDeviceAI();
 
   // ============================================
-  // ✅ Analyze text while typing (SILENT - no warnings)
+  // ✅ FIXED: Typing indicator logic
   // ============================================
-  const analyzeWhileTyping = useCallback(
-    debounce(async (text: string) => {
-      if (!aiReady || text.trim().length < 10) {
-        setEmotionAnalysis(null);
-        return;
-      }
-
-      try {
-        const analysis = await analyzeTextMessage(text);
-        setEmotionAnalysis(analysis);
-        // ✅ NO WARNINGS - just show emotion
-      } catch (error) {
-        console.error("❌ [AI] Analysis error:", error);
-      }
-    }, 2000),
-    [aiReady, analyzeTextMessage]
-  );
-
   const handleTyping = (text: string) => {
     setMessage(text);
 
     if (!onTyping) return;
 
-    if (text.length > 0 && !isTypingRef.current) {
-      isTypingRef.current = true;
-      onTyping(true);
-    }
-
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    typingTimeoutRef.current = setTimeout(() => {
+    if (text.length > 0) {
+      if (!isTypingRef.current) {
+        console.log("⌨️ [INPUT] User started typing");
+        isTypingRef.current = true;
+        onTyping(true);
+      }
+
+      typingTimeoutRef.current = setTimeout(() => {
+        console.log("⌨️ [INPUT] User stopped typing (2s timeout)");
+        isTypingRef.current = false;
+        onTyping(false);
+      }, 2000);
+    } else {
       if (isTypingRef.current) {
+        console.log("⌨️ [INPUT] User cleared text - stop typing");
         isTypingRef.current = false;
         onTyping(false);
       }
-    }, 2000);
+    }
 
     analyzeWhileTyping(text);
   };
@@ -175,14 +172,29 @@ const MessageInput: React.FC<MessageInputProps> = ({
         clearTimeout(typingTimeoutRef.current);
       }
       if (isTypingRef.current && onTyping) {
+        console.log("🧹 [INPUT] Cleanup - stop typing");
         onTyping(false);
       }
     };
   }, [onTyping]);
 
-  // ============================================
-  // ✅ Check images for toxicity - BLOCK IF TOXIC
-  // ============================================
+  const analyzeWhileTyping = useCallback(
+    debounce(async (text: string) => {
+      if (!aiReady || text.trim().length < 10) {
+        setEmotionAnalysis(null);
+        return;
+      }
+
+      try {
+        const analysis = await analyzeTextMessage(text);
+        setEmotionAnalysis(analysis);
+      } catch (error) {
+        console.error("❌ [AI] Analysis error:", error);
+      }
+    }, 2000),
+    [aiReady, analyzeTextMessage]
+  );
+
   const checkImagesBeforeSend = async (
     attachments: AttachmentPreview[]
   ): Promise<boolean> => {
@@ -211,7 +223,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           );
 
           setAnalyzingImage(false);
-          return false; // ✅ BLOCK IMAGE
+          return false;
         }
       }
 
@@ -221,7 +233,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     } catch (error) {
       console.error("❌ [AI] Image check error:", error);
       setAnalyzingImage(false);
-      return true; // ✅ Fallback: allow if error
+      return true;
     }
   };
 
@@ -254,7 +266,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   // ============================================
-  // ✅ HANDLE SEND - TEXT TOXIC ALLOWED, IMAGE TOXIC BLOCKED
+  // ✅ HANDLE SEND - COMPLETE FIXED VERSION
   // ============================================
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
@@ -265,6 +277,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     if (isTypingRef.current && onTyping) {
+      console.log("⌨️ [SEND] Stopping typing indicator");
       isTypingRef.current = false;
       onTyping(false);
     }
@@ -277,26 +290,22 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const currentAttachments = [...attachments];
     const currentReplyTo = replyTo?._id;
 
-    // ✅ STEP 1: ONLY Check images for toxicity (BLOCK IF TOXIC)
     const imagesAreSafe = await checkImagesBeforeSend(currentAttachments);
     if (!imagesAreSafe) {
       console.log("🚫 [AI] Images contain toxic content - BLOCKED!");
-      return; // ✅ STOP - don't send
+      return;
     }
 
-    // ✅ STEP 2: Analyze text for emotion ONLY (no blocking, no warnings)
     let emotionData: any = null;
     if (messageContent && aiReady) {
       try {
         const analysis = await analyzeTextMessage(messageContent);
         emotionData = analysis;
-        // ✅ NO BLOCKING, NO WARNINGS - just save emotion data
       } catch (error) {
         console.error("❌ [AI] Text analysis failed:", error);
       }
     }
 
-    // ✅ STEP 3: Clear UI IMMEDIATELY
     setMessage("");
     setAttachments([]);
     setEmotionAnalysis(null);
@@ -311,108 +320,195 @@ const MessageInput: React.FC<MessageInputProps> = ({
       const shouldEncryptFiles =
         encryptionReady && recipientId && currentAttachments.length > 0;
 
-      if (shouldEncryptFiles) {
-        console.log("🚀 [SEND] Starting STREAMING encrypt + upload...");
+     if (shouldEncryptFiles) {
+  console.log("🚀 [SEND] Starting STREAMING encrypt + upload...");
 
-        const firstAttachment = currentAttachments[0];
-        let messageType: "image" | "video" | "audio" | "file" = "file";
+  const firstAttachment = currentAttachments[0];
+  let messageType: "image" | "video" | "audio" | "file" = "file";
 
-        if (firstAttachment.type === "image") messageType = "image";
-        else if (firstAttachment.type === "video") messageType = "video";
-        else if (firstAttachment.type === "audio") messageType = "audio";
+  if (firstAttachment.type === "image") messageType = "image";
+  else if (firstAttachment.type === "video") messageType = "video";
+  else if (firstAttachment.type === "audio") messageType = "audio";
 
-        const localUris = currentAttachments.map((att) => att.uri);
-        const tempId = `temp_${Date.now()}_${Math.random()}`;
+  const localUris = currentAttachments.map((att) => att.uri);
+  const tempId = `temp_${Date.now()}_${Math.random()}`;
 
-        onSendMessage({
-          tempId,
-          type: messageType,
-          content: messageContent || undefined,
-          localUris: localUris,
-          replyTo: currentReplyTo,
-          isOptimistic: true,
-        });
+  // ✅ STEP 1: Create optimistic message
+  onSendMessage({
+    tempId,
+    type: messageType,
+    content: messageContent || undefined,
+    localUris: localUris,
+    replyTo: currentReplyTo,
+    isOptimistic: true,
+  });
 
-        console.log("✅ [SEND] Optimistic message created locally");
+  console.log("✅ [SEND] Optimistic message created locally");
 
-        const encryptedFiles: any[] = [];
-        const totalFiles = currentAttachments.length;
+  const encryptedFiles: any[] = [];
+  const totalFiles = currentAttachments.length;
+  let nativeAlreadyCreatedMessage = false;  // ✅ ADD FLAG
 
-        for (let i = 0; i < currentAttachments.length; i++) {
-          const att = currentAttachments[i];
+  // ✅ STEP 2: Encrypt all files
+  for (let i = 0; i < currentAttachments.length; i++) {
+    const att = currentAttachments[i];
 
-          console.log(`🔒 [ENCRYPT] File ${i + 1}/${totalFiles}: ${att.name}`);
+    console.log(`🔒 [ENCRYPT] File ${i + 1}/${totalFiles}: ${att.name}`);
 
-          const result = await encryptAndUploadFile(
-            att.uri,
-            att.name,
-            conversationId!,
-            recipientId,
-            {
-              onProgress: (progress) => {
-                setUploadProgress({
-                  phase: progress.phase,
-                  percentage: progress.percentage,
-                  chunksEncrypted: progress.chunksEncrypted || 0,
-                  chunksUploaded: progress.chunksUploaded || 0,
-                  totalChunks: progress.totalChunks || 1,
-                  currentFile: i + 1,
-                  totalFiles,
-                });
-              },
-            }
-          );
-
-          encryptedFiles.push({
-            encryptedFileId: result.fileId,
-            isLargeFile: true,
-            originalFileName: att.name,
-            originalFileType: att.mimeType || getMimeType(att.name),
-            encryptionMetadata: {
-              iv: result.masterIv,
-              authTag: result.masterAuthTag,
-              original_size: result.originalSize,
-              encrypted_size: result.encryptedSize,
-              chunks: result.chunks,
-              totalChunks: result.totalChunks,
-              fileId: result.fileId,
-            },
+    const result = await encryptAndUploadFile(
+      att.uri,
+      att.name,
+      conversationId!,
+      recipientId,
+      {
+        onProgress: (progress) => {
+          setUploadProgress({
+            phase: progress.phase,
+            percentage: progress.percentage,
+            chunksEncrypted: progress.chunksEncrypted || 0,
+            chunksUploaded: progress.chunksUploaded || 0,
+            totalChunks: progress.totalChunks || 1,
+            currentFile: i + 1,
+            totalFiles,
           });
+        },
+      }
+    );
 
-          console.log(`✅ [UPLOAD] File uploaded: ${att.name}`);
+    // ✅ Check if native already created message
+    if (result.skipMessageCreation) {
+      nativeAlreadyCreatedMessage = true;
+      console.log("✅ [SEND] Native already created message, will skip duplicate");
+    }
+
+    encryptedFiles.push({
+      encryptedFileId: result.fileId,
+      messageId: result.messageId,  // ✅ Keep messageId from native
+      isLargeFile: true,
+      originalFileName: att.name,
+      originalFileType: att.mimeType || getMimeType(att.name),
+      encryptionMetadata: {
+        iv: result.masterIv,
+        authTag: result.masterAuthTag,
+        original_size: result.originalSize,
+        encrypted_size: result.encryptedSize,
+        chunks: result.chunks,
+        totalChunks: result.totalChunks,
+        fileId: result.fileId,
+      },
+    });
+
+    console.log(`✅ [UPLOAD] File uploaded: ${att.name}`);
+  }
+
+  setUploadProgress(null);
+
+  // ✅ CRITICAL: Check flag before sending
+  if (nativeAlreadyCreatedMessage) {
+    console.log("✅ [SEND] Message already created by native - SKIPPING duplicate send");
+    console.log(`   Message ID: ${encryptedFiles[0]?.messageId}`);
+    
+    // Just cleanup UI
+    setUploadingFiles(false);
+    isSendingRef.current = false;
+
+    if (messageContent && conversationId && emotionData) {
+      saveEmotionInBackground(messageContent, conversationId, emotionData);
+    }
+
+    return;  // ✅ EXIT EARLY - Don't call onSendMessage again!
+  }
+
+  // ❌ This code ONLY runs if native didn't create message (fallback/old flow)
+  console.log("📤 [SEND] Sending encrypted files to server:", {
+    fileCount: encryptedFiles.length,
+    type: messageType,
+    hasContent: !!messageContent,
+  });
+
+  onSendMessage({
+    content: messageContent || undefined,
+    type: messageType,
+    encryptedFiles: encryptedFiles,
+    replyTo: currentReplyTo,
+    tempId: tempId,
+  });
+
+  console.log("✅ [SEND] Message sent with streaming encrypted files");
+  setUploadingFiles(false);
+  isSendingRef.current = false;
+
+  if (messageContent && conversationId && emotionData) {
+    saveEmotionInBackground(messageContent, conversationId, emotionData);
+  }
+
+  return;
+}
+
+      if (currentAttachments.length === 0 && messageContent) {
+        if (encryptionInitialized && recipientId) {
+          try {
+            console.log("🔐 [SEND] Encrypting text message...");
+
+            const encrypted = await encryptMessage(recipientId, messageContent);
+
+            console.log("🔐 [SEND] Encryption result:", {
+              hasEncryptedContent: !!encrypted.encryptedContent,
+              hasMetadata: !!encrypted.encryptionMetadata,
+              encryptedContentType: typeof encrypted.encryptedContent,
+            });
+
+            // ✅ CRITICAL: Pass as OBJECT with all fields
+            const textData = {
+              content: messageContent,
+              encryptedContent: encrypted.encryptedContent, // ✅ This is JSON string from useEncryption
+              encryptionMetadata: encrypted.encryptionMetadata,
+              type: "text" as const,
+              replyTo: currentReplyTo,
+            };
+
+            console.log("📤 [SEND] Calling onSendMessage with textData:", {
+              hasEncryptedContent: !!textData.encryptedContent,
+              hasMetadata: !!textData.encryptionMetadata,
+              type: textData.type,
+              encryptedContentPreview:
+                typeof textData.encryptedContent === "string"
+                  ? textData.encryptedContent.substring(0, 50)
+                  : "NOT A STRING!",
+            });
+
+            onSendMessage(textData); // ✅ Pass object
+
+            console.log("✅ [SEND] Encrypted text message sent");
+          } catch (error: any) {
+            console.error("❌ [SEND] Text encryption failed:", error);
+            Alert.alert(t("error"), `Failed to encrypt: ${error.message}`);
+            setUploadingFiles(false);
+            isSendingRef.current = false;
+            return;
+          }
+        } else {
+          console.error("❌ [SEND] Encryption not ready:", {
+            encryptionInitialized,
+            hasRecipientId: !!recipientId,
+          });
+          Alert.alert(t("error"), "Encryption not ready. Please wait...");
+          setUploadingFiles(false);
+          isSendingRef.current = false;
+          return;
         }
 
-        setUploadProgress(null);
-
-        onSendMessage({
-          content: messageContent || undefined,
-          type: messageType,
-          encryptedFiles: encryptedFiles,
-          replyTo: currentReplyTo,
-          tempId: tempId,
-        });
-
-        console.log("✅ [SEND] Message sent with streaming encrypted files");
         setUploadingFiles(false);
         isSendingRef.current = false;
 
-        // ✅ Save emotion to backend (BACKGROUND)
         if (messageContent && conversationId && emotionData) {
           saveEmotionInBackground(messageContent, conversationId, emotionData);
         }
 
-        return;
+        return; // ✅ CRITICAL: Return here to prevent FormData creation
       }
-
-      // Handle text-only or non-encrypted files
-      if (currentAttachments.length === 0 && messageContent) {
-        const textData = {
-          content: messageContent,
-          type: "text" as const,
-          replyTo: currentReplyTo,
-        };
-        onSendMessage(textData);
-      } else if (currentAttachments.length > 0) {
+      // ✅ Handle non-encrypted attachments
+      else if (currentAttachments.length > 0) {
         const mediaFiles = currentAttachments.filter((att) =>
           ["image", "video", "audio"].includes(att.type)
         );
@@ -471,7 +567,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       setUploadingFiles(false);
       isSendingRef.current = false;
 
-      // ✅ Save emotion to backend (BACKGROUND)
       if (messageContent && conversationId && emotionData) {
         saveEmotionInBackground(messageContent, conversationId, emotionData);
       }
@@ -484,9 +579,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
-  // ============================================
-  // ✅ Save emotion to backend (OPTIMIZED)
-  // ============================================
   const saveEmotionInBackground = async (
     text: string,
     convId: string,
@@ -503,6 +595,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
         }
 
         const token = await getToken();
+        const toxicityScore = Math.max(0, emotionData.toxicityScore || 0);
+
         await axios.post(
           `${API_URL}/api/emotion/save`,
           {
@@ -512,8 +606,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
             dominantEmotion: emotionData.emotion,
             confidenceScore: emotionData.confidence,
             context: "message",
-            isToxic: emotionData.isToxic,
-            toxicityScore: emotionData.toxicityScore,
+            isToxic: emotionData.isToxic || false,
+            toxicityScore: toxicityScore,
           },
           {
             headers: {
@@ -858,7 +952,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     );
   };
 
-  // ✅ Render emotion indicator (NO toxicity badge for text)
   const renderEmotionIndicator = () => {
     if (!emotionAnalysis || !message.trim()) return null;
 

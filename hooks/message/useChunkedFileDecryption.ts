@@ -1,11 +1,15 @@
-// hooks/message/useChunkedFileDecryption.ts - COMPLETE FIX v2
+// hooks/message/useChunkedFileDecryption.ts - ABSOLUTE FINAL VERSION
+// ✅ Fixed symmetricKey scope issue
+// ✅ Use MY master key to decrypt (symmetric key was encrypted with MY public key)
 
 import { useAuth as useAuthDecrypt } from "@clerk/clerk-expo";
 import * as FileSystem from "expo-file-system/legacy";
 import { useCallback as useCallbackDecrypt, useRef } from "react";
 import { NativeEncryptionBridge } from "@/lib/encryption/NativeEncryptionBridge";
+import * as SecureStore from 'expo-secure-store';
 
 const API_BASE_URL_DECRYPT = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+const ENCRYPTION_KEY_STORE = "e2ee_master_key";
 
 export interface ChunkedFileMetadata {
   fileId: string;
@@ -74,12 +78,15 @@ export const useChunkedFileDecryption = () => {
       onProgress?: (progress: any) => void
     ): Promise<string> => {
       console.log(`🔓 [DECRYPT] Using NEW decryption flow (symmetric key)`);
+      console.log(`   File: ${fileMetadata.fileName}`);
+      console.log(`   Sender: ${senderUserId}`);
+      console.log(`   My ID: ${myUserId}`);
 
       if (!fileMetadata.recipientKeys || fileMetadata.recipientKeys.length === 0) {
         throw new Error("No recipient keys found in file metadata");
       }
 
-      // ✅ CRITICAL: Validate chunks
+      // ✅ Validate chunks
       if (!fileMetadata.chunks || !Array.isArray(fileMetadata.chunks)) {
         console.error("❌ [DECRYPT] chunks is null or not array:", fileMetadata.chunks);
         throw new Error("Chunks data is missing or invalid");
@@ -95,6 +102,7 @@ export const useChunkedFileDecryption = () => {
       const token = await getTokenDecrypt();
       if (!token) throw new Error("No auth token");
 
+      // Find my encrypted symmetric key
       const myRecipientKey = fileMetadata.recipientKeys.find(
         (rk) => rk.userId === myUserId
       );
@@ -107,38 +115,52 @@ export const useChunkedFileDecryption = () => {
       }
 
       console.log("✅ [DECRYPT] Found my encrypted symmetric key");
+      console.log(`   Encrypted key: ${myRecipientKey.encryptedSymmetricKey.substring(0, 30)}...`);
+      console.log(`   IV: ${myRecipientKey.keyIv}`);
+      console.log(`   AuthTag: ${myRecipientKey.keyAuthTag}`);
 
-      console.log(`🔑 [DECRYPT] Getting sender's public key: ${senderUserId}`);
+      // ✅ CRITICAL FIX: Get MY master key (not sender's!)
+      // The symmetric key was encrypted with MY public key by sender
+      // So I need MY private key (master key) to decrypt it
+      console.log(`🔑 [DECRYPT] Getting MY master key from SecureStore...`);
       
-      const keyResponse = await fetch(
-        `${API_BASE_URL_DECRYPT}/api/keys/${senderUserId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (!keyResponse.ok) {
-        throw new Error(`Failed to get sender key: ${keyResponse.status}`);
+      const myMasterKey = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
+      if (!myMasterKey) {
+        throw new Error("Master key not found - encryption not initialized");
       }
 
-      const keyResult = await keyResponse.json();
-      if (!keyResult.success || !keyResult.data?.publicKey) {
-        throw new Error("Invalid key response");
+      console.log("✅ [DECRYPT] Got MY master key");
+      console.log(`   My master key length: ${myMasterKey.length}`);
+
+      // ✅ FIX SCOPE ISSUE: Declare symmetricKey OUTSIDE try block
+      console.log("🔓 [DECRYPT] Decrypting symmetric key with MY master key...");
+      
+      let symmetricKey: string;
+      
+      try {
+        symmetricKey = await NativeEncryptionBridge.decryptSymmetricKey(
+          myRecipientKey.encryptedSymmetricKey,
+          myRecipientKey.keyIv,
+          myRecipientKey.keyAuthTag,
+          myMasterKey  // ✅ MY master key! (same as used in encryption)
+        );
+
+        console.log("✅ [DECRYPT] Symmetric key decrypted successfully!");
+        console.log(`   Symmetric key length: ${symmetricKey.length}`);
+
+      } catch (decryptError: any) {
+        console.error("❌ [DECRYPT] Failed to decrypt symmetric key!");
+        console.error("   Error type:", decryptError?.constructor?.name || "Unknown");
+        console.error("   Error message:", decryptError?.message || "Unknown error");
+        console.error("   Encrypted key:", myRecipientKey.encryptedSymmetricKey.substring(0, 50));
+        console.error("   IV:", myRecipientKey.keyIv);
+        console.error("   AuthTag:", myRecipientKey.keyAuthTag);
+        console.error("   My master key length:", myMasterKey.length);
+        throw new Error(`Symmetric key decryption failed: ${decryptError?.message || "Unknown error"}`);
       }
 
-      const senderPublicKey = keyResult.data.publicKey;
-      console.log("✅ [DECRYPT] Got sender's public key");
-
-      console.log("🔓 [DECRYPT] Decrypting symmetric key with my private key...");
-      
-      const symmetricKey = await NativeEncryptionBridge.decryptSymmetricKey(
-        myRecipientKey.encryptedSymmetricKey,
-        myRecipientKey.keyIv,
-        myRecipientKey.keyAuthTag,
-        senderPublicKey
-      );
-
-      console.log("✅ [DECRYPT] Symmetric key decrypted");
-
-      console.log(`📥 [DECRYPT] Getting download URL...`);
+      // ✅ At this point, symmetricKey is definitely defined
+      console.log(`📥 [DECRYPT] Getting download URL for file ${fileId}...`);
       
       const downloadResponse = await fetch(
         `${API_BASE_URL_DECRYPT}/api/files/download/${fileId}`,
@@ -160,6 +182,7 @@ export const useChunkedFileDecryption = () => {
       const presignedUrl = downloadData.data.downloadUrl;
       console.log("✅ [DECRYPT] Got presigned URL");
 
+      // Prepare output path
       const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
       if (!baseDir) throw new Error("No FileSystem directory available");
 
@@ -174,28 +197,33 @@ export const useChunkedFileDecryption = () => {
       const tempFileName = `${fileId}_${Date.now()}.${extension}`;
       const outputPath = `${decryptedDir}${tempFileName}`;
 
-      console.log("🌊 [DECRYPT] Streaming decryption with symmetric key...");
+      console.log("🌊 [DECRYPT] Streaming file decryption...");
+      console.log(`   Source: ${presignedUrl.substring(0, 50)}...`);
       console.log(`   Chunks: ${fileMetadata.chunks.length}`);
       console.log(`   Output: ${outputPath}`);
+      console.log(`   Symmetric key available: ${!!symmetricKey}`); // Debug log
 
       const masterAuthTag = "SKIP_MASTER_AUTH_TAG_VERIFICATION";
 
+      // ✅ symmetricKey is now accessible here!
       const result = await NativeEncryptionBridge.decryptFileWithSymmetricKey(
         presignedUrl,
         fileMetadata.chunks,
         masterAuthTag,
-        symmetricKey,
+        symmetricKey,  // ✅ This should work now!
         outputPath,
         onProgress
       );
 
+      // Verify file exists
       const fileInfo = await FileSystem.getInfoAsync(result);
       if (!fileInfo.exists) {
         throw new Error("Failed to write decrypted file");
       }
 
       console.log("✅ [DECRYPT] File decrypted successfully!");
-      console.log(`   Path: ${result}`);
+      console.log(`   Output path: ${result}`);
+      console.log(`   File size: ${fileInfo.size} bytes`);
 
       return result;
     },
@@ -219,9 +247,10 @@ export const useChunkedFileDecryption = () => {
         try {
           console.log(`🔓 [DECRYPT] Starting decryption: ${fileMetadata.fileName}`);
           console.log(`   File ID: ${fileId}`);
+          console.log(`   Sender ID: ${senderUserId}`);
           console.log(`   My User ID: ${myUserId}`);
           
-          // ✅ FIX: Extract both recipientKeys AND chunks from encryptionMetadata
+          // ✅ Extract both recipientKeys AND chunks from encryptionMetadata
           let recipientKeys = fileMetadata.recipientKeys;
           let chunks = fileMetadata.chunks;
           
@@ -252,17 +281,19 @@ export const useChunkedFileDecryption = () => {
                                    Array.isArray(recipientKeys) &&
                                    recipientKeys.length > 0;
 
-          console.log("🔍 [DECRYPT] hasRecipientKeys:", hasRecipientKeys);
-          console.log("🔍 [DECRYPT] chunks count:", chunks.length);
+          console.log("🔍 [DECRYPT] Validation:");
+          console.log(`   hasRecipientKeys: ${hasRecipientKeys}`);
+          console.log(`   chunks count: ${chunks.length}`);
+          console.log(`   hasNewMethods: ${hasNewMethods()}`);
 
           if (hasRecipientKeys && hasNewMethods()) {
-            console.log("📦 [DECRYPT] NEW file format detected (recipientKeys)");
+            console.log("📦 [DECRYPT] NEW file format detected (hybrid encryption)");
             
             // Create updated metadata with all data at top level
             const updatedMetadata: ChunkedFileMetadata = {
               ...fileMetadata,
               recipientKeys,
-              chunks, // ✅ CRITICAL: Include chunks!
+              chunks,
             };
             
             return await decryptWithSymmetricKey(
@@ -274,14 +305,17 @@ export const useChunkedFileDecryption = () => {
           } else {
             if (!hasNewMethods()) {
               console.log("⚠️ [DECRYPT] NEW methods not available - cannot decrypt");
+              throw new Error("Decryption methods not available - please update app");
             } else {
               console.log("📦 [DECRYPT] OLD file format detected (no recipientKeys)");
+              throw new Error("Old file format not supported - please re-upload");
             }
-            
-            throw new Error("Cannot decrypt file. Please re-upload with new encryption system.");
           }
-        } catch (error) {
-          console.error("❌ [DECRYPT] Failed:", error);
+        } catch (error: any) {
+          console.error("❌ [DECRYPT] Decryption failed:");
+          console.error("   Error type:", error?.constructor?.name || "Unknown");
+          console.error("   Error message:", error?.message || "Unknown error");
+          console.error("   Stack:", error?.stack);
           throw error;
         } finally {
           decryptingFiles.current.delete(fileId);

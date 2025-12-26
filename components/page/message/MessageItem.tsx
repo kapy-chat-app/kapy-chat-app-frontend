@@ -75,11 +75,10 @@ const MessageItem: React.FC<MessageItemProps> = ({
     message.attachments?.some((att: any) => att.decryption_error) || false;
 
   // ✅ Check if message has ONLY media (no text content)
-   const hasMedia = message.attachments && message.attachments.length > 0;
-  const isFileMessage = message.type === 'file';
-  const hasTextContent = message.content && 
-                         message.content.trim().length > 0 && 
-                         !isFileMessage;  // ← File messages don't show text
+  const hasMedia = message.attachments && message.attachments.length > 0;
+  const isFileMessage = message.type === "file";
+  const hasTextContent =
+    message.content && message.content.trim().length > 0 && !isFileMessage; // ← File messages don't show text
   const isMediaOnly = hasMedia || isFileMessage;
 
   const handleLongPress = () => {
@@ -298,8 +297,12 @@ const MessageItem: React.FC<MessageItemProps> = ({
   };
 
   const renderReactions = () => {
-    if (!message.reactions || message.reactions.length === 0) return null;
+    // ✅ Early return nếu không có reactions
+    if (!message.reactions || message.reactions.length === 0) {
+      return null;
+    }
 
+    // ✅ Group reactions by type
     const reactionCounts: {
       [key: string]: { count: number; userReacted: boolean };
     } = {};
@@ -327,6 +330,7 @@ const MessageItem: React.FC<MessageItemProps> = ({
     const handleReactionPress = (type: string, userReacted: boolean) => {
       if (isSending) return;
 
+      // ✅ Toggle: Nếu user đã react thì remove, chưa thì add
       if (userReacted) {
         onRemoveReaction?.(message._id);
       } else {
@@ -335,35 +339,40 @@ const MessageItem: React.FC<MessageItemProps> = ({
     };
 
     return (
-      <View className="flex-row flex-wrap mt-1.5">
+      <View className="flex-row flex-wrap mt-1.5 gap-1">
+        {" "}
+        {/* ✅ Thêm gap-1 */}
         {Object.entries(reactionCounts).map(([type, data]) => {
           const iconInfo = iconMap[type] || { icon: "heart", color: "#ef4444" };
+
           return (
             <TouchableOpacity
               key={type}
               onPress={() => handleReactionPress(type, data.userReacted)}
               disabled={isSending}
               activeOpacity={0.7}
-              className={`flex-row items-center rounded-xl px-2 py-1 mr-1 mb-1 ${
+              className={`flex-row items-center rounded-full px-2.5 py-1 ${
+                // ✅ rounded-full + padding tốt hơn
                 data.userReacted
-                  ? "bg-orange-500"
+                  ? "bg-orange-500 border border-orange-600" // ✅ Thêm border khi active
                   : isDark
-                    ? "bg-gray-700"
-                    : "bg-gray-100"
+                    ? "bg-gray-700 border border-gray-600"
+                    : "bg-gray-100 border border-gray-300"
               }`}
             >
               <Ionicons
                 name={iconInfo.icon as any}
-                size={16}
+                size={14} // ✅ Nhỏ hơn một chút (16 -> 14)
                 color={data.userReacted ? "#ffffff" : iconInfo.color}
               />
               <Text
-                className={`text-xs ml-1 ${
+                className={`text-xs ml-1 font-semibold ${
+                  // ✅ Thêm font-semibold
                   data.userReacted
-                    ? "text-white font-semibold"
+                    ? "text-white"
                     : isDark
                       ? "text-gray-300"
-                      : "text-gray-600"
+                      : "text-gray-700"
                 }`}
               >
                 {data.count}

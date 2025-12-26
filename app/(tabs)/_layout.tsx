@@ -113,7 +113,7 @@ export default function TabLayout() {
           title: t("tabs.emotion"),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "sparkles" : "sparkles-outline"}
+              name={focused ? "happy" : "happy-outline"}
               size={size}
               color={color}
             />

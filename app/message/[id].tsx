@@ -1,4 +1,6 @@
-// MessageScreen.tsx - OPTIMIZED WITH MEMOIZATION TO PREVENT RE-DECRYPTION - NEW
+// MessageScreen.tsx - FIXED VERSION WITH TYPING LISTENER
+// ✅ Added socket listener for typing indicator
+
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -13,7 +15,14 @@ import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import axios from "axios";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,17 +40,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-// ✅ CRITICAL: Memoize MessageItem to prevent unnecessary re-renders
+// Memoize MessageItem
 const MemoizedMessageItem = memo(MessageItem, (prevProps, nextProps) => {
-  // Only re-render if essential props changed
   return (
     prevProps.message._id === nextProps.message._id &&
     prevProps.message.content === nextProps.message.content &&
     prevProps.message.status === nextProps.message.status &&
     prevProps.isHighlighted === nextProps.isHighlighted &&
-    // ✅ CRITICAL: Deep compare attachments to detect changes
     JSON.stringify(prevProps.message.attachments) ===
-      JSON.stringify(nextProps.message.attachments)
+      JSON.stringify(nextProps.message.attachments) &&
+    JSON.stringify(prevProps.message.reactions) ===
+      JSON.stringify(nextProps.message.reactions)
   );
 });
 
@@ -51,10 +60,12 @@ const MemoizedSystemMessage = memo(SystemMessage, (prevProps, nextProps) => {
 
 export default function MessageScreen() {
   const router = useRouter();
-  const { id, scrollToMessageId } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     scrollToMessageId?: string;
   }>();
+  const id = params.id as string;
+  const scrollToMessageId = params.scrollToMessageId as string | undefined;
   const { userId, getToken } = useAuth();
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
@@ -65,34 +76,27 @@ export default function MessageScreen() {
     string | null
   >(null);
 
-  // Call states
   const [isInitiatingCall, setIsInitiatingCall] = useState(false);
 
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-  const [canLoadMore, setCanLoadMore] = useState(false);
   const scrollButtonOpacity = useRef(new Animated.Value(0)).current;
   const lastMessageCountRef = useRef(0);
-  const isLoadingMoreRef = useRef(false);
-  const scrollPositionBeforeLoad = useRef(0);
-  const firstVisibleItemBeforeLoad = useRef<string | null>(null);
-  const lastLoadTimeRef = useRef(0);
   const socketMessageCountRef = useRef(0);
   const hasMarkedAsReadRef = useRef(false);
   const [recipientId, setRecipientId] = useState<string | null>(null);
+  const isLoadingMoreRef = useRef(false);
+  const firstVisibleItemRef = useRef<string | null>(null);
 
-  // ⭐ NEW: Activity tracking ref
-  const activityIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
+  const scrollDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+const markedAsReadRef = useRef<Set<string>>(new Set());
   const isDark = actualTheme === "dark";
 
-  // ✅ OPTIMIZED: Get encryption state from global provider (instant)
   const { isInitialized: encryptionReady, loading: encryptionLoading } =
     useEncryption();
 
-  // ✅ OPTIMIZED: Messages hook starts loading immediately
   const {
     messages,
     loading,
@@ -112,10 +116,109 @@ export default function MessageScreen() {
     retryDecryption,
   } = useMessages(id || null);
 
-  const { socket, isConnected, isUserOnline, onlineUsers } = useSocket();
+  const { socket, isConnected, isUserOnline } = useSocket();
   const { conversations } = useConversations();
 
-  // ✅ OPTIMIZED: Set conversation immediately
+  // ✅ FIX: Add typing indicator listener
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const handleTyping = (data: any) => {
+      console.log("⌨️ [CLIENT] Received typing event:", data);
+      
+      if (data.conversation_id !== id) {
+        console.log("⌨️ [CLIENT] Ignoring - different conversation");
+        return;
+      }
+
+      if (data.user_id === userId) {
+        console.log("⌨️ [CLIENT] Ignoring - own typing event");
+        return;
+      }
+
+      // This will be handled by useMessages hook's typingUsers state
+      console.log(`⌨️ [CLIENT] User ${data.user_name} typing: ${data.is_typing}`);
+    };
+
+    socket.on("userTyping", handleTyping);
+
+    console.log("✅ [CLIENT] Typing listener registered for conversation:", id);
+
+    return () => {
+      socket.off("userTyping", handleTyping);
+      console.log("🧹 [CLIENT] Typing listener cleaned up");
+    };
+  }, [socket, id, userId]);
+
+  // Memoize expensive computations
+  const conversationTitle = useMemo(() => {
+    if (!conversation) return "Chat";
+    if (conversation.type === "group") {
+      return conversation.name || "Group Chat";
+    }
+    const otherParticipant = conversation.participants?.find(
+      (p: any) => p.clerkId !== userId
+    );
+    return (
+      otherParticipant?.full_name ||
+      otherParticipant?.username ||
+      "Unknown User"
+    );
+  }, [conversation, userId]);
+
+  const conversationAvatar = useMemo(() => {
+    if (!conversation) return null;
+    if (conversation.type === "group") {
+      return conversation.avatar;
+    }
+    const otherParticipant = conversation.participants?.find(
+      (p: any) => p.clerkId !== userId
+    );
+    return otherParticipant?.avatar;
+  }, [conversation, userId]);
+
+  const onlineStatus = useMemo(() => {
+    if (!conversation || conversation.type === "group") return null;
+    const otherParticipant = conversation.participants?.find(
+      (p: any) => p.clerkId !== userId
+    );
+    if (!otherParticipant) return null;
+
+    if (isUserOnline(otherParticipant.clerkId)) {
+      return "Online";
+    }
+
+    if (otherParticipant?.last_seen) {
+      const lastSeen = new Date(otherParticipant.last_seen);
+      const now = new Date();
+      const diffMs = now.getTime() - lastSeen.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.floor(diffHours / 24);
+      return `${diffDays}d ago`;
+    }
+
+    return "Offline";
+  }, [conversation, userId, isUserOnline]);
+
+  const isUserOnlineInConversation = useMemo((): boolean => {
+    if (!conversation) return false;
+    if (conversation.type === "private") {
+      const otherParticipant = conversation.participants?.find(
+        (p: any) => p.clerkId !== userId
+      );
+      if (otherParticipant) {
+        return isUserOnline(otherParticipant.clerkId);
+      }
+    }
+    return false;
+  }, [conversation, userId, isUserOnline]);
+
+  // Set conversation
   useEffect(() => {
     if (id && conversations.length > 0) {
       const currentConversation = conversations.find((conv) => conv._id === id);
@@ -123,7 +226,7 @@ export default function MessageScreen() {
     }
   }, [id, conversations]);
 
-  // ✅ OPTIMIZED: Set recipient ID immediately
+  // Set recipient ID
   useEffect(() => {
     if (conversation && conversation.type !== "group") {
       const recipient = conversation.participants?.find(
@@ -137,61 +240,60 @@ export default function MessageScreen() {
     }
   }, [conversation, userId]);
 
-  // ==========================================
-  // ⭐ NEW: ACTIVE CONVERSATION TRACKING
-  // ==========================================
+  // Join/Leave conversation
   useEffect(() => {
-    if (!socket || !id || !userId || !isConnected) {
-      console.log("⏳ Waiting for socket...", {
-        hasSocket: !!socket,
-        conversationId: id,
-        userId,
-        isConnected,
-      });
-      return;
-    }
+    if (!socket || !id || !userId || !isConnected) return;
 
-    console.log("✅ Socket connected, joining conversation:", id);
-
-    // ✅ Emit join
     socket.emit("joinConversation", {
       user_id: userId,
       conversation_id: id,
     });
 
-    // ✅ Wait for confirmation
-    const handleJoined = (data: any) => {
-      console.log("✅ Successfully joined conversation:", data);
-    };
-
-    socket.on("joinedConversation", handleJoined);
-
     return () => {
-      socket.off("joinedConversation", handleJoined);
-
       if (socket.connected) {
         socket.emit("leaveConversation", {
           user_id: userId,
           conversation_id: id,
         });
-        console.log(`👋 Left conversation: ${id}`);
       }
     };
   }, [socket, id, userId, isConnected]);
 
-  const handleUserActivity = useCallback(() => {
-    if (socket && id && userId) {
-      socket.emit("conversationActivity", {
-        user_id: userId,
-        conversation_id: id,
-      });
-    }
-  }, [socket, id, userId]);
+  // Cleanup scroll timer on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollDebounceTimerRef.current) {
+        clearTimeout(scrollDebounceTimerRef.current);
+      }
+    };
+  }, []);
 
-  const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 10,
-    minimumViewTime: 100,
-  }).current;
+  // Auto scroll to bottom ONCE when messages load
+  useEffect(() => {
+    if (messages.length > 0 && !hasScrolledToBottom && !scrollToMessageId) {
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+        setHasScrolledToBottom(true);
+        lastMessageCountRef.current = messages.length;
+        socketMessageCountRef.current = socketMessageCount;
+      }, 300);
+
+      return () => clearTimeout(timer);
+    } else if (
+      messages.length > 0 &&
+      !hasScrolledToBottom &&
+      scrollToMessageId
+    ) {
+      setHasScrolledToBottom(true);
+      lastMessageCountRef.current = messages.length;
+      socketMessageCountRef.current = socketMessageCount;
+    }
+  }, [
+    messages.length,
+    hasScrolledToBottom,
+    socketMessageCount,
+    scrollToMessageId,
+  ]);
 
   // Handle scroll to specific message
   useEffect(() => {
@@ -218,37 +320,59 @@ export default function MessageScreen() {
     }
   }, [scrollToMessageId, messages.length, hasScrolledToBottom]);
 
-  // Auto scroll to bottom
+  // Handle LOAD MORE scroll restoration ONLY
   useEffect(() => {
-    if (messages.length > 0 && !hasScrolledToBottom && !scrollToMessageId) {
-      const timer = setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: false });
-        setHasScrolledToBottom(true);
-        lastMessageCountRef.current = messages.length;
-        socketMessageCountRef.current = socketMessageCount;
-        setTimeout(() => setCanLoadMore(true), 500);
-      }, 300);
-
-      return () => clearTimeout(timer);
-    } else if (
-      messages.length > 0 &&
-      !hasScrolledToBottom &&
-      scrollToMessageId
+    if (
+      isLoadingMoreRef.current &&
+      firstVisibleItemRef.current &&
+      messages.length > lastMessageCountRef.current
     ) {
-      setHasScrolledToBottom(true);
-      lastMessageCountRef.current = messages.length;
-      socketMessageCountRef.current = socketMessageCount;
-      setTimeout(() => setCanLoadMore(true), 500);
-    }
-  }, [
-    messages.length,
-    hasScrolledToBottom,
-    socketMessageCount,
-    scrollToMessageId,
-  ]);
+      console.log(
+        `📍 [LOAD MORE] Messages increased: ${lastMessageCountRef.current} → ${messages.length}`
+      );
+      console.log(
+        `📍 [LOAD MORE] Restoring scroll to: ${firstVisibleItemRef.current}`
+      );
 
-  // Handle new messages
+      const index = messages.findIndex(
+        (m) => m._id === firstVisibleItemRef.current
+      );
+
+      if (index !== -1) {
+        setTimeout(() => {
+          console.log(`📍 [LOAD MORE] Scrolling to index ${index}`);
+
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: false,
+            viewPosition: 0.1,
+          });
+
+          console.log(`✅ [LOAD MORE] Scroll restored`);
+
+          firstVisibleItemRef.current = null;
+          isLoadingMoreRef.current = false;
+          lastMessageCountRef.current = messages.length;
+        }, 150);
+      } else {
+        console.warn(
+          `⚠️ [LOAD MORE] Could not find anchor: ${firstVisibleItemRef.current}`
+        );
+
+        isLoadingMoreRef.current = false;
+        firstVisibleItemRef.current = null;
+        lastMessageCountRef.current = messages.length;
+      }
+    }
+  }, [messages.length]);
+
+  // Handle NEW SOCKET MESSAGES separately
   useEffect(() => {
+    if (isLoadingMoreRef.current) {
+      console.log(`⏳ [SOCKET] Skipping - load more in progress`);
+      return;
+    }
+
     if (
       socketMessageCount > socketMessageCountRef.current &&
       hasScrolledToBottom
@@ -256,46 +380,29 @@ export default function MessageScreen() {
       const newSocketMessages =
         socketMessageCount - socketMessageCountRef.current;
 
-      if (isLoadingMoreRef.current) {
-        isLoadingMoreRef.current = false;
-        lastLoadTimeRef.current = Date.now();
+      console.log(`🔔 [SOCKET] ${newSocketMessages} new message(s)`);
 
-        if (
-          firstVisibleItemBeforeLoad.current &&
-          messages.length > lastMessageCountRef.current
-        ) {
-          setTimeout(() => {
-            const index = messages.findIndex(
-              (m) => m._id === firstVisibleItemBeforeLoad.current
-            );
-            if (index !== -1) {
-              flatListRef.current?.scrollToIndex({
-                index,
-                animated: false,
-                viewPosition: 0.3,
-              });
-            }
-            firstVisibleItemBeforeLoad.current = null;
-          }, 150);
-        }
-      }
+      if (!isNearBottom) {
+        console.log(
+          `📍 [SOCKET] User scrolled up - showing button (${newSocketMessages} new)`
+        );
 
-      if (!isNearBottom && !isLoadingMoreRef.current) {
         setNewMessagesCount((prev) => prev + newSocketMessages);
         setShowScrollButton(true);
+
         Animated.timing(scrollButtonOpacity, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
         }).start();
-      } else if (isNearBottom && !isLoadingMoreRef.current) {
+      } else {
+        console.log(`📍 [SOCKET] User at bottom - auto-scrolling`);
+
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
         }, 100);
       }
-    }
 
-    if (hasScrolledToBottom) {
       lastMessageCountRef.current = messages.length;
       socketMessageCountRef.current = socketMessageCount;
     }
@@ -326,24 +433,31 @@ export default function MessageScreen() {
 
   // Mark individual messages as read
   useEffect(() => {
-    if (!userId) return;
+  if (!userId) return;
 
-    const unreadMessages = messages.filter(
-      (msg) =>
-        !msg.read_by?.some((r: any) => r.user === userId) &&
-        msg.sender?.clerkId !== userId
-    );
+  const unreadMessages = messages.filter(
+    (msg) =>
+      !msg.read_by?.some((r: any) => r.user === userId) &&
+      msg.sender?.clerkId !== userId &&
+      !markedAsReadRef.current.has(msg._id)  // ✅ Skip already marked
+  );
 
-    if (unreadMessages.length > 0) {
-      unreadMessages.forEach((msg) => {
-        markAsRead(msg._id);
-      });
-    }
-  }, [messages, markAsRead, userId]);
+  if (unreadMessages.length > 0) {
+    console.log(`📖 [READ] Marking ${unreadMessages.length} messages as read`);
+    
+    unreadMessages.forEach((msg) => {
+      markedAsReadRef.current.add(msg._id);  // ✅ Track it
+      markAsRead(msg._id);
+    });
+  }
+}, [messages, markAsRead, userId]);
 
-  // ========================================
+useEffect(() => {
+  markedAsReadRef.current.clear();
+}, [id]);
+  // =============================================
   // CALL HANDLERS
-  // ========================================
+  // =============================================
 
   const handleVideoCall = async () => {
     if (!id || isInitiatingCall) return;
@@ -352,15 +466,12 @@ export default function MessageScreen() {
       setIsInitiatingCall(true);
 
       const isGroup = conversation?.type === "group";
-      const displayName = isGroup
-        ? conversation?.name || "Group"
-        : getConversationTitle();
 
       Alert.alert(
         `Start Video Call`,
         isGroup
-          ? `Do you want to start a video call in ${displayName}?`
-          : `Do you want to start a video call with ${displayName}?`,
+          ? `Do you want to start a video call in ${conversationTitle}?`
+          : `Do you want to start a video call with ${conversationTitle}?`,
         [
           {
             text: "Cancel",
@@ -423,15 +534,12 @@ export default function MessageScreen() {
       setIsInitiatingCall(true);
 
       const isGroup = conversation?.type === "group";
-      const displayName = isGroup
-        ? conversation?.name || "Group"
-        : getConversationTitle();
 
       Alert.alert(
         `Start Audio Call`,
         isGroup
-          ? `Do you want to start an audio call in ${displayName}?`
-          : `Do you want to start an audio call with ${displayName}?`,
+          ? `Do you want to start an audio call in ${conversationTitle}?`
+          : `Do you want to start an audio call with ${conversationTitle}?`,
         [
           {
             text: "Cancel",
@@ -487,165 +595,49 @@ export default function MessageScreen() {
     }
   };
 
-  // ========================================
+  // =============================================
   // MESSAGE HANDLERS
-  // ========================================
+  // =============================================
 
- const handleSendMessage = async (
-  contentOrData:
-    | string
-    | {
-        content?: string;
-        type: string;
-        replyTo?: string;
-        encryptedFiles?: any[];
-        localUris?: string[];
-        richMedia?: any;
-        isOptimistic?: boolean; // ✅ NEW
-        tempId?: string; // ✅ NEW
-      },
-  attachments?: string[],
-  replyToId?: string
-) => {
-  handleUserActivity();
+  const handleSendMessage = async (data: any) => {
+  try {
+    console.log("📥 [SCREEN] Received data:", {
+      type: typeof data,
+      isFormData: data instanceof FormData,
+      hasEncryptedContent: !!(data as any).encryptedContent,
+      hasEncryptionMetadata: !!(data as any).encryptionMetadata,
+      hasEncryptedFiles: !!(data as any).encryptedFiles,
+      dataType: data.type,
+      isOptimistic: !!(data as any).isOptimistic,
+    });
 
-  // ✅ CASE 0: Handle GIF/Sticker
-  if (
-    typeof contentOrData === "object" &&
-    (contentOrData.type === "gif" || contentOrData.type === "sticker") &&
-    (contentOrData as any).richMedia
-  ) {
-    try {
-      await sendMessage({
-        content: contentOrData.content?.trim() || "",
-        type: contentOrData.type as any,
-        richMedia: (contentOrData as any).richMedia,
-        replyTo: contentOrData.replyTo,
-      });
-
-      setReplyTo(null);
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      return;
-    } catch (error: any) {
-      console.error(`❌ Failed to send ${contentOrData.type}:`, error);
-      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-        { text: t("ok") },
-      ]);
+    // ✅ Handle optimistic message creation (don't send to server yet)
+    if ((data as any).isOptimistic === true) {
+      console.log("🎯 [SCREEN] Creating optimistic message locally");
+      // This creates a local preview message
+      // The actual server call will happen in the next onSendMessage call
       return;
     }
+
+    // ✅ Pass data AS-IS to sendMessage
+    await sendMessage(data);
+
+    // ✅ Clear reply
+    setReplyTo(null);
+
+    // ✅ Scroll to bottom
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    console.log("✅ [SCREEN] Message sent successfully");
+  } catch (error: any) {
+    console.error("❌ [SCREEN] Failed to send message:", error);
+    Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+      { text: t("ok") },
+    ]);
   }
-
-  // ✅ CASE 1: Optimistic message (LOCAL only, no API call)
-  if (
-    typeof contentOrData === "object" &&
-    contentOrData.isOptimistic === true
-  ) {
-    console.log("📤 [SCREEN] Creating LOCAL optimistic message");
-
-    try {
-      // ✅ Just create optimistic message in hook, don't call API
-      await sendMessage({
-        content: contentOrData.content?.trim() || "",
-        type: contentOrData.type as any,
-        localUris: contentOrData.localUris,
-        replyTo: contentOrData.replyTo,
-        tempId: contentOrData.tempId, // ✅ Pass tempId
-        isOptimistic: true, // ✅ Flag for hook
-      });
-
-      setReplyTo(null);
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-
-      console.log("✅ [SCREEN] Optimistic message created");
-      return;
-    } catch (error: any) {
-      console.error("❌ Failed to create optimistic message:", error);
-      return;
-    }
-  }
-
-  // ✅ CASE 2: Send encrypted files to server (REAL API call)
-  if (
-    typeof contentOrData === "object" &&
-    contentOrData.encryptedFiles &&
-    contentOrData.tempId
-  ) {
-    console.log("📤 [SCREEN] Sending encrypted files to server");
-
-    try {
-      await sendMessage({
-        content: contentOrData.content?.trim() || "",
-        type: contentOrData.type as any,
-        encryptedFiles: contentOrData.encryptedFiles,
-        localUris: contentOrData.localUris,
-        replyTo: contentOrData.replyTo,
-        tempId: contentOrData.tempId, // ✅ To match optimistic message
-      });
-
-      console.log("✅ [SCREEN] Encrypted files sent");
-      return;
-    } catch (error: any) {
-      console.error("❌ Failed to send encrypted files:", error);
-      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-        { text: t("ok") },
-      ]);
-      return;
-    }
-  }
-
-
-    // ✅ CASE 3: Handle normal text message
-    let messageContent: string;
-    let messageAttachments: string[] | undefined;
-    let messageReplyTo: string | undefined;
-
-    if (typeof contentOrData === "string") {
-      messageContent = contentOrData;
-      messageAttachments = attachments;
-      messageReplyTo = replyToId;
-    } else {
-      messageContent = contentOrData.content || "";
-      messageAttachments = undefined;
-      messageReplyTo = contentOrData.replyTo;
-    }
-
-    if (typeof messageContent !== "string") {
-      Alert.alert(t("error"), "Invalid message content");
-      return;
-    }
-
-    if (
-      !messageContent.trim() &&
-      (!messageAttachments || messageAttachments.length === 0)
-    ) {
-      return;
-    }
-
-    try {
-      await sendMessage({
-        content: messageContent.trim(),
-        type: "text",
-        attachments: messageAttachments,
-        replyTo: messageReplyTo,
-      });
-
-      setReplyTo(null);
-
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    } catch (error: any) {
-      console.error("❌ Failed to send message:", error);
-      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-        { text: t("ok") },
-      ]);
-    }
-  };
+};
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
     try {
@@ -701,61 +693,44 @@ export default function MessageScreen() {
   }, []);
 
   const handleLoadMore = useCallback(async () => {
-    console.log("🔍 [LOAD_MORE] Called with:", {
-      hasMore,
-      loading,
-      canLoadMore,
-      isLoadingMore: isLoadingMoreRef.current,
-      timeSinceLastLoad: Date.now() - lastLoadTimeRef.current,
-    });
-
-    if (
-      !hasMore ||
-      loading ||
-      !canLoadMore ||
-      Date.now() - lastLoadTimeRef.current < 1000
-    ) {
-      console.log("⏭️ [LOAD_MORE] Skipping - conditions not met");
+    if (!hasMore || loading || isLoadingMoreRef.current) {
       return;
     }
 
-    if (isLoadingMoreRef.current) {
-      console.log("⏭️ [LOAD_MORE] Already loading");
-      return;
-    }
+    console.log("📜 [LOAD MORE] Starting...");
+    console.log(`   Current messages: ${messages.length}`);
+    console.log(`   Oldest message: ${messages[0]?._id}`);
 
-    console.log("✅ [LOAD_MORE] Starting to load older messages...");
     isLoadingMoreRef.current = true;
 
-    const visibleMessages = messages.slice(0, 5);
+    const visibleMessages = messages.slice(0, 10);
     if (visibleMessages.length > 0) {
-      firstVisibleItemBeforeLoad.current = visibleMessages[0]._id;
+      firstVisibleItemRef.current = visibleMessages[0]._id;
       console.log(
-        "📍 [LOAD_MORE] Saved first visible:",
-        firstVisibleItemBeforeLoad.current
+        `📍 [LOAD MORE] Saved scroll anchor: ${firstVisibleItemRef.current}`
       );
     }
 
     try {
       await loadMoreMessages();
-      console.log("✅ [LOAD_MORE] Successfully loaded more messages");
+
+      console.log(`✅ [LOAD MORE] Completed`);
+      console.log(`   New total messages: ${messages.length}`);
     } catch (error) {
-      console.error("❌ [LOAD_MORE] Failed:", error);
+      console.error("❌ [LOAD MORE] Failed:", error);
+    } finally {
       isLoadingMoreRef.current = false;
     }
-  }, [hasMore, loading, loadMoreMessages, canLoadMore, messages]);
-  let scrollDebounceTimer: NodeJS.Timeout | null = null;
+  }, [hasMore, loading, loadMoreMessages, messages]);
+
   const handleScroll = useCallback(
     (event: any) => {
-      handleUserActivity();
-
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
       const scrollPosition = contentOffset.y;
       const scrollHeight = contentSize.height;
       const viewHeight = layoutMeasurement.height;
 
-      // Handle scroll to bottom logic...
       const distanceFromBottom = scrollHeight - scrollPosition - viewHeight;
       const isNear = distanceFromBottom < 100;
       setIsNearBottom(isNear);
@@ -770,27 +745,23 @@ export default function MessageScreen() {
         }).start();
       }
 
-      // ✅ IMPROVED: Debounced load more check
       const distanceFromTop = scrollPosition;
 
-      if (
-        distanceFromTop < 100 &&
-        hasMore &&
-        !isLoadingMoreRef.current &&
-        canLoadMore
-      ) {
-        // ✅ Debounce to prevent multiple triggers
-        if (scrollDebounceTimer) {
-          clearTimeout(scrollDebounceTimer);
+      if (distanceFromTop < 50 && hasMore && !isLoadingMoreRef.current) {
+        if (scrollDebounceTimerRef.current) {
+          clearTimeout(scrollDebounceTimerRef.current);
         }
 
-        scrollDebounceTimer = setTimeout(() => {
-          console.log("📜 Loading more messages... (scrolled to top)");
+        scrollDebounceTimerRef.current = setTimeout(() => {
+          console.log(
+            `📜 [SCROLL] Triggering load more (distance from top: ${distanceFromTop}px)`
+          );
           handleLoadMore();
-        }, 300); // ✅ Wait 300ms before triggering
+          scrollDebounceTimerRef.current = null;
+        }, 200);
       }
     },
-    [showScrollButton, hasMore, canLoadMore, handleLoadMore, handleUserActivity]
+    [showScrollButton, hasMore, handleLoadMore]
   );
 
   const handleScrollToBottom = () => {
@@ -808,98 +779,22 @@ export default function MessageScreen() {
     // Handle viewable items if needed
   }, []);
 
-  const getConversationTitle = () => {
-    if (!conversation) return "Chat";
-
-    if (conversation.type === "group") {
-      return conversation.name || "Group Chat";
-    }
-
-    const otherParticipant = conversation.participants?.find(
-      (p: any) => p.clerkId !== userId
-    );
-    return (
-      otherParticipant?.full_name ||
-      otherParticipant?.username ||
-      "Unknown User"
-    );
-  };
-
-  const getConversationAvatar = () => {
-    if (!conversation) return null;
-
-    if (conversation.type === "group") {
-      return conversation.avatar;
-    }
-
-    const otherParticipant = conversation.participants?.find(
-      (p: any) => p.clerkId !== userId
-    );
-    return otherParticipant?.avatar;
-  };
-
-  const getOnlineStatus = () => {
-    if (!conversation || conversation.type === "group") return null;
-
-    const otherParticipant = conversation.participants?.find(
-      (p: any) => p.clerkId !== userId
-    );
-
-    if (!otherParticipant) return null;
-
-    if (isUserOnline(otherParticipant.clerkId)) {
-      return "Online";
-    }
-
-    if (otherParticipant?.last_seen) {
-      const lastSeen = new Date(otherParticipant.last_seen);
-      const now = new Date();
-      const diffMs = now.getTime() - lastSeen.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins}m ago`;
-      const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours}h ago`;
-      const diffDays = Math.floor(diffHours / 24);
-      return `${diffDays}d ago`;
-    }
-
-    return "Offline";
-  };
-
-  const isUserOnlineInConversation = (): boolean => {
-    if (!conversation) return false;
-
-    if (conversation.type === "private") {
-      const otherParticipant = conversation.participants?.find(
-        (p: any) => p.clerkId !== userId
-      );
-      if (otherParticipant) {
-        return isUserOnline(otherParticipant.clerkId);
-      }
-    }
-
-    return false;
-  };
-
-  const handleTypingStart = () => {
-    handleUserActivity();
+  const handleTypingStart = useCallback(() => {
+    console.log("⌨️ [CLIENT] Sending typing START");
     sendTypingIndicator(true);
-  };
+  }, [sendTypingIndicator]);
 
-  const handleTypingStop = () => {
+  const handleTypingStop = useCallback(() => {
+    console.log("⌨️ [CLIENT] Sending typing STOP");
     sendTypingIndicator(false);
-  };
+  }, [sendTypingIndicator]);
 
-  // ========================================
-  // RENDER FUNCTIONS - ✅ MEMOIZED
-  // ========================================
+  // =============================================
+  // RENDER FUNCTIONS
+  // =============================================
 
-  // ✅ CRITICAL: Memoize renderMessage to prevent unnecessary re-renders
   const renderMessage = useCallback(
     ({ item, index }: { item: any; index: number }) => {
-      // System message
       if (item.metadata?.isSystemMessage === true) {
         return <MemoizedSystemMessage message={item} />;
       }
@@ -935,15 +830,12 @@ export default function MessageScreen() {
     ]
   );
 
-  // ✅ CRITICAL: Memoize keyExtractor
   const keyExtractor = useCallback((item: any) => item._id, []);
 
   const renderLoadingHeader = () => {
-    // ✅ Show loading indicator khi đang load more
-    if (!hasMore && !loading) return null;
+    if (!hasMore) return null;
 
-    // ✅ NEW: Show different indicator for loading more vs initial load
-    if (isLoadingMoreRef.current) {
+    if (isLoadingMoreRef.current || loading) {
       return (
         <View className="py-4 items-center">
           <ActivityIndicator size="small" color="#F97316" />
@@ -956,17 +848,13 @@ export default function MessageScreen() {
       );
     }
 
-    if (!hasMore || !loading) return null;
-
-    return (
-      <View className="py-4 items-center">
-        <ActivityIndicator size="small" color="#F97316" />
-      </View>
-    );
+    return null;
   };
 
   const renderTypingIndicator = () => {
     if (typingUsers.length === 0) return null;
+
+    console.log("⌨️ [CLIENT] Rendering typing indicator:", typingUsers);
 
     return (
       <TypingIndicator
@@ -977,8 +865,7 @@ export default function MessageScreen() {
     );
   };
 
-  const renderHeader = () => {
-    const avatarUrl = getConversationAvatar();
+  const renderHeader = useMemo(() => {
     const isGroup = conversation?.type === "group";
 
     return (
@@ -995,9 +882,9 @@ export default function MessageScreen() {
 
         <View className="flex-1 flex-row items-center ml-3">
           <View className="relative mr-3">
-            {avatarUrl ? (
+            {conversationAvatar ? (
               <Image
-                source={{ uri: avatarUrl }}
+                source={{ uri: conversationAvatar }}
                 className="w-10 h-10 rounded-full"
               />
             ) : (
@@ -1011,7 +898,7 @@ export default function MessageScreen() {
                 />
               </View>
             )}
-            {isUserOnlineInConversation() && (
+            {isUserOnlineInConversation && (
               <View className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full" />
             )}
           </View>
@@ -1021,7 +908,7 @@ export default function MessageScreen() {
               <Text
                 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-800"}`}
               >
-                {getConversationTitle()}
+                {conversationTitle}
               </Text>
 
               {encryptionReady && (
@@ -1039,11 +926,11 @@ export default function MessageScreen() {
               >
                 {conversation?.participants?.length || 0} members
               </Text>
-            ) : getOnlineStatus() ? (
+            ) : onlineStatus ? (
               <Text
                 className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
               >
-                {getOnlineStatus()}
+                {onlineStatus}
               </Text>
             ) : null}
           </View>
@@ -1081,8 +968,8 @@ export default function MessageScreen() {
               params: {
                 id: id,
                 type: conversation?.type || "private",
-                name: getConversationTitle(),
-                avatar: getConversationAvatar() || "",
+                name: conversationTitle,
+                avatar: conversationAvatar || "",
                 participantCount: conversation?.participants?.length || 2,
               },
             })
@@ -1096,7 +983,21 @@ export default function MessageScreen() {
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [
+    conversation,
+    isDark,
+    router,
+    conversationAvatar,
+    isUserOnlineInConversation,
+    conversationTitle,
+    encryptionReady,
+    typingUsers.length,
+    onlineStatus,
+    isInitiatingCall,
+    handleAudioCall,
+    handleVideoCall,
+    id,
+  ]);
 
   const renderEmptyState = () => (
     <View className="flex-1 justify-center items-center px-8">
@@ -1162,9 +1063,9 @@ export default function MessageScreen() {
     );
   };
 
-  // ========================================
+  // =============================================
   // MAIN RENDER
-  // ========================================
+  // =============================================
 
   if (error) {
     return (
@@ -1173,7 +1074,7 @@ export default function MessageScreen() {
           barStyle={isDark ? "light-content" : "dark-content"}
           backgroundColor={isDark ? "#000000" : "#FFFFFF"}
         />
-        {renderHeader()}
+        {renderHeader}
         <View className="flex-1 justify-center items-center px-8">
           <Ionicons name="alert-circle-outline" size={64} color="#ef4444" />
           <Text
@@ -1199,7 +1100,7 @@ export default function MessageScreen() {
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
       />
 
-      {renderHeader()}
+      {renderHeader}
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -1222,13 +1123,12 @@ export default function MessageScreen() {
               initialNumToRender={15}
               maxToRenderPerBatch={10}
               windowSize={10}
-              // ✅ CRITICAL: Add these for better performance
               removeClippedSubviews={Platform.OS === "android"}
               updateCellsBatchingPeriod={50}
               ListHeaderComponent={renderLoadingHeader}
               ListFooterComponent={renderTypingIndicator}
               onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
+              viewabilityConfig={{ viewAreaCoveragePercentThreshold: 10 }}
               onScrollToIndexFailed={(info) => {
                 const wait = new Promise((resolve) => setTimeout(resolve, 100));
                 wait.then(() => {
