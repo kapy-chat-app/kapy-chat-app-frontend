@@ -521,6 +521,42 @@
       "averageScores": "Điểm trung bình",
       "byContext": "Theo ngữ cảnh",
       "confidence": "Độ tin cậy {{percent}}%"
+    },
+    "counselor": {
+      "title": "Tư vấn cảm xúc AI",
+      "analyzing": "Đang phân tích cảm xúc...",
+      "noData": "Chưa có đủ dữ liệu để phân tích. Hãy ghi nhận cảm xúc của bạn!",
+      "acuteWarning": "Bạn đang có cảm xúc mạnh. Hãy cân nhắc tìm kiếm sự hỗ trợ.",
+      "chatButton": "Trò chuyện với AI để được tư vấn",
+      "emotionBalance": "Cân bằng cảm xúc",
+      "viewDetails": "Xem chi tiết",
+      "refresh": "Làm mới phân tích",
+      "loading": "Đang phân tích...",
+      "recommendations": "Gợi ý",
+      "viewFull": "Xem đầy đủ phân tích",
+      "more": "gợi ý khác"
+    },
+    "filter": {
+      "title": "Bộ lọc",
+      "context": "Ngữ cảnh",
+      "timeRange": "Khoảng thời gian",
+      "days": "{{count}} ngày",
+      "clear": "Xóa bộ lọc",
+      "apply": "Áp dụng"
+    },
+
+    "contexts": {
+      "message": "Tin nhắn",
+      "voice_note": "Ghi âm",
+      "call": "Cuộc gọi",
+      "general": "Chung"
+    },
+
+    "delete": {
+      "confirmTitle": "Xóa",
+      "confirmMessage": "Bạn có chắc chắn muốn xóa bản ghi cảm xúc này?",
+      "success": "Đã xóa bản ghi cảm xúc thành công",
+      "failed": "Không thể xóa bản ghi cảm xúc"
     }
   },
 
@@ -561,7 +597,8 @@
       "title": "Gợi ý AI cho bạn",
       "showSuggestions": "Hiển thị gợi ý",
       "startWith": "Bắt đầu với các chủ đề:",
-      "count": "{{count}} gợi ý"
+      "count": "{{count}} gợi ý",
+      "smartTitle": "Gợi ý cho bạn"
     },
 
     "empty": {
@@ -706,27 +743,29 @@
       "replyingTo": "Trả lời {{name}}",
       "cancel": "Hủy"
     },
+
     "actions": {
       "reply": "Trả lời",
-      "react": "Phản ứng",
-      "delete": "Xóa",
+      "react": "Thả cảm xúc",
       "edit": "Chỉnh sửa",
-      "viewReads": "Xem đã đọc",
+      "recall": "Thu hồi",
+      "delete": "Xóa",
+      "viewReads": "Xem ai đã đọc",
+      "deleteForMe": "Xóa với tôi",
+      "deleteForEveryone": "Xóa với mọi người",
       "deleteTitle": "Xóa tin nhắn",
-      "deleteMessage": "Chọn cách xóa:",
-      "deleteForMe": "Xóa ở phía tôi",
-      "deleteForEveryone": "Xóa ở mọi người",
-      "deleteTitle": "Xóa cuộc trò chuyện",
-      "deleteMessage": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tin nhắn chỉ bị xóa ở phía bạn.",
+      "deleteMessage": "Chọn tùy chọn xóa:",
+      "recallTitle": "Thu hồi tin nhắn",
+      "recallMessage": "Bạn có chắc muốn thu hồi tin nhắn này? Tất cả người nhận sẽ không thể xem nội dung.",
       "leaveGroup": "Rời nhóm",
-      "leaveGroupConfirm": "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-      "leaveGroupSuccess": "Đã rời khỏi nhóm thành công",
+      "leaveGroupConfirm": "Bạn có chắc muốn rời khỏi nhóm này?",
+      "leaveGroupSuccess": "Đã rời nhóm thành công",
       "removeMember": "Xóa thành viên",
-      "removeMemberConfirm": "Bạn có chắc chắn muốn xóa {{name}} khỏi nhóm?",
+      "removeMemberConfirm": "Bạn có chắc muốn xóa {{name}} khỏi nhóm?",
       "remove": "Xóa",
       "removeSuccess": "Đã xóa thành viên thành công",
       "transferAdmin": "Chuyển quyền quản trị",
-      "transferAdminConfirm": "Bạn có chắc chắn muốn chuyển quyền quản trị cho {{name}}?",
+      "transferAdminConfirm": "Bạn có chắc muốn chuyển quyền quản trị cho {{name}}?",
       "transfer": "Chuyển",
       "transferSuccess": "Đã chuyển quyền quản trị thành công",
       "deleteConversation": "Xóa cuộc trò chuyện",
@@ -734,6 +773,13 @@
     },
     "edited": "đã chỉnh sửa",
     "readBy": "Đã đọc bởi {{count}}",
+    "edit": {
+      "title": "Chỉnh sửa tin nhắn",
+      "placeholder": "Nhập tin nhắn của bạn...",
+      "characters": "ký tự",
+      "emptyContent": "Tin nhắn không được để trống",
+      "failed": "Không thể chỉnh sửa tin nhắn"
+    },
     "call": {
       "video": {
         "title": "Bắt đầu cuộc gọi video",

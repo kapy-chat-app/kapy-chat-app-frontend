@@ -1,4 +1,6 @@
-// components/page/message/EncryptionInitProvider.tsx - PURE NATIVE VERSION
+// components/page/message/EncryptionInitProvider.tsx
+// ✅ FIXED VERSION - Pure native encryption with proper key handling
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 import { NativeEncryptionBridge } from '@/lib/encryption/NativeEncryptionBridge';
@@ -22,9 +24,10 @@ import { Ionicons } from '@expo/vector-icons';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 const ENCRYPTION_KEY_STORE = "e2ee_master_key";
 
-// ✅ Backup data structure
+// Backup data structure
 interface KeyBackupData {
   encryptedMasterKey: string;
+  salt: string;
   iv: string;
   authTag: string;
   keyVersion: number;
@@ -103,21 +106,17 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, [needsBackupPassword, needsRestore]);
 
-  // ============================================
-  // ✅ Check if local keys exist
-  // ============================================
+  // Check if local keys exist
   const hasLocalKeys = async (): Promise<boolean> => {
     try {
       const key = await SecureStore.getItemAsync(ENCRYPTION_KEY_STORE);
-      return key !== null;
+      return key !== null && key.length > 0;
     } catch {
       return false;
     }
   };
 
-  // ============================================
-  // ✅ Check server backup status
-  // ============================================
+  // Check server backup status
   const checkServerBackup = async (token: string): Promise<boolean> => {
     try {
       const response = await fetch(
@@ -155,7 +154,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
       console.log('📡 [Init] Server has backup:', serverHasBackup);
       setHasBackup(serverHasBackup);
 
-      // ✅ SCENARIO 1: Has backup but no local keys → RESTORE
+      // SCENARIO 1: Has backup but no local keys → RESTORE
       if (serverHasBackup && !hasLocal) {
         console.log('📦 [Init] Need to restore from backup');
         setNeedsRestore(true);
@@ -163,7 +162,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         return;
       }
 
-      // ✅ SCENARIO 2: No local keys, no backup → NEW USER
+      // SCENARIO 2: No local keys, no backup → NEW USER
       if (!hasLocal) {
         console.log('🆕 [Init] New user - need to create keys');
         setNeedsBackupPassword(true);
@@ -171,20 +170,12 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
         return;
       }
 
-      // ✅ SCENARIO 3: Has local keys AND has backup → ALL GOOD
-      if (hasLocal && serverHasBackup) {
-        console.log('✅ [Init] Complete setup detected');
-        await initializeEncryption();
-        return;
-      }
+      // SCENARIO 3: Has local keys → Ready (with or without backup)
+      console.log('✅ [Init] Has local keys, initializing...');
+      await initializeEncryption();
 
-      // ✅ SCENARIO 4: Has local keys but NO backup → OLD USER
-      if (hasLocal && !serverHasBackup) {
-        console.log('👤 [Init] Old user (no backup)');
-        setIsReady(true);
-        setLoading(false);
-        
-        // Show backup recommendation after delay
+      // Recommend backup if not exists
+      if (!serverHasBackup) {
         setTimeout(() => {
           Alert.alert(
             t('encryption.backup.recommendTitle') || 'Backup Your Keys',
@@ -201,11 +192,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
             ]
           );
         }, 2000);
-        return;
       }
-
-      // Fallback
-      await initializeEncryption();
       
     } catch (err: any) {
       console.error('❌ [Init] Failed:', err);
@@ -214,15 +201,17 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // ============================================
-  // ✅ Pure native key generation
-  // ============================================
+  // Generate and store master key
   const generateAndUploadKey = async (): Promise<string> => {
-    // Generate native key
-    const masterKey = await NativeEncryptionBridge.generateKey();
+    console.log('🔐 [Init] Generating master key...');
     
-    // Store locally
+    // Generate native key (32 bytes, base64 encoded)
+    const masterKey = await NativeEncryptionBridge.generateKey();
+    console.log(`✅ [Init] Master key generated (${masterKey.length} chars)`);
+    
+    // Store locally in SecureStore
     await SecureStore.setItemAsync(ENCRYPTION_KEY_STORE, masterKey);
+    console.log('✅ [Init] Master key stored locally');
     
     // Upload to server
     const token = await getToken();
@@ -238,24 +227,37 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
 
       if (uploadResponse.ok) {
         console.log('✅ [Init] Key uploaded to server');
+      } else {
+        console.warn('⚠️ [Init] Failed to upload key to server');
       }
     }
     
     return masterKey;
   };
 
-  // ============================================
-  // ✅ Create backup using native encryption
-  // ============================================
+  // Create backup using native encryption with password
   const createNativeBackup = async (
     masterKey: string,
     password: string
   ): Promise<KeyBackupData> => {
-    // Use native module to encrypt the master key with password
-    const result = await NativeEncryptionBridge.encryptMessage(masterKey, password);
+    console.log('🔐 [Init] Creating encrypted backup...');
+    
+    // Generate random salt for password derivation
+    const saltBytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+      saltBytes[i] = Math.floor(Math.random() * 256);
+    }
+    const salt = Buffer.from(saltBytes).toString('base64');
+    
+    // Use native module to encrypt the master key with password-derived key
+    // The password acts as the encryption key after derivation
+    const result = await NativeEncryptionBridge.encryptMessage(masterKey, password + salt);
+    
+    console.log('✅ [Init] Backup created');
     
     return {
       encryptedMasterKey: result.encryptedContent,
+      salt: salt,
       iv: result.iv,
       authTag: result.authTag,
       keyVersion: 1,
@@ -273,6 +275,8 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
       if (!masterKey) {
         // Generate new key
         masterKey = await generateAndUploadKey();
+      } else {
+        console.log(`✅ [Init] Using existing master key (${masterKey.length} chars)`);
       }
 
       // Create backup if password provided
@@ -291,7 +295,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
           });
 
           if (backupResponse.ok) {
-            console.log('✅ [Init] Backup uploaded');
+            console.log('✅ [Init] Backup uploaded to server');
             setHasBackup(true);
           }
         }
@@ -310,9 +314,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // ============================================
-  // ✅ Create backup for existing keys
-  // ============================================
+  // Create backup for existing keys
   const createBackupForExistingKeys = async () => {
     if (backupPassword.length < 8) {
       Alert.alert(t('error'), 'Password must be at least 8 characters');
@@ -391,9 +393,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     }
   };
 
-  // ============================================
-  // ✅ Restore from backup using native decryption
-  // ============================================
+  // Restore from backup using native decryption
   const handleRestore = async () => {
     if (!restorePassword) {
       Alert.alert(t('error'), 'Password is required');
@@ -418,26 +418,47 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
       }
 
       const backupData: KeyBackupData = result.data.backup;
+      console.log('📥 [Init] Backup fetched from server');
 
       // Decrypt master key using native module
       const masterKey = await NativeEncryptionBridge.decryptMessage(
         backupData.encryptedMasterKey,
         backupData.iv,
         backupData.authTag,
-        restorePassword
+        restorePassword + backupData.salt  // Use password + salt as decryption key
       );
+
+      console.log(`✅ [Init] Master key restored (${masterKey.length} chars)`);
 
       // Store restored key
       await SecureStore.setItemAsync(ENCRYPTION_KEY_STORE, masterKey);
+      console.log('✅ [Init] Master key stored locally');
       
+      // Upload key to server (in case it was deleted)
+      const uploadResponse = await fetch(`${API_BASE_URL}/api/keys/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ publicKey: masterKey }),
+      });
+
+      if (uploadResponse.ok) {
+        console.log('✅ [Init] Key re-uploaded to server');
+      }
+
       // Initialize normally
-      await initializeEncryption();
+      setIsReady(true);
+      setHasBackup(true);
       setNeedsRestore(false);
+      setRestorePassword('');
       
       Alert.alert(t('success'), 'Keys restored successfully');
     } catch (err: any) {
       console.error('❌ [Init] Restore failed:', err);
       Alert.alert(t('error'), 'Invalid password or corrupted backup');
+    } finally {
       setLoading(false);
     }
   };
@@ -473,46 +494,31 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
           showsVerticalScrollIndicator={false}
         >
           <Animated.View 
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            }}
+            style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
             className="items-center"
           >
-            {/* Icon */}
             <View className={`w-24 h-24 rounded-full ${cardBg} items-center justify-center mb-6`}>
-              <Ionicons 
-                name="shield-checkmark" 
-                size={48} 
-                color={isDark ? '#f97316' : '#f97316'} 
-              />
+              <Ionicons name="shield-checkmark" size={48} color="#f97316" />
             </View>
 
-            {/* Title */}
             <Text className={`text-3xl font-bold ${textColor} mb-3 text-center`}>
               {isCreatingBackupForExistingKeys 
                 ? (t('encryption.backup.createForExistingTitle') || 'Create Backup')
                 : (t('encryption.backup.title') || 'Secure Your Messages')}
             </Text>
             
-            {/* Description */}
             <Text className={`text-base ${subTextColor} text-center mb-8 px-4`}>
               {isCreatingBackupForExistingKeys
-                ? (t('encryption.backup.createForExistingDescription') || 'Create a backup password to protect your existing encryption keys')
+                ? (t('encryption.backup.createForExistingDescription') || 'Create a backup password to protect your encryption keys')
                 : (t('encryption.backup.description') || 'Create a backup password to protect your encryption keys')}
             </Text>
 
-            {/* Password Input */}
             <View className="w-full mb-4">
               <Text className={`text-sm font-medium ${textColor} mb-2`}>
                 {t('encryption.backup.passwordLabel') || 'Backup Password'}
               </Text>
               <View className={`flex-row items-center ${inputBg} border ${borderColor} rounded-xl px-4`}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={isDark ? '#9CA3AF' : '#6B7280'} 
-                />
+                <Ionicons name="lock-closed-outline" size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 <TextInput
                   className={`flex-1 py-4 px-3 ${textColor}`}
                   placeholder={t('encryption.backup.passwordPlaceholder') || 'Enter password'}
@@ -523,26 +529,17 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Ionicons 
-                    name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
-                    size={20} 
-                    color={isDark ? '#9CA3AF' : '#6B7280'} 
-                  />
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Confirm Password Input */}
             <View className="w-full mb-6">
               <Text className={`text-sm font-medium ${textColor} mb-2`}>
                 {t('encryption.backup.confirmPasswordLabel') || 'Confirm Password'}
               </Text>
               <View className={`flex-row items-center ${inputBg} border ${borderColor} rounded-xl px-4`}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={isDark ? '#9CA3AF' : '#6B7280'} 
-                />
+                <Ionicons name="lock-closed-outline" size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 <TextInput
                   className={`flex-1 py-4 px-3 ${textColor}`}
                   placeholder={t('encryption.backup.confirmPasswordPlaceholder') || 'Confirm password'}
@@ -553,43 +550,29 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                  <Ionicons 
-                    name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} 
-                    size={20} 
-                    color={isDark ? '#9CA3AF' : '#6B7280'} 
-                  />
+                  <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Requirements */}
             <View className={`w-full ${cardBg} rounded-xl p-4 mb-6`}>
               <Text className={`text-sm font-medium ${textColor} mb-2`}>
                 {t('encryption.backup.requirements') || 'Requirements'}
               </Text>
               <View className="flex-row items-center mb-1">
-                <Ionicons 
-                  name="checkmark-circle" 
-                  size={16} 
-                  color={backupPassword.length >= 8 ? '#10B981' : isDark ? '#4B5563' : '#D1D5DB'} 
-                />
+                <Ionicons name="checkmark-circle" size={16} color={backupPassword.length >= 8 ? '#10B981' : isDark ? '#4B5563' : '#D1D5DB'} />
                 <Text className={`text-sm ${subTextColor} ml-2`}>
                   {t('encryption.backup.minLength') || 'At least 8 characters'}
                 </Text>
               </View>
               <View className="flex-row items-center">
-                <Ionicons 
-                  name="information-circle" 
-                  size={16} 
-                  color={isDark ? '#9CA3AF' : '#6B7280'} 
-                />
-                <Text className={`text-xs ${subTextColor} ml-2`}>
-                  {t('encryption.backup.hint') || 'Use a strong, unique password'}
+                <Ionicons name="checkmark-circle" size={16} color={backupPassword === confirmPassword && backupPassword.length > 0 ? '#10B981' : isDark ? '#4B5563' : '#D1D5DB'} />
+                <Text className={`text-sm ${subTextColor} ml-2`}>
+                  Passwords match
                 </Text>
               </View>
             </View>
 
-            {/* Create Button */}
             <TouchableOpacity
               className={`w-full bg-orange-500 rounded-xl py-4 mb-3 ${loading ? 'opacity-50' : ''}`}
               onPress={handleCreateBackup}
@@ -602,16 +585,13 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
               </Text>
             </TouchableOpacity>
             
-            {/* Skip/Cancel Button */}
             <TouchableOpacity
               className="w-full py-3"
               onPress={() => {
                 if (isCreatingBackupForExistingKeys) {
-                  // Cancel - go back to app
                   setNeedsBackupPassword(false);
                   setIsCreatingBackupForExistingKeys(false);
                 } else {
-                  // Skip - initialize without backup
                   initializeEncryption();
                 }
               }}
@@ -623,21 +603,6 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
                   : (t('encryption.backup.skipButton') || 'Skip for now')}
               </Text>
             </TouchableOpacity>
-
-            {/* Warning (only for new users) */}
-            {!isCreatingBackupForExistingKeys && (
-              <View className="flex-row items-start mt-4 px-4">
-                <Ionicons 
-                  name="warning-outline" 
-                  size={16} 
-                  color="#F59E0B" 
-                  style={{ marginTop: 2 }}
-                />
-                <Text className={`text-xs ${subTextColor} ml-2 flex-1`}>
-                  {t('encryption.backup.skipWarning') || 'Without a backup, you may lose access to your messages'}
-                </Text>
-              </View>
-            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -656,42 +621,27 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
           showsVerticalScrollIndicator={false}
         >
           <Animated.View 
-            style={{
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            }}
+            style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
             className="items-center"
           >
-            {/* Icon */}
             <View className={`w-24 h-24 rounded-full ${cardBg} items-center justify-center mb-6`}>
-              <Ionicons 
-                name="key" 
-                size={48} 
-                color={isDark ? '#f97316' : '#f97316'} 
-              />
+              <Ionicons name="key" size={48} color="#f97316" />
             </View>
 
-            {/* Title */}
             <Text className={`text-3xl font-bold ${textColor} mb-3 text-center`}>
               {t('encryption.restore.title') || 'Restore Your Keys'}
             </Text>
             
-            {/* Description */}
             <Text className={`text-base ${subTextColor} text-center mb-8 px-4`}>
               {t('encryption.restore.description') || 'Enter your backup password to restore your encryption keys'}
             </Text>
 
-            {/* Password Input */}
             <View className="w-full mb-6">
               <Text className={`text-sm font-medium ${textColor} mb-2`}>
                 {t('encryption.restore.passwordLabel') || 'Backup Password'}
               </Text>
               <View className={`flex-row items-center ${inputBg} border ${borderColor} rounded-xl px-4`}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={isDark ? '#9CA3AF' : '#6B7280'} 
-                />
+                <Ionicons name="lock-closed-outline" size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 <TextInput
                   className={`flex-1 py-4 px-3 ${textColor}`}
                   placeholder={t('encryption.restore.passwordPlaceholder') || 'Enter your backup password'}
@@ -702,31 +652,11 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowRestorePassword(!showRestorePassword)}>
-                  <Ionicons 
-                    name={showRestorePassword ? 'eye-off-outline' : 'eye-outline'} 
-                    size={20} 
-                    color={isDark ? '#9CA3AF' : '#6B7280'} 
-                  />
+                  <Ionicons name={showRestorePassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Info Card */}
-            <View className={`w-full ${cardBg} rounded-xl p-4 mb-6`}>
-              <View className="flex-row items-start">
-                <Ionicons 
-                  name="information-circle" 
-                  size={20} 
-                  color="#3B82F6" 
-                  style={{ marginTop: 2 }}
-                />
-                <Text className={`text-sm ${subTextColor} ml-3 flex-1`}>
-                  {t('encryption.restore.info') || 'This is the password you created when backing up your keys'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Restore Button */}
             <TouchableOpacity
               className={`w-full bg-orange-500 rounded-xl py-4 mb-3 ${loading ? 'opacity-50' : ''}`}
               onPress={handleRestore}
@@ -739,7 +669,6 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
               </Text>
             </TouchableOpacity>
             
-            {/* Start Fresh Button */}
             <TouchableOpacity
               className="w-full py-3"
               onPress={() => {
@@ -753,7 +682,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
                       style: 'destructive',
                       onPress: () => {
                         setNeedsRestore(false);
-                        initializeEncryption();
+                        setNeedsBackupPassword(true);
                       },
                     },
                   ]
@@ -771,7 +700,7 @@ export const EncryptionInitProvider: React.FC<{ children: React.ReactNode }> = (
     );
   }
 
-  // Show loading only ONCE at app start
+  // Show loading
   if (loading && isSignedIn) {
     return (
       <View className={`flex-1 justify-center items-center ${bgColor}`}>

@@ -516,6 +516,43 @@
       "averageScores": "平均分数",
       "byContext": "按上下文",
       "confidence": "{{percent}}% 置信度"
+    },
+    "counselor": {
+      "title": "AI情绪咨询",
+      "analyzing": "正在分析情绪...",
+      "noData": "数据不足无法分析。开始记录您的情绪！",
+      "acuteWarning": "您正在经历强烈情绪。考虑寻求支持。",
+      "chatButton": "与AI聊天获取咨询",
+      "emotionBalance": "情绪平衡",
+      "viewDetails": "查看详情",
+      "refresh": "刷新分析",
+      "loading": "分析中...",
+    "recommendations": "建议",
+    "viewFull": "查看完整分析",
+    "more": "更多建议"
+    },
+
+    "filter": {
+      "title": "筛选",
+      "context": "上下文",
+      "timeRange": "时间范围",
+      "days": "{{count}} 天",
+      "clear": "清除筛选",
+      "apply": "应用"
+    },
+
+    "contexts": {
+      "message": "消息",
+      "voice_note": "语音留言",
+      "call": "通话",
+      "general": "常规"
+    },
+
+    "delete": {
+      "confirmTitle": "删除",
+      "confirmMessage": "您确定要删除此情绪记录吗？",
+      "success": "情绪记录删除成功",
+      "failed": "删除情绪记录失败"
     }
   },
 
@@ -556,7 +593,8 @@
       "title": "AI为您推荐",
       "showSuggestions": "显示建议",
       "startWith": "从话题开始：",
-      "count": "{{count}}条建议"
+      "count": "{{count}}条建议",
+      "smartTitle": "为您推荐"
     },
 
     "empty": {
@@ -726,32 +764,40 @@
     },
     "actions": {
       "reply": "回复",
-      "react": "反应",
-      "delete": "删除",
+      "react": "表情反应",
       "edit": "编辑",
+      "recall": "撤回",
+      "delete": "删除",
       "viewReads": "查看已读",
-      "deleteTitle": "删除消息",
-      "deleteMessage": "选择删除选项：",
       "deleteForMe": "为我删除",
       "deleteForEveryone": "为所有人删除",
-      "deleteTitle": "删除对话",
-      "deleteMessage": "您确定要删除此对话吗？消息仅会在您的侧被删除。",
-      "leaveGroup": "离开群组",
-      "leaveGroupConfirm": "您确定要离开此群组吗？",
-      "leaveGroupSuccess": "已成功离开群组",
+      "deleteTitle": "删除消息",
+      "deleteMessage": "选择删除选项：",
+      "recallTitle": "撤回消息",
+      "recallMessage": "您确定要撤回此消息吗？所有收件人将无法查看内容。",
+      "leaveGroup": "退出群组",
+      "leaveGroupConfirm": "您确定要退出此群组吗？",
+      "leaveGroupSuccess": "成功退出群组",
       "removeMember": "移除成员",
-      "removeMemberConfirm": "您确定要将 {{name}} 从群组中移除吗？",
+      "removeMemberConfirm": "您确定要将{{name}}从群组中移除吗？",
       "remove": "移除",
-      "removeSuccess": "成员已成功移除",
+      "removeSuccess": "成功移除成员",
       "transferAdmin": "转移管理员权限",
-      "transferAdminConfirm": "您确定要将管理员权限转移给 {{name}} 吗？",
+      "transferAdminConfirm": "您确定要将管理员权限转移给{{name}}吗？",
       "transfer": "转移",
-      "transferSuccess": "管理员权限已成功转移",
+      "transferSuccess": "成功转移管理员权限",
       "deleteConversation": "删除对话",
       "removeFromGroup": "从群组中移除"
     },
     "edited": "已编辑",
     "readBy": "已读 {{count}}",
+    "edit": {
+      "title": "编辑消息",
+      "placeholder": "输入您的消息...",
+      "characters": "字符",
+      "emptyContent": "消息不能为空",
+      "failed": "编辑消息失败"
+    },
     "call": {
       "video": {
         "title": "开始视频通话",

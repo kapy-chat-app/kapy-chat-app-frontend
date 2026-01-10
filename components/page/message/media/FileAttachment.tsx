@@ -1,5 +1,5 @@
 // components/page/message/media/FileAttachment.tsx
-// ✅ FIXED: Added onLongPress support for MessageActionsMenu
+// ✅ UPDATED: Support optimistic messages with local URIs (decryptedUri priority)
 
 import React from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
@@ -14,7 +14,7 @@ interface FileAttachmentProps {
   isOwnMessage: boolean;
   isSending: boolean;
   isDark: boolean;
-  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from parent
+  onLongPress?: () => void;
 }
 
 export const FileAttachment: React.FC<FileAttachmentProps> = ({ 
@@ -22,11 +22,28 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
   isOwnMessage, 
   isSending, 
   isDark,
-  onLongPress, // ✅ NEW
+  onLongPress,
 }) => {
+  /**
+   * ✅ PRIORITY: decryptedUri (local OR decrypted) > url
+   * For optimistic messages: decryptedUri = local file://
+   * For encrypted messages: decryptedUri = decrypted file://
+   * For regular messages: url = server URL
+   */
   const getFileUri = (attachment: any): string | null => {
+    console.log('📄 [FILE] getFileUri:', {
+      id: attachment._id,
+      hasDecryptedUri: !!attachment.decryptedUri,
+      hasUrl: !!attachment.url,
+      decryptedUriType: attachment.decryptedUri?.substring(0, 10),
+    });
+    
+    // Priority 1: decryptedUri (for both optimistic and decrypted)
     if (attachment.decryptedUri) return attachment.decryptedUri;
+    
+    // Priority 2: url (for non-encrypted server files)
     if (attachment.url) return attachment.url;
+    
     return null;
   };
 
@@ -89,8 +106,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
           <TouchableOpacity 
             key={att._id || index}
             onPress={() => fileUri && !hasError && handleDownload(att)}
-            onLongPress={onLongPress} // ✅ FIXED: Add long press
-            delayLongPress={300} // ✅ FIXED: Add delay
+            onLongPress={onLongPress}
+            delayLongPress={300}
             disabled={isSending || !fileUri || hasError}
             activeOpacity={0.7}
             style={{ width: GALLERY_WIDTH }}

@@ -1,12 +1,12 @@
 // lib/encryption/NativeEncryptionBridge.ts
-// ✅ CACHE-FIRST VERSION - Enhanced với helper methods
+// ✅ FIXED VERSION - Complete bridge with all encryption methods
 
 import { NativeEventEmitter, NativeModules, Platform } from "react-native";
 
 const { KapyEncryption, KapyCache } = NativeModules;
 
 if (!KapyEncryption && Platform.OS === "android") {
-  throw new Error("KapyEncryption native module not found");
+  console.error("❌ KapyEncryption native module not found!");
 }
 
 // =============================================
@@ -14,12 +14,7 @@ if (!KapyEncryption && Platform.OS === "android") {
 // =============================================
 
 export interface EncryptionProgress {
-  phase:
-    | "encrypting"
-    | "decrypting"
-    | "reading"
-    | "finalizing"
-    | "streaming-decrypt";
+  phase: "encrypting" | "decrypting" | "reading" | "finalizing" | "streaming-decrypt" | "uploading";
   percentage: number;
   currentChunk: number;
   totalChunks: number;
@@ -44,18 +39,6 @@ export interface EncryptedFileResult {
   chunks: ChunkInfo[];
 }
 
-export interface StreamingUploadResult {
-  fileId: string;
-  messageId: string;
-  masterIv: string;
-  masterAuthTag: string;
-  chunks: ChunkInfo[];
-  totalChunks: number;
-  originalSize: number;
-  encryptedSize: number;
-  fileName: string;
-}
-
 export interface ChunkInfo {
   index: number;
   iv: string;
@@ -73,7 +56,7 @@ export interface EncryptedSymmetricKey {
 
 export type ProgressCallback = (progress: EncryptionProgress) => void;
 
-const eventEmitter = new NativeEventEmitter(KapyEncryption);
+const eventEmitter = KapyEncryption ? new NativeEventEmitter(KapyEncryption) : null;
 
 // =============================================
 // NATIVE ENCRYPTION BRIDGE
@@ -82,222 +65,68 @@ const eventEmitter = new NativeEventEmitter(KapyEncryption);
 export class NativeEncryptionBridge {
   private static progressListeners: Map<string, ProgressCallback> = new Map();
   private static subscriptions: any[] = [];
+  private static initialized = false;
 
   static initialize(): void {
-    const subscription = eventEmitter.addListener(
-      "KapyEncryptionProgress",
-      (progress: EncryptionProgress) => {
-        this.progressListeners.forEach((callback) => {
-          callback(progress);
-        });
-      }
-    );
+    if (this.initialized || !eventEmitter) return;
 
-    this.subscriptions.push(subscription);
-    console.log("✅ NativeEncryptionBridge initialized");
+    try {
+      const subscription = eventEmitter.addListener(
+        "KapyEncryptionProgress",
+        (progress: EncryptionProgress) => {
+          this.progressListeners.forEach((callback) => {
+            try { callback(progress); } catch (e) { }
+          });
+        }
+      );
+      this.subscriptions.push(subscription);
+      this.initialized = true;
+      console.log("✅ NativeEncryptionBridge initialized");
+    } catch (e) {
+      console.warn("⚠️ NativeEncryptionBridge initialization failed:", e);
+    }
   }
 
   static cleanup(): void {
-    this.subscriptions.forEach((sub) => sub.remove());
+    this.subscriptions.forEach((sub) => { try { sub.remove(); } catch (e) { } });
     this.subscriptions = [];
     this.progressListeners.clear();
-  }
-
-  static async generateKey(): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-    return await KapyEncryption.generateKey();
-  }
-
-  static async deriveKey(keyBase64: string): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-    return await KapyEncryption.deriveKey(keyBase64);
-  }
-
-  static async clearKeyCache(): Promise<void> {
-    if (Platform.OS !== "android") return;
-    await KapyEncryption.clearKeyCache();
-  }
-
-  static async encryptMessage(
-    message: string,
-    keyBase64: string
-  ): Promise<EncryptedMessageResult> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    const result = await KapyEncryption.encryptMessage(message, keyBase64);
-
-    return {
-      encryptedContent: result.encryptedContent,
-      iv: result.iv,
-      authTag: result.authTag,
-    };
-  }
-
-  static async decryptMessage(
-    encryptedBase64: string,
-    ivBase64: string,
-    authTagBase64: string,
-    senderKeyBase64: string
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    return await KapyEncryption.decryptMessage(
-      encryptedBase64,
-      ivBase64,
-      authTagBase64,
-      senderKeyBase64
-    );
-  }
-
-  static async encryptFileStreaming(
-    fileUri: string,
-    fileName: string,
-    keyBase64: string,
-    onProgress?: ProgressCallback
-  ): Promise<EncryptedFileResult> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    const listenerId = `encrypt_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
-    try {
-      const result = await KapyEncryption.encryptFileStreaming(
-        fileUri,
-        fileName,
-        keyBase64
-      );
-
-      return result as EncryptedFileResult;
-    } finally {
-      this.progressListeners.delete(listenerId);
-    }
-  }
-
-  static async decryptFileDirect(
-    encryptedBase64: string,
-    iv: string,
-    authTag: string,
-    senderKeyBase64: string,
-    outputPath: string
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    return await KapyEncryption.decryptFileDirect(
-      encryptedBase64,
-      iv,
-      authTag,
-      senderKeyBase64,
-      outputPath
-    );
-  }
-
-  static async decryptFileStreaming(
-    encryptedBase64: string,
-    chunks: ChunkInfo[],
-    masterAuthTag: string,
-    senderKeyBase64: string,
-    outputPath: string,
-    onProgress?: ProgressCallback
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    const listenerId = `decrypt_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
-    try {
-      const resultPath = await KapyEncryption.decryptFileStreaming(
-        encryptedBase64,
-        chunks,
-        masterAuthTag,
-        senderKeyBase64,
-        outputPath
-      );
-
-      return resultPath;
-    } finally {
-      this.progressListeners.delete(listenerId);
-    }
-  }
-
-  static async decryptFileStreamingFromUrl(
-    s3Url: string,
-    chunks: ChunkInfo[],
-    masterAuthTag: string,
-    senderKeyBase64: string,
-    outputPath: string,
-    onProgress?: ProgressCallback
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    const listenerId = `decrypt_stream_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
-    try {
-      const resultPath = await KapyEncryption.decryptFileStreamingFromUrl(
-        s3Url,
-        chunks,
-        masterAuthTag,
-        senderKeyBase64,
-        outputPath
-      );
-
-      return resultPath;
-    } finally {
-      this.progressListeners.delete(listenerId);
-    }
+    this.initialized = false;
   }
 
   static isAvailable(): boolean {
-    const available = Platform.OS === "android" && !!KapyEncryption;
-    return available;
+    return Platform.OS === "android" && !!KapyEncryption;
   }
 
   static getPerformanceMultiplier(): number {
     return this.isAvailable() ? 7 : 1;
   }
 
+  // KEY MANAGEMENT
+  static async generateKey(): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    return await KapyEncryption.generateKey();
+  }
+
+  static async deriveKey(keyBase64: string): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    return await KapyEncryption.deriveKey(keyBase64);
+  }
+
+  static async clearKeyCache(): Promise<void> {
+    if (!this.isAvailable()) return;
+    await KapyEncryption.clearKeyCache();
+  }
+
+  // SYMMETRIC KEY MANAGEMENT
   static async generateSymmetricKey(): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
     return await KapyEncryption.generateSymmetricKey();
   }
 
-  static async encryptSymmetricKey(
-    symmetricKey: string,
-    recipientPublicKey: string
-  ): Promise<EncryptedSymmetricKey> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    const result = await KapyEncryption.encryptSymmetricKey(
-      symmetricKey,
-      recipientPublicKey
-    );
-
+  static async encryptSymmetricKey(symmetricKey: string, recipientMasterKey: string): Promise<EncryptedSymmetricKey> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    const result = await KapyEncryption.encryptSymmetricKey(symmetricKey, recipientMasterKey);
     return {
       encryptedSymmetricKey: result.encryptedSymmetricKey,
       keyIv: result.keyIv,
@@ -305,140 +134,89 @@ export class NativeEncryptionBridge {
     };
   }
 
-  static async decryptSymmetricKey(
-    encryptedKey: string,
-    keyIv: string,
-    keyAuthTag: string,
-    senderPublicKey: string
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
-
-    return await KapyEncryption.decryptSymmetricKey(
-      encryptedKey,
-      keyIv,
-      keyAuthTag,
-      senderPublicKey
-    );
+  static async decryptSymmetricKey(encryptedKey: string, keyIv: string, keyAuthTag: string, myMasterKey: string): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    return await KapyEncryption.decryptSymmetricKey(encryptedKey, keyIv, keyAuthTag, myMasterKey);
   }
 
-  static async encryptFileWithSymmetricKey(
-    fileUri: string,
-    fileName: string,
-    symmetricKey: string,
-    onProgress?: ProgressCallback
-  ): Promise<EncryptedFileResult> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
+  // MESSAGE ENCRYPTION
+  static async encryptMessage(message: string, keyBase64: string): Promise<EncryptedMessageResult> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    const result = await KapyEncryption.encryptMessage(message, keyBase64);
+    return { encryptedContent: result.encryptedContent, iv: result.iv, authTag: result.authTag };
+  }
 
+  static async decryptMessage(encryptedBase64: string, ivBase64: string, authTagBase64: string, senderKeyBase64: string): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    return await KapyEncryption.decryptMessage(encryptedBase64, ivBase64, authTagBase64, senderKeyBase64);
+  }
+
+  // FILE ENCRYPTION
+  static async encryptFileWithSymmetricKey(fileUri: string, fileName: string, symmetricKey: string, onProgress?: ProgressCallback): Promise<EncryptedFileResult> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
     const listenerId = `encrypt_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
+    if (onProgress) this.progressListeners.set(listenerId, onProgress);
     try {
-      const result = await KapyEncryption.encryptFileStreamingWithSymmetricKey(
-        fileUri,
-        fileName,
-        symmetricKey
-      );
-
-      return result as EncryptedFileResult;
+      return await KapyEncryption.encryptFileStreamingWithSymmetricKey(fileUri, fileName, symmetricKey);
     } finally {
       this.progressListeners.delete(listenerId);
     }
   }
 
-  static async decryptFileWithSymmetricKey(
-    s3Url: string,
-    chunks: ChunkInfo[],
-    masterAuthTag: string,
-    symmetricKey: string,
-    outputPath: string,
-    onProgress?: ProgressCallback
-  ): Promise<string> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
+  static async encryptFileStreaming(fileUri: string, fileName: string, keyBase64: string, onProgress?: ProgressCallback): Promise<EncryptedFileResult> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    const listenerId = `encrypt_${Date.now()}`;
+    if (onProgress) this.progressListeners.set(listenerId, onProgress);
+    try {
+      return await KapyEncryption.encryptFileStreaming(fileUri, fileName, keyBase64);
+    } finally {
+      this.progressListeners.delete(listenerId);
     }
+  }
 
-    if (!chunks || !Array.isArray(chunks)) {
-      console.error("❌ [Bridge] chunks is null or not array:", chunks);
-      throw new Error("chunks parameter is null or not an array");
+  // FILE DECRYPTION
+  static async decryptFileWithSymmetricKey(s3Url: string, chunks: ChunkInfo[], masterAuthTag: string, symmetricKey: string, outputPath: string, onProgress?: ProgressCallback): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    if (!chunks || !Array.isArray(chunks) || chunks.length === 0) {
+      throw new Error("chunks parameter is invalid");
     }
-
-    if (chunks.length === 0) {
-      console.error("❌ [Bridge] chunks array is empty");
-      throw new Error("chunks array is empty");
-    }
-
     const validatedChunks = chunks.map((chunk, index) => {
-      if (
-        !chunk.iv ||
-        !chunk.gcmAuthTag ||
-        typeof chunk.encryptedSize !== "number"
-      ) {
-        console.error(
-          `❌ [Bridge] Chunk ${index} missing required fields:`,
-          chunk
-        );
-        throw new Error(
-          `Chunk ${index} missing required fields (iv, gcmAuthTag, or encryptedSize)`
-        );
+      if (!chunk.iv || !chunk.gcmAuthTag || typeof chunk.encryptedSize !== "number") {
+        throw new Error(`Chunk ${index} missing required fields`);
       }
       return chunk;
     });
-
     const listenerId = `decrypt_stream_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
+    if (onProgress) this.progressListeners.set(listenerId, onProgress);
     try {
-      const resultPath =
-        await KapyEncryption.decryptFileStreamingFromUrlWithSymmetricKey(
-          s3Url,
-          validatedChunks,
-          masterAuthTag,
-          symmetricKey,
-          outputPath
-        );
-
-      return resultPath;
+      return await KapyEncryption.decryptFileStreamingFromUrlWithSymmetricKey(s3Url, validatedChunks, masterAuthTag, symmetricKey, outputPath);
     } finally {
       this.progressListeners.delete(listenerId);
     }
   }
 
-  static async encryptAndUploadWithSymmetricKey(
-    fileUri: string,
-    fileName: string,
-    conversationId: string,
-    symmetricKey: string,
-    authToken: string,
-    onProgress?: ProgressCallback
-  ): Promise<StreamingUploadResult> {
-    if (Platform.OS !== "android") {
-      throw new Error("Native encryption only available on Android");
-    }
+  static async decryptFileDirect(encryptedBase64: string, iv: string, authTag: string, senderKeyBase64: string, outputPath: string): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    return await KapyEncryption.decryptFileDirect(encryptedBase64, iv, authTag, senderKeyBase64, outputPath);
+  }
 
-    const listenerId = `upload_${Date.now()}`;
-    if (onProgress) {
-      this.progressListeners.set(listenerId, onProgress);
-    }
-
+  static async decryptFileStreaming(encryptedBase64: string, chunks: ChunkInfo[], masterAuthTag: string, senderKeyBase64: string, outputPath: string, onProgress?: ProgressCallback): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    const listenerId = `decrypt_${Date.now()}`;
+    if (onProgress) this.progressListeners.set(listenerId, onProgress);
     try {
-      const result =
-        await KapyEncryption.encryptAndUploadFileStreamingWithSymmetricKey(
-          fileUri,
-          fileName,
-          conversationId,
-          symmetricKey,
-          authToken
-        );
+      return await KapyEncryption.decryptFileStreaming(encryptedBase64, chunks, masterAuthTag, senderKeyBase64, outputPath);
+    } finally {
+      this.progressListeners.delete(listenerId);
+    }
+  }
 
-      return result as StreamingUploadResult;
+  static async decryptFileStreamingFromUrl(s3Url: string, chunks: ChunkInfo[], masterAuthTag: string, senderKeyBase64: string, outputPath: string, onProgress?: ProgressCallback): Promise<string> {
+    if (!this.isAvailable()) throw new Error("Native encryption only available on Android");
+    const listenerId = `decrypt_stream_${Date.now()}`;
+    if (onProgress) this.progressListeners.set(listenerId, onProgress);
+    try {
+      return await KapyEncryption.decryptFileStreamingFromUrl(s3Url, chunks, masterAuthTag, senderKeyBase64, outputPath);
     } finally {
       this.progressListeners.delete(listenerId);
     }
@@ -469,95 +247,30 @@ export interface CachedMessage {
 }
 
 export class NativeCacheBridge {
-  /**
-   * ✅ NEW: Check if messages exist (fast check)
-   */
   static async hasMessages(conversationId: string): Promise<boolean> {
-    if (Platform.OS !== "android") return false;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return false;
-    }
-
+    if (Platform.OS !== "android" || !KapyCache) return false;
     try {
-      const result = await KapyCache.hasMessages(conversationId);
-      return result === true;
-    } catch (error) {
-      console.error("❌ [Bridge] hasMessages error:", error);
-      return false;
-    }
+      return await KapyCache.hasMessages(conversationId) === true;
+    } catch { return false; }
   }
 
-  /**
-   * ✅ NEW: Get message count
-   */
   static async getMessageCount(conversationId: string): Promise<number> {
-    if (Platform.OS !== "android") return 0;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return 0;
-    }
-
+    if (Platform.OS !== "android" || !KapyCache) return 0;
     try {
-      const count = await KapyCache.getMessageCount(conversationId);
-      return count || 0;
-    } catch (error) {
-      console.error("❌ [Bridge] getMessageCount error:", error);
-      return 0;
-    }
+      return (await KapyCache.getMessageCount(conversationId)) || 0;
+    } catch { return 0; }
   }
 
-  /**
-   * ✅ Get messages với pagination support
-   */
-  static async getMessages(
-    conversationId: string,
-    limit: number,
-    beforeTimestamp?: number
-  ): Promise<CachedMessage[]> {
-    if (Platform.OS !== "android") {
-      return [];
-    }
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return [];
-    }
-
+  static async getMessages(conversationId: string, limit: number, beforeTimestamp?: number): Promise<CachedMessage[]> {
+    if (Platform.OS !== "android" || !KapyCache) return [];
     try {
-      const result = await KapyCache.getMessages(
-        conversationId,
-        limit,
-        beforeTimestamp || null
-      );
-
-      if (!result || !Array.isArray(result)) {
-        return [];
-      }
-
-      return result as CachedMessage[];
-      
-    } catch (error) {
-      console.error("❌ [Bridge] getMessages error:", error);
-      return [];
-    }
+      const result = await KapyCache.getMessages(conversationId, limit, beforeTimestamp || null);
+      return result && Array.isArray(result) ? result : [];
+    } catch { return []; }
   }
 
-  /**
-   * ✅ Save messages returns count
-   */
   static async saveMessages(messages: CachedMessage[]): Promise<number> {
-    if (Platform.OS !== "android") {
-      return 0;
-    }
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      throw new Error("KapyCache module not available");
-    }
-
+    if (Platform.OS !== "android" || !KapyCache) return 0;
     try {
       const normalized = messages.map(msg => ({
         _id: msg._id,
@@ -577,128 +290,43 @@ export class NativeCacheBridge {
         updated_at: Math.floor(msg.updated_at),
         rich_media_json: msg.rich_media_json || "",
       }));
-
-      const savedCount = await KapyCache.saveMessages(normalized);
-      
-      return savedCount || 0;
-      
-    } catch (error) {
-      console.error("❌ [Bridge] saveMessages error:", error);
-      throw error;
-    }
+      return (await KapyCache.saveMessages(normalized)) || 0;
+    } catch (e) { throw e; }
   }
 
-  static async updateAttachmentUri(
-    messageId: string,
-    attachmentId: string,
-    decryptedUri: string
-  ): Promise<boolean> {
-    if (Platform.OS !== "android") return false;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return false;
-    }
-
+  static async updateAttachmentUri(messageId: string, attachmentId: string, decryptedUri: string): Promise<boolean> {
+    if (Platform.OS !== "android" || !KapyCache) return false;
     try {
-      const result = await KapyCache.updateAttachmentUri(
-        messageId,
-        attachmentId,
-        decryptedUri
-      );
-      
-      return result === true;
-      
-    } catch (error) {
-      console.error("❌ [Bridge] updateAttachmentUri error:", error);
-      return false;
-    }
+      return await KapyCache.updateAttachmentUri(messageId, attachmentId, decryptedUri) === true;
+    } catch { return false; }
   }
 
   static async clearConversation(conversationId: string): Promise<void> {
-    if (Platform.OS !== "android") return;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return;
-    }
-
-    try {
-      await KapyCache.clearConversation(conversationId);
-    } catch (error) {
-      console.error("❌ [Bridge] clearConversation error:", error);
-      throw error;
-    }
+    if (Platform.OS !== "android" || !KapyCache) return;
+    await KapyCache.clearConversation(conversationId);
   }
 
-  static async getConversationMeta(conversationId: string): Promise<{
-    conversation_id: string;
-    last_sync_time: number;
-    total_cached: number;
-    last_message_id?: string;
-  } | null> {
-    if (Platform.OS !== "android") return null;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return null;
-    }
-
+  static async getConversationMeta(conversationId: string): Promise<{ conversation_id: string; last_sync_time: number; total_cached: number; last_message_id?: string; } | null> {
+    if (Platform.OS !== "android" || !KapyCache) return null;
     try {
-      const result = await KapyCache.getConversationMeta(conversationId);
-      return result;
-    } catch (error) {
-      console.error("❌ [Bridge] getConversationMeta error:", error);
-      return null;
-    }
+      return await KapyCache.getConversationMeta(conversationId);
+    } catch { return null; }
   }
 
-  static async updateConversationMeta(
-    conversationId: string,
-    lastSyncTime: number,
-    totalCached: number,
-    lastMessageId?: string
-  ): Promise<void> {
-    if (Platform.OS !== "android") return;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return;
-    }
-
-    try {
-      await KapyCache.updateConversationMeta(
-        conversationId,
-        lastSyncTime,
-        totalCached,
-        lastMessageId || null
-      );
-    } catch (error) {
-      console.error("❌ [Bridge] updateConversationMeta error:", error);
-      throw error;
-    }
+  static async updateConversationMeta(conversationId: string, lastSyncTime: number, totalCached: number, lastMessageId?: string): Promise<void> {
+    if (Platform.OS !== "android" || !KapyCache) return;
+    await KapyCache.updateConversationMeta(conversationId, lastSyncTime, totalCached, lastMessageId || null);
   }
 
   static async clearAll(): Promise<void> {
-    if (Platform.OS !== "android") return;
-    
-    if (!KapyCache) {
-      console.error("❌ [Bridge] KapyCache module not found!");
-      return;
-    }
-
-    try {
-      await KapyCache.clearAll();
-    } catch (error) {
-      console.error("❌ [Bridge] clearAll error:", error);
-      throw error;
-    }
+    if (Platform.OS !== "android" || !KapyCache) return;
+    await KapyCache.clearAll();
   }
 
   static isAvailable(): boolean {
-    const available = Platform.OS === "android" && !!KapyCache;
-    return available;
+    return Platform.OS === "android" && !!KapyCache;
   }
 }
 
+// Initialize on load
 NativeEncryptionBridge.initialize();

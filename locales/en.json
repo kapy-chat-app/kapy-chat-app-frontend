@@ -522,6 +522,42 @@
       "averageScores": "Average Scores",
       "byContext": "By Context",
       "confidence": "{{percent}}% confidence"
+    },
+    "counselor": {
+      "title": "AI Emotion Counseling",
+      "analyzing": "Analyzing emotions...",
+      "noData": "Not enough data to analyze. Start recording your emotions!",
+      "acuteWarning": "You're experiencing strong emotions. Consider seeking support.",
+      "chatButton": "Chat with AI for Counseling",
+      "emotionBalance": "Emotion Balance",
+      "viewDetails": "View Details",
+      "refresh": "Refresh Analysis",
+      "loading": "Analyzing...",
+      "recommendations": "Suggestions",
+      "viewFull": "View Full Analysis",
+      "more": "more suggestions"
+    },
+    "filter": {
+      "title": "Filter",
+      "context": "Context",
+      "timeRange": "Time Range",
+      "days": "{{count}} days",
+      "clear": "Clear",
+      "apply": "Apply"
+    },
+
+    "contexts": {
+      "message": "Message",
+      "voice_note": "Voice Note",
+      "call": "Call",
+      "general": "General"
+    },
+
+    "delete": {
+      "confirmTitle": "Delete",
+      "confirmMessage": "Are you sure you want to delete this emotion record?",
+      "success": "Emotion record deleted successfully",
+      "failed": "Failed to delete emotion record"
     }
   },
 
@@ -562,7 +598,8 @@
       "title": "AI Suggestions for You",
       "showSuggestions": "Show Suggestions",
       "startWith": "Start with topics:",
-      "count": "{{count}} suggestions"
+      "count": "{{count}} suggestions",
+      "smartTitle": "Suggestions for you"
     },
 
     "empty": {
@@ -710,15 +747,16 @@
     "actions": {
       "reply": "Reply",
       "react": "React",
-      "delete": "Delete",
       "edit": "Edit",
+      "recall": "Recall",
+      "delete": "Delete",
       "viewReads": "View Reads",
-      "deleteTitle": "Delete Message",
-      "deleteMessage": "Choose delete option:",
       "deleteForMe": "Delete for me",
       "deleteForEveryone": "Delete for everyone",
-      "deleteTitle": "Delete Conversation",
-      "deleteMessage": "Are you sure you want to delete this conversation? Messages will only be deleted on your side.",
+      "deleteTitle": "Delete Message",
+      "deleteMessage": "Choose delete option:",
+      "recallTitle": "Recall Message",
+      "recallMessage": "Are you sure you want to recall this message? All recipients will no longer be able to view the content.",
       "leaveGroup": "Leave Group",
       "leaveGroupConfirm": "Are you sure you want to leave this group?",
       "leaveGroupSuccess": "Left the group successfully",
@@ -735,6 +773,13 @@
     },
     "edited": "edited",
     "readBy": "Read by {{count}}",
+    "edit": {
+      "title": "Edit Message",
+      "placeholder": "Enter your message...",
+      "characters": "characters",
+      "emptyContent": "Message cannot be empty",
+      "failed": "Failed to edit message"
+    },
     "call": {
       "video": {
         "title": "Start Video Call",

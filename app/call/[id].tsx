@@ -1,4 +1,4 @@
-// app/call/[id].tsx - FULL VERSION: Removed recording, kept everything else
+// app/call/[id].tsx - COMPLETE WITH PiP MINIMIZE BUTTON
 import { useCallEmotionCapture } from "@/hooks/call/useCallEmotionCapture";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,6 +32,7 @@ import {
 } from "react-native-agora";
 import { SafeAreaView } from "react-native-safe-area-context";
 import io, { Socket } from "socket.io-client";
+import { usePiPCall } from "@/contexts/PiPCallContext";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const SOCKET_URL =
@@ -75,6 +76,7 @@ export default function VideoCallScreen() {
   const cameraRef = useRef<any>(null);
   const remoteVideoSetupRef = useRef<Set<number>>(new Set());
   const mainVideoViewRef = useRef(null);
+  
   // Call states
   const [joined, setJoined] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -89,7 +91,6 @@ export default function VideoCallScreen() {
   const [showControls, setShowControls] = useState(true);
   const [showParticipantsList, setShowParticipantsList] = useState(false);
   const [myUid, setMyUid] = useState<number>(0);
-  // ❌ REMOVED: const [isEmotionAnalyzing, setIsEmotionAnalyzing] = useState(false);
 
   // ⭐ NEW: Emotion states
   const [myCurrentEmotion, setMyCurrentEmotion] = useState<string | null>(null);
@@ -107,6 +108,32 @@ export default function VideoCallScreen() {
 
   const isGroupCall = conversationType === "group";
 
+  // ⭐ PiP functionality
+  const { minimizeCall } = usePiPCall();
+
+  // ⭐ Minimize to PiP handler
+  const handleMinimize = () => {
+    if (!agoraEngineRef.current) return;
+
+    console.log("🎬 Minimizing call to PiP mode");
+
+    minimizeCall({
+      callId: callId || "",
+      channelName: channelName || "",
+      conversationId: conversationId || "",
+      callType: callType as "audio" | "video",
+      localUid: myUid,
+      remoteUid: mainParticipant?.uid || null,
+      isMuted,
+      isVideoOff,
+      callDuration,
+      engine: agoraEngineRef.current,
+    });
+
+    // Navigate back without ending call
+    router.back();
+  };
+
   // ⭐ EMOTION CAPTURE HOOK - Captures every 10s
   const { isCapturing } = useCallEmotionCapture({
     callId: callId || "",
@@ -114,7 +141,7 @@ export default function VideoCallScreen() {
     intervalSeconds: 10,
     agoraEngine: agoraEngineRef.current,
     videoViewRef: mainVideoViewRef,
-    mainParticipantUid: mainParticipant?.uid || myUid, // ⭐ ADD THIS LINE
+    mainParticipantUid: mainParticipant?.uid || myUid,
   });
 
   // ⭐ NEW: Toggle emotion capture
@@ -193,7 +220,6 @@ export default function VideoCallScreen() {
 
     try {
       const engine = agoraEngineRef.current;
-      // ❌ REMOVED: recording cleanup
       if (engine) {
         if (isScreenSharing) {
           await stopScreenShare();
@@ -242,6 +268,7 @@ export default function VideoCallScreen() {
       console.error("❌ Failed to setup remote video:", error);
     }
   };
+
   useEffect(() => {
     return () => {
       if (adviceTimeoutRef.current) {
@@ -249,6 +276,7 @@ export default function VideoCallScreen() {
       }
     };
   }, []);
+
   // Initialize Socket Connection
   useEffect(() => {
     if (!userId || !conversationId) return;
@@ -375,7 +403,6 @@ export default function VideoCallScreen() {
         ai_advice?: string;
         transcription?: string;
       }) => {
-        // ⭐ DEBUG: Log toàn bộ data nhận được
         console.log("🔥 ==========================================");
         console.log("🔥 RAW callEmotionUpdate EVENT RECEIVED");
         console.log("🔥 ==========================================");
@@ -396,7 +423,6 @@ export default function VideoCallScreen() {
         console.log("🔥 Advice length:", data.ai_advice?.length || 0);
         console.log("🔥 ==========================================");
 
-        // Check callId match
         if (data.call_id !== callId) {
           console.log("❌ Call ID mismatch, ignoring event");
           console.log("❌ Expected:", callId);
@@ -406,7 +432,6 @@ export default function VideoCallScreen() {
 
         console.log("✅ Call ID matched, processing emotion update");
 
-        // Update own emotion
         if (data.user_id === userId) {
           console.log("🎯 ==========================================");
           console.log("🎯 THIS IS MY EMOTION UPDATE");
@@ -418,7 +443,6 @@ export default function VideoCallScreen() {
           console.log("🎯 Updated myCurrentEmotion to:", data.emotion);
           console.log("🎯 Updated myEmotionConfidence to:", data.confidence);
 
-          // ⭐ Show AI advice if available
           if (data.ai_advice && data.ai_advice.trim().length > 0) {
             console.log("🤖 ==========================================");
             console.log("🤖 AI ADVICE DETECTED!");
@@ -427,13 +451,11 @@ export default function VideoCallScreen() {
             console.log("🤖 Advice length:", data.ai_advice.length);
             console.log("🤖 Trimmed length:", data.ai_advice.trim().length);
 
-            // Clear existing timeout
             if (adviceTimeoutRef.current) {
               console.log("🤖 Clearing previous advice timeout");
               clearTimeout(adviceTimeoutRef.current);
             }
 
-            // Show advice
             console.log("🤖 Setting aiAdvice state...");
             setAiAdvice(data.ai_advice);
 
@@ -468,7 +490,6 @@ export default function VideoCallScreen() {
           console.log("ℹ️ My userId:", userId);
         }
 
-        // Update participant emotion
         console.log("👥 Updating participants list with new emotion...");
         setParticipants((prev) => {
           const updated = prev.map((p) =>
@@ -484,7 +505,6 @@ export default function VideoCallScreen() {
           return updated;
         });
 
-        // Update main participant if needed
         setMainParticipant((prev) => {
           if (prev?.userId === data.user_id) {
             console.log("🎬 Updating main participant emotion");
@@ -531,9 +551,6 @@ export default function VideoCallScreen() {
         }
       }
     });
-
-    // ❌ REMOVED: requestCallRecording socket handler
-    // ❌ REMOVED: callEmotionAnalyzed socket handler
 
     socketRef.current = socket;
 
@@ -612,8 +629,6 @@ export default function VideoCallScreen() {
           onJoinChannelSuccess: (connection, elapsed) => {
             console.log("✅ Join channel success:", connection.channelId);
             setJoined(true);
-
-            // ❌ REMOVED: startRecording call
           },
           onUserJoined: async (connection, remoteUid, elapsed) => {
             console.log("👤 Remote user joined:", remoteUid);
@@ -917,7 +932,6 @@ export default function VideoCallScreen() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // ⭐ NEW: Get emotion emoji
   const getEmotionEmoji = (emotion?: string): string => {
     if (!emotion) return "";
 
@@ -933,7 +947,6 @@ export default function VideoCallScreen() {
     return emojiMap[emotion.toLowerCase()] || "🙂";
   };
 
-  // Start Screen Share
   const startScreenShare = async () => {
     try {
       const engine = agoraEngineRef.current;
@@ -968,7 +981,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Stop Screen Share
   const stopScreenShare = async () => {
     try {
       const engine = agoraEngineRef.current;
@@ -998,7 +1010,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Toggle Mute
   const toggleMute = async () => {
     try {
       const engine = agoraEngineRef.current;
@@ -1020,7 +1031,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Toggle Video
   const toggleVideo = async () => {
     try {
       const engine = agoraEngineRef.current;
@@ -1042,7 +1052,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Toggle Speaker
   const toggleSpeaker = async () => {
     try {
       const engine = agoraEngineRef.current;
@@ -1055,7 +1064,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // End Call
   const endCall = async () => {
     try {
       const authToken = await getToken();
@@ -1076,7 +1084,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Render participant thumbnail
   const renderParticipantThumbnail = ({ item }: { item: Participant }) => {
     const isSelected = mainParticipant?.uid === item.uid;
 
@@ -1109,7 +1116,6 @@ export default function VideoCallScreen() {
           />
         )}
 
-        {/* ⭐ NEW: Emotion indicator */}
         {item.currentEmotion && (
           <View style={styles.emotionBadge}>
             <Text style={styles.emotionEmoji}>
@@ -1146,10 +1152,8 @@ export default function VideoCallScreen() {
         activeOpacity={1}
         onPress={() => setShowControls(!showControls)}
       >
-        {/* Main video area */}
         {mainParticipant ? (
           <View style={styles.mainVideoContainer}>
-            {/* ⭐ Main participant emotion */}
             {mainParticipant.currentEmotion && (
               <View style={styles.mainEmotionIndicator}>
                 <Text style={styles.mainEmotionEmoji}>
@@ -1178,11 +1182,10 @@ export default function VideoCallScreen() {
                 </Text>
               </View>
             ) : (
-              // ⭐⭐⭐ WRAP THE RtcSurfaceView IN A VIEW WITH REF ⭐⭐⭐
               <View
-                ref={mainVideoViewRef} // ⭐ ADD THIS
+                ref={mainVideoViewRef}
                 style={styles.mainVideo}
-                collapsable={false} // ⭐ ADD THIS (important for Android)
+                collapsable={false}
               >
                 <RtcSurfaceView
                   style={styles.mainVideo}
@@ -1210,7 +1213,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* Audio-only mode */}
         {callType === "audio" && (
           <View style={styles.audioModeContainer}>
             <View style={styles.avatarPlaceholder}>
@@ -1220,7 +1222,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* Participants thumbnails */}
         {participants.length > 0 && (
           <View style={styles.thumbnailsWrapper}>
             <FlatList
@@ -1282,7 +1283,6 @@ export default function VideoCallScreen() {
                       />
                     )}
 
-                    {/* ⭐ NEW: Emotion badge */}
                     {item.currentEmotion && (
                       <View style={styles.emotionBadge}>
                         <Text style={styles.emotionEmoji}>
@@ -1321,7 +1321,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* ⭐ EMOTION CAPTURE INDICATOR */}
         {isCapturing && emotionCaptureEnabled && (
           <View
             style={[
@@ -1333,7 +1332,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* ⭐ MY EMOTION DISPLAY */}
         {myCurrentEmotion && (
           <View
             style={[
@@ -1347,6 +1345,7 @@ export default function VideoCallScreen() {
             <Text style={styles.myEmotionLabel}>You: {myCurrentEmotion}</Text>
           </View>
         )}
+
         {showAdvice && aiAdvice && (
           <Animated.View
             style={[
@@ -1376,10 +1375,6 @@ export default function VideoCallScreen() {
           </Animated.View>
         )}
 
-        {/* ❌ REMOVED: RECORDING INDICATOR */}
-        {/* ❌ REMOVED: EMOTION ANALYZING INDICATOR */}
-
-        {/* Top bar */}
         {showControls && (
           <View style={styles.topBar}>
             <TouchableOpacity
@@ -1390,6 +1385,15 @@ export default function VideoCallScreen() {
               <Text style={styles.participantsCount}>
                 {participants.length + 1}
               </Text>
+            </TouchableOpacity>
+
+            {/* 🎬 NEW: Minimize to PiP button */}
+            <TouchableOpacity 
+              style={styles.minimizeButton}
+              onPress={handleMinimize}
+            >
+              <Ionicons name="remove" size={20} color="#fff" />
+              <Text style={styles.minimizeText}>Minimize</Text>
             </TouchableOpacity>
 
             <View style={styles.callInfo}>
@@ -1415,7 +1419,6 @@ export default function VideoCallScreen() {
           </View>
         )}
 
-        {/* Bottom controls */}
         {showControls && (
           <View style={styles.controlsWrapper}>
             <ScrollView
@@ -1423,7 +1426,6 @@ export default function VideoCallScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.controlsContainer}
             >
-              {/* Mute button */}
               <TouchableOpacity
                 style={[
                   styles.controlButton,
@@ -1438,7 +1440,6 @@ export default function VideoCallScreen() {
                 />
               </TouchableOpacity>
 
-              {/* Video button */}
               {callType === "video" && (
                 <TouchableOpacity
                   style={[
@@ -1455,7 +1456,6 @@ export default function VideoCallScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Speaker button */}
               <TouchableOpacity
                 style={[
                   styles.controlButton,
@@ -1470,7 +1470,6 @@ export default function VideoCallScreen() {
                 />
               </TouchableOpacity>
 
-              {/* ⭐ NEW: Emotion Capture Toggle Button */}
               <TouchableOpacity
                 style={[
                   styles.controlButton,
@@ -1485,9 +1484,6 @@ export default function VideoCallScreen() {
                 />
               </TouchableOpacity>
 
-              {/* ❌ REMOVED: RECORDING BUTTON */}
-
-              {/* Screen share button (video only) */}
               {callType === "video" && Platform.OS === "android" && (
                 <TouchableOpacity
                   style={[
@@ -1504,7 +1500,6 @@ export default function VideoCallScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* End call button */}
               <TouchableOpacity
                 style={[styles.controlButton, styles.endCallButton]}
                 onPress={endCall}
@@ -1516,7 +1511,6 @@ export default function VideoCallScreen() {
         )}
       </TouchableOpacity>
 
-      {/* Participants List Modal */}
       <Modal
         visible={showParticipantsList}
         transparent
@@ -1535,7 +1529,6 @@ export default function VideoCallScreen() {
             </View>
 
             <ScrollView style={styles.participantsList}>
-              {/* Current user */}
               <View style={styles.participantItem}>
                 <Ionicons
                   name="person-circle"
@@ -1554,7 +1547,6 @@ export default function VideoCallScreen() {
                 </View>
               </View>
 
-              {/* Other participants */}
               {participants.map((participant) => (
                 <View key={participant.uid} style={styles.participantItem}>
                   <Ionicons
@@ -1582,7 +1574,6 @@ export default function VideoCallScreen() {
         </View>
       </Modal>
 
-      {/* Call Ending Overlay */}
       {showEndingOverlay && (
         <Animated.View style={[styles.endingOverlay, { opacity: fadeAnim }]}>
           <View style={styles.endingContent}>
@@ -1679,7 +1670,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  // ⭐ NEW: Emotion badge styles
   emotionBadge: {
     position: "absolute",
     top: 6,
@@ -1730,6 +1720,22 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   participantsCount: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  // 🎬 NEW: Minimize button styles
+  minimizeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(249, 115, 22, 0.8)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    marginLeft: 12,
+  },
+  minimizeText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
@@ -1865,7 +1871,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "center",
   },
-  // ⭐ NEW: Emotion indicators
   emotionCaptureIndicator: {
     position: "absolute",
     backgroundColor: "rgba(249, 115, 22, 0.8)",

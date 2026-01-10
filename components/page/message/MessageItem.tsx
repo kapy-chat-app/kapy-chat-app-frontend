@@ -1,5 +1,7 @@
-// components/page/message/MessageItem.tsx - OPTIMIZED MEDIA DISPLAY
-// ✅ FIXED: Long press now works on media-only messages
+// components/page/message/MessageItem.tsx - UPDATED
+// ✅ Fixed: Hide file name when media is displayed
+// ✅ Added defensive rendering for attachments
+// ✅ Fixed socket message crash issues
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -7,15 +9,19 @@ import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { formatDistanceToNow } from "date-fns";
 import * as Haptics from "expo-haptics";
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Image,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { MessageActionsMenu } from "./MessageActionsMenu";
 import { MessageMediaGallery } from "./MessageMediaGallery";
@@ -30,6 +36,7 @@ interface MessageItemProps {
   onReply?: (message: any) => void;
   onEdit?: (messageId: string, content: string) => void;
   onDelete?: (messageId: string, type: "only_me" | "both") => void;
+  onRecall?: (messageId: string) => void;
   onReaction?: (messageId: string, reaction: string) => void;
   onRemoveReaction?: (messageId: string) => void;
   isHighlighted?: boolean;
@@ -43,12 +50,19 @@ const MessageItem: React.FC<MessageItemProps> = ({
   onReply,
   onEdit,
   onDelete,
+  onRecall,
   onReaction,
   onRemoveReaction,
   isHighlighted,
   onRetryDecryption,
   encryptionReady,
 }) => {
+  // ✅ CRITICAL: Early validation
+  if (!message?._id || !message?.sender) {
+    console.warn("⚠️ MessageItem: Invalid message structure", message);
+    return null;
+  }
+
   const { user } = useUser();
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
@@ -62,33 +76,99 @@ const MessageItem: React.FC<MessageItemProps> = ({
   });
   const bubbleRef = useRef<View>(null);
 
+  // Edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   const isDark = actualTheme === "dark";
   const messageStatus = message.status || "sent";
   const isSending = messageStatus === "sending";
   const isFailed = messageStatus === "failed";
 
-  const hasDecryptionError =
-    message.type === "text" && message.decryption_error;
-  const readBy = message.read_by?.filter((r: any) => r.user !== user?.id) || [];
+  const hasDecryptionError = message.type === "text" && message.decryption_error;
+  
+  // ✅ Safe read_by access
+  const readBy = Array.isArray(message.read_by) 
+    ? message.read_by.filter((r: any) => r?.user !== user?.id)
+    : [];
   const hasBeenRead = readBy.length > 0;
-  const hasAttachmentDecryptionError =
-    message.attachments?.some((att: any) => att.decryption_error) || false;
 
-  // ✅ Check if message has ONLY media (no text content)
-  const hasMedia = message.attachments && message.attachments.length > 0;
+  // ✅ Safe attachments access
+  const safeAttachments = useMemo(() => {
+    if (!Array.isArray(message.attachments)) {
+      return [];
+    }
+    
+    return message.attachments.filter((att: any) => {
+      if (!att || !att._id) {
+        console.warn("⚠️ Invalid attachment:", att);
+        return false;
+      }
+      return true;
+    });
+  }, [message.attachments]);
+
+  const hasAttachmentDecryptionError = safeAttachments.some(
+    (att: any) => att.decryption_error === true
+  );
+
+  // ✅ UPDATED: Check if message has media (images, videos, audio)
+  const hasMedia = safeAttachments.some((att: any) => {
+    const fileType = att.file_type?.toLowerCase() || '';
+    const fileName = att.file_name?.toLowerCase() || '';
+    
+    const isImage = fileType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/);
+    const isVideo = fileType.startsWith('video/') || fileName.match(/\.(mp4|mov|avi|mkv|webm|m4v|flv|wmv)$/);
+    const isAudio = fileType.startsWith('audio/') || fileName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/);
+    
+    return isImage || isVideo || isAudio;
+  });
+  
   const isFileMessage = message.type === "file";
-  const hasTextContent =
-    message.content && message.content.trim().length > 0 && !isFileMessage; // ← File messages don't show text
+  
+  // ✅ UPDATED: Only show text content if there's actual text AND no media
+  // If has media (image/video/audio), don't show text content even if it exists
+  const hasTextContent = message.content && 
+                        message.content.trim().length > 0 && 
+                        !isFileMessage && 
+                        !hasMedia;
+  
   const isMediaOnly = hasMedia || isFileMessage;
 
+  // ✅ Check if message is recalled
+  const isRecalled = message.metadata?.isRecalled === true;
+
+  // ✅ Check if message can be edited
+  const canEdit =
+    isOwnMessage &&
+    message.type === "text" &&
+    !hasMedia &&
+    !message.rich_media &&
+    !isSending &&
+    !isRecalled;
+
+  // ✅ Check if message can be recalled (within 24 hours)
+  const canRecall = useMemo(() => {
+    if (!isOwnMessage || isRecalled) return false;
+
+    const messageTime = new Date(message.created_at).getTime();
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+
+    return now - messageTime <= twentyFourHours;
+  }, [isOwnMessage, isRecalled, message.created_at]);
+
   const handleLongPress = () => {
-    if (!isSending && !showReadReceipts) {
+    if (!isSending && !showReadReceipts && !isRecalled) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       bubbleRef.current?.measureInWindow((x, y, width, height) => {
-        let optionCount = 3;
-        if (isOwnMessage && hasBeenRead) optionCount++;
-        if (isOwnMessage) optionCount++;
+        let optionCount = 3; // Reply, React, Cancel
+        if (isOwnMessage && hasBeenRead) optionCount++; // View reads
+        if (canEdit) optionCount++; // Edit
+        if (canRecall) optionCount++; // Recall
+        if (isOwnMessage) optionCount++; // Delete
 
         const MENU_HEIGHT = optionCount * 56 + 16;
         const MENU_WIDTH = 220;
@@ -153,6 +233,51 @@ const MessageItem: React.FC<MessageItemProps> = ({
         setShowActions(true);
       });
     }
+  };
+
+  const handleEdit = () => {
+    setShowActions(false);
+    setEditedContent(message.content || "");
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editedContent.trim()) {
+      Alert.alert(t("error"), t("message.edit.emptyContent"));
+      return;
+    }
+
+    if (editedContent.trim() === message.content?.trim()) {
+      setIsEditing(false);
+      return;
+    }
+
+    try {
+      setIsSavingEdit(true);
+      await onEdit?.(message._id, editedContent.trim());
+      setIsEditing(false);
+      setIsSavingEdit(false);
+    } catch (error: any) {
+      setIsSavingEdit(false);
+      Alert.alert(t("error"), error.message || t("message.edit.failed"));
+    }
+  };
+
+  // ✅ Handle recall
+  const handleRecall = () => {
+    setShowActions(false);
+    Alert.alert(
+      t("message.actions.recallTitle"),
+      t("message.actions.recallMessage"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("message.actions.recall"),
+          style: "destructive" as const,
+          onPress: () => onRecall?.(message._id),
+        },
+      ]
+    );
   };
 
   const handleDelete = () => {
@@ -262,6 +387,13 @@ const MessageItem: React.FC<MessageItemProps> = ({
     }
 
     const { rich_media } = message;
+    
+    // ✅ Validate rich_media structure
+    if (!rich_media.media_url || !rich_media.width || !rich_media.height) {
+      console.warn("⚠️ Invalid rich_media:", rich_media);
+      return null;
+    }
+
     const maxWidth = 250;
     const aspectRatio = rich_media.width / rich_media.height;
     const displayWidth = Math.min(rich_media.width, maxWidth);
@@ -278,41 +410,29 @@ const MessageItem: React.FC<MessageItemProps> = ({
           resizeMode="cover"
           className="rounded-xl"
         />
-        {message.content && (
-          <Text
-            className={`text-xs mt-2 px-3 ${
-              isOwnMessage
-                ? "text-gray-200"
-                : isDark
-                  ? "text-gray-400"
-                  : "text-gray-600"
-            }`}
-            numberOfLines={1}
-          >
-            {message.content}
-          </Text>
-        )}
+        {/* ✅ Don't show content text for GIF/sticker */}
       </View>
     );
   };
 
   const renderReactions = () => {
-    // ✅ Early return nếu không có reactions
-    if (!message.reactions || message.reactions.length === 0) {
+    // ✅ Safe reactions access
+    if (!Array.isArray(message.reactions) || message.reactions.length === 0) {
       return null;
     }
 
-    // ✅ Group reactions by type
     const reactionCounts: {
       [key: string]: { count: number; userReacted: boolean };
     } = {};
 
     message.reactions.forEach((reaction: any) => {
+      if (!reaction?.type) return; // ✅ Skip invalid reactions
+      
       if (!reactionCounts[reaction.type]) {
         reactionCounts[reaction.type] = { count: 0, userReacted: false };
       }
       reactionCounts[reaction.type].count++;
-      if (reaction.user.clerkId === user?.id) {
+      if (reaction.user?.clerkId === user?.id) {
         reactionCounts[reaction.type].userReacted = true;
       }
     });
@@ -330,7 +450,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
     const handleReactionPress = (type: string, userReacted: boolean) => {
       if (isSending) return;
 
-      // ✅ Toggle: Nếu user đã react thì remove, chưa thì add
       if (userReacted) {
         onRemoveReaction?.(message._id);
       } else {
@@ -340,8 +459,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
 
     return (
       <View className="flex-row flex-wrap mt-1.5 gap-1">
-        {" "}
-        {/* ✅ Thêm gap-1 */}
         {Object.entries(reactionCounts).map(([type, data]) => {
           const iconInfo = iconMap[type] || { icon: "heart", color: "#ef4444" };
 
@@ -352,9 +469,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
               disabled={isSending}
               activeOpacity={0.7}
               className={`flex-row items-center rounded-full px-2.5 py-1 ${
-                // ✅ rounded-full + padding tốt hơn
                 data.userReacted
-                  ? "bg-orange-500 border border-orange-600" // ✅ Thêm border khi active
+                  ? "bg-orange-500 border border-orange-600"
                   : isDark
                     ? "bg-gray-700 border border-gray-600"
                     : "bg-gray-100 border border-gray-300"
@@ -362,12 +478,11 @@ const MessageItem: React.FC<MessageItemProps> = ({
             >
               <Ionicons
                 name={iconInfo.icon as any}
-                size={14} // ✅ Nhỏ hơn một chút (16 -> 14)
+                size={14}
                 color={data.userReacted ? "#ffffff" : iconInfo.color}
               />
               <Text
                 className={`text-xs ml-1 font-semibold ${
-                  // ✅ Thêm font-semibold
                   data.userReacted
                     ? "text-white"
                     : isDark
@@ -384,6 +499,157 @@ const MessageItem: React.FC<MessageItemProps> = ({
     );
   };
 
+  const renderEditModal = () => {
+    return (
+      <Modal
+        visible={isEditing}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isSavingEdit && setIsEditing(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => !isSavingEdit && setIsEditing(false)}
+            className={`flex-1 ${isDark ? "bg-black/80" : "bg-black/50"} items-center justify-center px-4`}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              className={`w-full max-w-md p-4 rounded-xl ${
+                isDark ? "bg-gray-800" : "bg-white"
+              } shadow-lg`}
+            >
+              <View className="flex-row items-center justify-between mb-3">
+                <Text
+                  className={`text-lg font-semibold ${
+                    isDark ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  {t("message.edit.title")}
+                </Text>
+
+                {encryptionReady && (
+                  <View className="bg-green-500 rounded-full px-2 py-0.5">
+                    <Text className="text-white text-xs font-bold">🔒</Text>
+                  </View>
+                )}
+              </View>
+
+              <TextInput
+                value={editedContent}
+                onChangeText={setEditedContent}
+                multiline
+                maxLength={5000}
+                placeholder={t("message.edit.placeholder")}
+                placeholderTextColor={isDark ? "#6b7280" : "#9ca3af"}
+                editable={!isSavingEdit}
+                className={`border rounded-lg p-3 mb-3 ${
+                  isDark
+                    ? "border-gray-600 bg-gray-700 text-white"
+                    : "border-gray-300 bg-white text-gray-900"
+                }`}
+                style={{ minHeight: 100, maxHeight: 200, textAlignVertical: "top" }}
+              />
+
+              <Text
+                className={`text-xs mb-3 ${
+                  isDark ? "text-gray-400" : "text-gray-500"
+                }`}
+              >
+                {editedContent.length}/5000 {t("message.edit.characters")}
+              </Text>
+
+              <View className="flex-row justify-end gap-2">
+                <TouchableOpacity
+                  onPress={() => setIsEditing(false)}
+                  disabled={isSavingEdit}
+                  className={`px-4 py-2 rounded-lg ${
+                    isSavingEdit ? "bg-gray-400" : "bg-gray-500"
+                  }`}
+                >
+                  <Text className="text-white font-semibold">{t("cancel")}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleSaveEdit}
+                  disabled={isSavingEdit || !editedContent.trim()}
+                  className={`px-4 py-2 rounded-lg ${
+                    isSavingEdit || !editedContent.trim()
+                      ? "bg-orange-300"
+                      : "bg-orange-500"
+                  }`}
+                >
+                  {isSavingEdit ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text className="text-white font-semibold">{t("save")}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  };
+
+  // ✅ Render recalled message
+  if (isRecalled) {
+    return (
+      <View
+        className={`flex-row mb-4 ${isOwnMessage ? "justify-end" : "justify-start"}`}
+      >
+        {!isOwnMessage && <View className="mr-2">{renderAvatar()}</View>}
+
+        <View
+          className={`max-w-[80%] ${isOwnMessage ? "items-end" : "items-start"}`}
+        >
+          {!isOwnMessage && (
+            <Text
+              className={`text-xs mb-1 ${isDark ? "text-gray-400" : "text-gray-600"}`}
+            >
+              {message.sender?.full_name || t("message.unknownUser")}
+            </Text>
+          )}
+
+          <View
+            className={`rounded-2xl px-3 py-2 ${
+              isDark ? "bg-gray-800" : "bg-gray-200"
+            }`}
+          >
+            <View className="flex-row items-center">
+              <Ionicons
+                name="ban"
+                size={16}
+                color={isDark ? "#9ca3af" : "#6b7280"}
+              />
+              <Text
+                className={`ml-2 italic ${
+                  isDark ? "text-gray-400" : "text-gray-600"
+                }`}
+              >
+                {t("message.recalled")}
+              </Text>
+            </View>
+          </View>
+
+          <View className="flex-row items-center mt-1">
+            <Text className="text-[10px] text-gray-400">
+              {formatDistanceToNow(new Date(message.created_at), {
+                addSuffix: true,
+              })}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // ✅ Normal message render
   return (
     <View
       className={`flex-row mb-4 ${isOwnMessage ? "justify-end" : "justify-start"}`}
@@ -407,7 +673,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
             disabled={isSending}
             delayLongPress={300}
             className={`overflow-hidden ${
-              // ✅ CHỈ apply background khi KHÔNG phải media-only
               isMediaOnly
                 ? ""
                 : `rounded-2xl ${
@@ -419,8 +684,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   }`
             } ${isSending && "opacity-70"} ${isHighlighted && "ring-2 ring-yellow-500"}`}
           >
-            {/* Reply indicator - CHỈ hiển thị nếu có reply */}
-            {message.reply_to && !isMediaOnly && (
+            {/* ✅ Safe reply_to rendering */}
+            {message.reply_to && message.reply_to._id && !isMediaOnly && (
               <View
                 className={`border-l-2 pl-2 mx-3 mt-2 mb-2 ${
                   isOwnMessage ? "border-white" : "border-orange-500"
@@ -430,38 +695,40 @@ const MessageItem: React.FC<MessageItemProps> = ({
                   className={`text-[10px] ${isOwnMessage ? "text-gray-200" : "text-gray-600"}`}
                 >
                   {t("message.reply.replyingTo", {
-                    name: message.reply_to.sender?.full_name,
+                    name: message.reply_to.sender?.full_name || "Unknown",
                   })}
                 </Text>
                 <Text
                   className={`text-xs ${isOwnMessage ? "text-gray-200" : "text-gray-600"}`}
                   numberOfLines={1}
                 >
-                  {message.reply_to.content || `[${message.reply_to.type}]`}
+                  {message.reply_to.content || `[${message.reply_to.type || "message"}]`}
                 </Text>
               </View>
             )}
 
-            {/* GIF/Sticker - No wrapper */}
             {(message.type === "gif" || message.type === "sticker") &&
               renderRichMedia()}
 
-            {/* ✅ Media Gallery - ZERO padding/background nếu media-only */}
-            {!hasAttachmentDecryptionError && hasMedia && (
+            {/* ✅ Safe media rendering */}
+            {!hasAttachmentDecryptionError && safeAttachments.length > 0 && (
               <MessageMediaGallery
-                message={message}
+                message={{
+                  ...message,
+                  attachments: safeAttachments,
+                }}
                 isOwnMessage={isOwnMessage}
                 isSending={isSending}
                 isDark={isDark}
-                onLongPress={handleLongPress} // ✅ PASS handleLongPress to media gallery
+                onLongPress={handleLongPress}
               />
             )}
 
-            {/* ✅ Text content - CHỈ hiển thị nếu có text */}
+            {/* ✅ UPDATED: Only show text if no media */}
             {hasTextContent && (
-              <View className={hasMedia ? "px-3 pb-2" : ""}>
+              <View className={safeAttachments.length > 0 ? "px-3 pb-2" : ""}>
                 <Text
-                  className={`text-base ${hasMedia ? "" : "px-3 py-2"} ${
+                  className={`text-base ${safeAttachments.length > 0 ? "" : "px-3 py-2"} ${
                     isOwnMessage
                       ? "text-white"
                       : isDark
@@ -485,7 +752,6 @@ const MessageItem: React.FC<MessageItemProps> = ({
               </View>
             )}
 
-            {/* Edited indicator - CHỈ hiển thị nếu KHÔNG phải media-only */}
             {message.is_edited && !isSending && !isMediaOnly && (
               <Text
                 className={`text-[10px] mt-0.5 px-3 pb-1.5 ${
@@ -518,10 +784,14 @@ const MessageItem: React.FC<MessageItemProps> = ({
         hasBeenRead={hasBeenRead}
         readByCount={readBy.length}
         isDark={isDark}
+        canEdit={canEdit}
+        canRecall={canRecall}
         onReply={() => {
           setShowActions(false);
           onReply?.(message);
         }}
+        onEdit={handleEdit}
+        onRecall={handleRecall}
         onReact={() => {
           setShowActions(false);
           bubbleRef.current?.measureInWindow((x, y, width, height) => {
@@ -552,6 +822,8 @@ const MessageItem: React.FC<MessageItemProps> = ({
         readBy={readBy}
         isDark={isDark}
       />
+
+      {renderEditModal()}
     </View>
   );
 };

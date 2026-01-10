@@ -363,27 +363,7 @@ export interface TranslationKeys {
       stats: string;
     };
     empty: string;
-    delete: {
-      confirmTitle: string;
-      confirmMessage: string;
-      success: string;
-      failed: string;
-    };
     tryAgain: string;
-    filter: {
-      title: string;
-      context: string;
-      timeRange: string;
-      clear: string;
-      apply: string;
-      days: string;
-    };
-    contexts: {
-      message: string;
-      voice_note: string;
-      call: string;
-      general: string;
-    };
     emotions: {
       joy: string;
       sadness: string;
@@ -401,6 +381,40 @@ export interface TranslationKeys {
       averageScores: string;
       byContext: string;
       confidence: string;
+    };
+    counselor: {
+      title: string;
+      analyzing: string;
+      noData: string;
+      acuteWarning: string;
+      chatButton: string;
+      emotionBalance: string;
+      viewDetails: string;
+      refresh: string;
+      loading: string;
+      recommendations: string;
+      viewFull: string;
+      more: string;
+    };
+    filter: {
+      title: string;
+      context: string;
+      timeRange: string;
+      days: string;
+      clear: string;
+      apply: string;
+    };
+    contexts: {
+      message: string;
+      voice_note: string;
+      call: string;
+      general: string;
+    };
+    delete: {
+      confirmTitle: string;
+      confirmMessage: string;
+      success: string;
+      failed: string;
     };
   };
   common: {
@@ -443,6 +457,7 @@ export interface TranslationKeys {
       showSuggestions: string;
       startWith: string;
       count: string;
+      smartTitle: string;
     };
     empty: {
       title: string;

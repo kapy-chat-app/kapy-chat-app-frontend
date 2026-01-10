@@ -1,6 +1,8 @@
-// hooks/message/useMessages.ts - FIXED VERSION
-// ✅ Fixed background sync always runs (removed needsDecryption check)
-// ✅ All other code remains EXACTLY the same
+// hooks/message/useMessages.ts - FIXED WITH OPTIMISTIC MESSAGES
+// ✅ Instant optimistic message UI update
+// ✅ Non-blocking message sending
+// ✅ Background sync always runs
+// ✅ TYPING INDICATOR FIXED
 
 import {
   CachedMessage,
@@ -146,6 +148,7 @@ interface MessageHookReturn {
   error: string | null;
   sendMessage: (data: CreateMessageData | FormData) => Promise<Message>;
   editMessage: (id: string, content: string) => Promise<Message>;
+  recallMessage: (id: string) => Promise<void>;
   deleteMessage: (id: string, type?: "only_me" | "both") => Promise<void>;
   addReaction: (id: string, reaction: string) => Promise<void>;
   removeReaction: (id: string) => Promise<void>;
@@ -157,7 +160,7 @@ interface MessageHookReturn {
   refreshMessages: () => Promise<void>;
   clearMessages: () => void;
   socketMessageCount: number;
-  typingUsers: TypingUser[];
+  typingUsers: string[]; 
   sendTypingIndicator: (isTyping: boolean) => void;
   retryDecryption: (messageId: string) => Promise<void>;
   clearMessageCache: () => Promise<void>;
@@ -173,15 +176,34 @@ const toCachedMessage = (
   console.log(`💾 [CACHE] Saving message ${msg._id}:`, {
     hasContent: !!msg.content,
     hasEncryptedContent: !!msg.encrypted_content,
+    isRecalled: msg.metadata?.isRecalled,
     contentPreview: msg.content?.substring(0, 30),
   });
+
+  // ✅ FIX: Extract avatar URL from object if needed
+  const getSenderAvatar = (sender: MessageSender): string | undefined => {
+    if (!sender?.avatar) return undefined;
+
+    // If avatar is already a string URL, return it
+    if (typeof sender.avatar === "string") {
+      return sender.avatar;
+    }
+
+    // If avatar is an object with url property
+    if (typeof sender.avatar === "object" && sender.avatar !== null) {
+      const avatarObj = sender.avatar as any;
+      return avatarObj.url || avatarObj.uri || undefined;
+    }
+
+    return undefined;
+  };
 
   return {
     _id: msg._id,
     conversation_id: conversationId,
     sender_id: msg.sender.clerkId,
     sender_name: msg.sender.full_name,
-    sender_avatar: msg.sender.avatar,
+    sender_avatar: getSenderAvatar(msg.sender), // ✅ USE HELPER
     content: msg.content || "",
     encrypted_content: msg.encrypted_content,
     type: msg.type,
@@ -203,7 +225,10 @@ const toCachedMessage = (
       ? JSON.stringify({
           _id: msg.reply_to._id,
           content: msg.reply_to.content,
-          sender: msg.reply_to.sender,
+          sender: {
+            ...msg.reply_to.sender,
+            avatar: getSenderAvatar(msg.reply_to.sender), // ✅ FIX reply_to avatar too
+          },
           type: msg.reply_to.type,
         })
       : undefined,
@@ -268,7 +293,7 @@ export const useMessages = (
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [socketMessageCount, setSocketMessageCount] = useState(0);
-  const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
+  // const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
 
   const { socket, emit, on, off, isConnected } = useSocket();
   const { user } = useUser();
@@ -288,6 +313,10 @@ export const useMessages = (
   const decryptingFiles = useRef<Set<string>>(new Set());
   const isSyncingRef = useRef(false);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+const [typingUsers, setTypingUsers] = useState<string[]>([]); 
+  // ✅ NEW: Typing debounce refs
+  const typingDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const isCurrentlyTypingRef = useRef(false);
 
   const API_BASE_URL = useMemo(
     () => process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000",
@@ -302,6 +331,10 @@ export const useMessages = (
     return () => {
       if (syncDebounceTimerRef.current) {
         clearTimeout(syncDebounceTimerRef.current);
+      }
+      // ✅ NEW: Cleanup typing debounce
+      if (typingDebounceRef.current) {
+        clearTimeout(typingDebounceRef.current);
       }
       isSyncingRef.current = false;
     };
@@ -702,7 +735,7 @@ export const useMessages = (
               console.log("✅ [FETCH] All cached messages already decrypted!");
             }
 
-            // ✅ CRITICAL FIX: ALWAYS run background sync (removed `if (!needsDecryption)`)
+            // ✅ CRITICAL FIX: ALWAYS run background sync
             const meta =
               await messageCacheService.getConversationMeta(conversationId);
 
@@ -761,8 +794,7 @@ export const useMessages = (
                         conversation_id: conversationId,
                         last_sync_time: Date.now(),
                         total_cached:
-                          (meta?.total_cached || 0) +
-                          processedMessages.length,
+                          (meta?.total_cached || 0) + processedMessages.length,
                         last_message_id: lastMsg._id,
                       });
 
@@ -773,9 +805,7 @@ export const useMessages = (
                         );
 
                         if (newMessages.length === 0) {
-                          console.log(
-                            "✅ [SYNC] No new messages (all exist)"
-                          );
+                          console.log("✅ [SYNC] No new messages (all exist)");
                           return prev;
                         }
 
@@ -963,11 +993,64 @@ export const useMessages = (
             hasEncryptedContent: !!(data as any).encryptedContent,
             hasEncryptionMetadata: !!(data as any).encryptionMetadata,
             hasEncryptedFiles: !!(data as any).encryptedFiles,
+            isOptimistic: !!(data as any).isOptimistic,
           });
 
           tempId = data.tempId || `temp-${Date.now()}-${Math.random()}`;
           content = data.content;
           messageType = data.type;
+
+          if ((data as any).isOptimistic === true) {
+            console.log(
+              "🎯 [SEND] Creating optimistic message locally WITH ATTACHMENTS"
+            );
+
+            const localAttachments = (data as any).localAttachments || [];
+
+            const optimisticMessage: Message = {
+              _id: tempId,
+              conversation: conversationId,
+              sender: {
+                _id: user?.id || "",
+                clerkId: user?.id || "",
+                full_name: user?.fullName || "",
+                username: user?.username || "",
+                avatar: user?.imageUrl,
+              },
+              content: data.content,
+              type: data.type,
+
+              attachments: localAttachments.map((att: any, index: number) => ({
+                _id: `temp-att-${tempId}-${index}`,
+                file_name: att.name || "unknown",
+                file_type: att.mimeType || "application/octet-stream",
+                file_size: att.size || 0,
+                url: att.uri,
+                is_encrypted: false,
+                decryptedUri: att.uri,
+              })),
+
+              reactions: [],
+              read_by: [],
+              is_edited: false,
+              created_at: new Date(),
+              updated_at: new Date(),
+              status: "sending",
+              tempId: tempId,
+              localUri: (data as any).localUris,
+              reply_to: data.replyTo
+                ? messages.find((m) => m._id === data.replyTo)
+                : undefined,
+            };
+
+            setMessages((prev) => [...prev, optimisticMessage]);
+
+            console.log(
+              "✅ [SEND] Optimistic message with LOCAL ATTACHMENTS added to UI"
+            );
+
+            return optimisticMessage;
+          }
 
           if ((data as any).encryptedContent) {
             console.log("🔐 [SEND] Has encryptedContent - will send as JSON");
@@ -1036,30 +1119,6 @@ export const useMessages = (
           }
         }
 
-        const optimisticMessage: Message = {
-          _id: tempId,
-          conversation: conversationId,
-          sender: {
-            _id: user?.id || "",
-            clerkId: user?.id || "",
-            full_name: user?.fullName || "",
-            username: user?.username || "",
-            avatar: user?.imageUrl,
-          },
-          content: content,
-          type: messageType,
-          attachments: [],
-          reactions: [],
-          read_by: [],
-          is_edited: false,
-          created_at: new Date(),
-          updated_at: new Date(),
-          status: "sending",
-          tempId: tempId,
-        };
-
-        setMessages((prev) => [...prev, optimisticMessage]);
-
         console.log("📡 [SEND] Sending to server:", {
           isJson,
           type: messageType,
@@ -1120,12 +1179,36 @@ export const useMessages = (
         throw error;
       }
     },
-    [conversationId, getToken, user, API_BASE_URL]
+    [conversationId, getToken, user, API_BASE_URL, messages]
   );
 
   const editMessage = useCallback(
-    async (id: string, content: string): Promise<Message> => {
+    async (id: string, newContent: string): Promise<Message> => {
       try {
+        console.log(`📝 [EDIT] Starting edit for message ${id}`);
+
+        const originalMessage = messagesRef.current.find((m) => m._id === id);
+
+        if (!originalMessage) {
+          throw new Error("Message not found");
+        }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === id
+              ? {
+                  ...msg,
+                  content: newContent,
+                  is_edited: true,
+                  edited_at: new Date(),
+                  status: "sending" as MessageStatus,
+                }
+              : msg
+          )
+        );
+
+        console.log("✅ [EDIT] Optimistic update applied");
+
         const token = await getToken();
         const response = await fetch(
           `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
@@ -1135,20 +1218,160 @@ export const useMessages = (
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify({ content }),
+            body: JSON.stringify({
+              action: "edit",
+              content: newContent,
+            }),
           }
         );
 
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("❌ [EDIT] Response not OK:", {
+            status: response.status,
+            body: errorText,
+          });
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const result = await response.json();
-        if (!result.success) throw new Error(result.error);
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to update message");
+        }
+
+        const updatedMessage = result.data;
+
+        console.log("✅ [EDIT] Server confirmed update");
 
         setMessages((prev) =>
-          prev.map((msg) => (msg._id === id ? result.data : msg))
+          prev.map((msg) =>
+            msg._id === id
+              ? {
+                  ...updatedMessage,
+                  content: newContent,
+                  status: "sent" as MessageStatus,
+                }
+              : msg
+          )
         );
 
-        return result.data;
+        if (conversationId) {
+          setTimeout(async () => {
+            try {
+              const cached = toCachedMessage(
+                {
+                  ...updatedMessage,
+                  content: newContent,
+                },
+                conversationId
+              );
+
+              await messageCacheService.saveMessages([cached]);
+              console.log(`💾 [EDIT] Cache updated for ${id}`);
+            } catch (error) {
+              console.error("❌ [EDIT] Cache update failed:", error);
+            }
+          }, 0);
+        }
+
+        return updatedMessage;
+      } catch (error: any) {
+        console.error("❌ [EDIT] Failed:", error);
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg._id === id) {
+              const original = messagesRef.current.find((m) => m._id === id);
+              return original
+                ? { ...original, status: "failed" as MessageStatus }
+                : msg;
+            }
+            return msg;
+          })
+        );
+
+        throw error;
+      }
+    },
+    [conversationId, getToken, API_BASE_URL]
+  );
+
+  const recallMessage = useCallback(
+    async (id: string): Promise<void> => {
+      try {
+        console.log(`🔄 [RECALL] Recalling message ${id}`);
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === id
+              ? {
+                  ...msg,
+                  metadata: {
+                    ...msg.metadata,
+                    isRecalled: true,
+                    recalledAt: new Date(),
+                  },
+                  status: "sending" as MessageStatus,
+                }
+              : msg
+          )
+        );
+
+        const token = await getToken();
+        const response = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ action: "recall" }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to recall message");
+        }
+
+        console.log(`✅ [RECALL] Message recalled successfully`);
+
+        if (conversationId) {
+          setTimeout(async () => {
+            try {
+              const updatedMessage = messagesRef.current.find(
+                (m) => m._id === id
+              );
+              if (updatedMessage) {
+                const cached = toCachedMessage(updatedMessage, conversationId);
+                await messageCacheService.saveMessages([cached]);
+                console.log(`💾 [RECALL] Cache updated for ${id}`);
+              }
+            } catch (error) {
+              console.error("❌ [RECALL] Cache update failed:", error);
+            }
+          }, 0);
+        }
       } catch (error) {
-        console.error("❌ Edit failed:", error);
+        console.error("❌ [RECALL] Failed:", error);
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg._id === id) {
+              const original = messagesRef.current.find((m) => m._id === id);
+              return original || msg;
+            }
+            return msg;
+          })
+        );
+
         throw error;
       }
     },
@@ -1493,19 +1716,61 @@ export const useMessages = (
     console.log("✅ Cleared all message cache");
   }, []);
 
+  // ✅ FIXED: Typing indicator with debounce
   const sendTypingIndicator = useCallback(
     (isTyping: boolean) => {
-      if (!socket || !conversationId || !user) return;
-      if (!socket.connected) return;
+      if (!socket || !conversationId || !user || !emit) {
+        console.warn("⌨️ [CLIENT] Cannot send typing:", {
+          hasSocket: !!socket,
+          hasConversationId: !!conversationId,
+          hasUser: !!user,
+          hasEmit: !!emit,
+        });
+        return;
+      }
 
-      emit("userTyping", {
+      if (!socket.connected) {
+        console.warn("⌨️ [CLIENT] Socket not connected");
+        return;
+      }
+
+      console.log(`⌨️ [CLIENT] Sending typing: ${isTyping}`);
+      console.log("   Conversation:", conversationId);
+      console.log("   User:", user.fullName || user.username);
+
+      emit("sendTypingIndicator", {
         conversation_id: conversationId,
         user_id: user.id,
         user_name: user.fullName || user.username || "User",
         is_typing: isTyping,
       });
+
+      isCurrentlyTypingRef.current = isTyping;
+
+      // Auto-stop after 3 seconds
+      if (isTyping) {
+        if (typingDebounceRef.current) {
+          clearTimeout(typingDebounceRef.current);
+        }
+
+        typingDebounceRef.current = setTimeout(() => {
+          console.log("⌨️ [CLIENT] Auto-stopping (timeout)");
+          emit("sendTypingIndicator", {
+            conversation_id: conversationId,
+            user_id: user.id,
+            user_name: user.fullName || user.username || "User",
+            is_typing: false,
+          });
+          isCurrentlyTypingRef.current = false;
+        }, 3000);
+      } else {
+        if (typingDebounceRef.current) {
+          clearTimeout(typingDebounceRef.current);
+          typingDebounceRef.current = null;
+        }
+      }
     },
-    [socket, conversationId, user, emit]
+    [socket, conversationId, user, emit] // ✅ Include emit
   );
 
   const retryDecryption = useCallback(
@@ -1558,6 +1823,91 @@ export const useMessages = (
     [messages, processMessage, conversationId]
   );
 
+  // ✅ FIXED: Socket listener for typing with proper dependencies
+  useEffect(() => {
+    if (!socket || !conversationId || !on || !off) {
+      console.log("⌨️ [useMessages] ❌ Missing dependencies:", {
+        hasSocket: !!socket,
+        hasConversationId: !!conversationId,
+        hasOn: !!on,
+        hasOff: !!off,
+      });
+      return;
+    }
+
+    console.log("✅ [useMessages] Setting up typing listener");
+    console.log("   Conversation:", conversationId);
+    console.log("   Socket ID:", socket.id);
+    console.log("   User ID:", user?.id);
+
+    const handleTyping = (data: any) => {
+      console.log("⌨️ [CLIENT] ✅ RECEIVED userTyping event:", {
+        conversation_id: data.conversation_id,
+        user_id: data.user_id,
+        user_name: data.user_name,
+        is_typing: data.is_typing,
+        timestamp: data.timestamp,
+      });
+
+      // Validate conversation
+      if (data.conversation_id !== conversationId) {
+        console.log("⌨️ [CLIENT] ❌ Wrong conversation, ignoring");
+        return;
+      }
+
+      // Ignore own typing
+      if (data.user_id === user?.id) {
+        console.log("⌨️ [CLIENT] ❌ Own typing, ignoring");
+        return;
+      }
+
+      console.log(`⌨️ [CLIENT] ✅ Processing typing from ${data.user_name}`);
+
+      setTypingUsers((prev) => {
+        console.log("⌨️ [CLIENT] Current typing users:", prev);
+        
+        if (data.is_typing) {
+          // Add user if not already typing
+          if (prev.includes(data.user_name)) {
+            console.log(`⌨️ [CLIENT] ⚠️ ${data.user_name} already typing`);
+            return prev;
+          }
+
+          console.log(`⌨️ [CLIENT] ➕ Adding ${data.user_name}`);
+          const updated = [...prev, data.user_name];
+          console.log("⌨️ [CLIENT] New typing users:", updated);
+          return updated;
+        } else {
+          console.log(`⌨️ [CLIENT] ➖ Removing ${data.user_name}`);
+          const updated = prev.filter((name) => name !== data.user_name);
+          console.log("⌨️ [CLIENT] New typing users:", updated);
+          return updated;
+        }
+      });
+    };
+
+    // ✅ Register listener with on() from useSocket
+    console.log("✅ [useMessages] Registering userTyping listener");
+    on("userTyping", handleTyping);
+
+    return () => {
+      console.log("🧹 [useMessages] Cleaning up typing listener");
+      off("userTyping", handleTyping);
+
+      // Send typing stop when unmounting
+      if (isCurrentlyTypingRef.current && socket.connected) {
+        console.log("⌨️ [useMessages] Sending typing stop on unmount");
+        emit("sendTypingIndicator", {
+          conversation_id: conversationId,
+          user_id: user?.id,
+          user_name: user?.fullName || user?.username || "User",
+          is_typing: false,
+        });
+        isCurrentlyTypingRef.current = false;
+      }
+    };
+  }, [socket, conversationId, on, off, emit, user?.id, user?.fullName, user?.username]); // ✅ REMOVED on, off, emit from dependencies
+
   useEffect(() => {
     if (!socket || !conversationId) return;
 
@@ -1578,10 +1928,138 @@ export const useMessages = (
         return;
       }
 
-      if (newMessage.metadata?.isSystemMessage === true) {
+      const extractAvatarUrl = (avatar: any): string | undefined => {
+        if (!avatar) return undefined;
+        if (typeof avatar === "string") return avatar;
+        if (typeof avatar === "object" && avatar !== null) {
+          return avatar.url || avatar.uri || undefined;
+        }
+        return undefined;
+      };
+
+      const normalizeAttachments = (
+        attachments: any[]
+      ): MessageAttachment[] => {
+        if (!Array.isArray(attachments)) {
+          console.warn("⚠️ attachments is not array:", attachments);
+          return [];
+        }
+
+        return attachments
+          .map((att, index) => {
+            if (!att || typeof att !== "object") {
+              console.warn(`⚠️ Invalid attachment at index ${index}:`, att);
+              return null;
+            }
+
+            const normalized: MessageAttachment = {
+              _id: att._id?.toString() || `temp-att-${index}`,
+              file_name: att.file_name || "unknown_file",
+              file_type: att.file_type || "application/octet-stream",
+              file_size: Number(att.file_size) || 0,
+              url: att.url || "",
+              is_encrypted: Boolean(att.is_encrypted),
+              encryption_metadata: att.encryption_metadata || null,
+              decryptedUri: att.decryptedUri || undefined,
+            };
+
+            return normalized;
+          })
+          .filter(Boolean) as MessageAttachment[];
+      };
+
+      const normalizedMessage: Message = {
+        _id: newMessage._id || "",
+        conversation: newMessage.conversation || conversationId,
+
+        sender: newMessage.sender
+          ? {
+              _id: newMessage.sender._id || "",
+              clerkId: newMessage.sender.clerkId || "",
+              full_name: newMessage.sender.full_name || "Unknown",
+              username: newMessage.sender.username || "unknown",
+              avatar: extractAvatarUrl(newMessage.sender.avatar),
+            }
+          : {
+              _id: data.sender_id || "",
+              clerkId: data.sender_id || "",
+              full_name: data.sender_name || "Unknown",
+              username: data.sender_username || "unknown",
+              avatar: extractAvatarUrl(data.sender_avatar),
+            },
+
+        content: newMessage.content,
+        encrypted_content: newMessage.encrypted_content,
+        encryption_metadata: newMessage.encryption_metadata,
+        type: newMessage.type || "text",
+        attachments: normalizeAttachments(newMessage.attachments || []),
+        reactions: Array.isArray(newMessage.reactions)
+          ? newMessage.reactions
+          : [],
+        read_by: Array.isArray(newMessage.read_by) ? newMessage.read_by : [],
+        metadata: newMessage.metadata || {},
+        is_edited: newMessage.is_edited || false,
+        edited_at: newMessage.edited_at
+          ? new Date(newMessage.edited_at)
+          : undefined,
+        rich_media: newMessage.rich_media,
+        created_at: new Date(newMessage.created_at || Date.now()),
+        updated_at: new Date(newMessage.updated_at || Date.now()),
+
+        reply_to: newMessage.reply_to
+          ? {
+              _id: newMessage.reply_to._id || "",
+              conversation: newMessage.reply_to.conversation || conversationId,
+              sender: newMessage.reply_to.sender
+                ? {
+                    _id: newMessage.reply_to.sender._id || "",
+                    clerkId: newMessage.reply_to.sender.clerkId || "",
+                    full_name:
+                      newMessage.reply_to.sender.full_name || "Unknown",
+                    username: newMessage.reply_to.sender.username || "unknown",
+                    avatar: extractAvatarUrl(newMessage.reply_to.sender.avatar),
+                  }
+                : {
+                    _id: "",
+                    clerkId: "",
+                    full_name: "Unknown",
+                    username: "unknown",
+                  },
+              content: newMessage.reply_to.content,
+              encrypted_content: newMessage.reply_to.encrypted_content,
+              encryption_metadata: newMessage.reply_to.encryption_metadata,
+              type: newMessage.reply_to.type || "text",
+              attachments: normalizeAttachments(
+                newMessage.reply_to.attachments || []
+              ),
+              reactions: [],
+              read_by: [],
+              is_edited: false,
+              metadata: {},
+              created_at: new Date(
+                newMessage.reply_to.created_at || Date.now()
+              ),
+              updated_at: new Date(
+                newMessage.reply_to.updated_at || Date.now()
+              ),
+              reply_to: undefined,
+              status: "sent" as MessageStatus,
+            }
+          : undefined,
+
+        status: "sent" as MessageStatus,
+      };
+
+      console.log("✅ [SOCKET] Normalized message:", {
+        _id: normalizedMessage._id,
+        type: normalizedMessage.type,
+        attachmentCount: normalizedMessage.attachments.length,
+      });
+
+      if (normalizedMessage.metadata?.isSystemMessage === true) {
         setMessages((prev) => {
-          if (prev.some((m) => m._id === newMessage._id)) return prev;
-          return [...prev, newMessage];
+          if (prev.some((m) => m._id === normalizedMessage._id)) return prev;
+          return [...prev, normalizedMessage];
         });
         setSocketMessageCount((c) => c + 1);
         return;
@@ -1600,36 +2078,70 @@ export const useMessages = (
             const updated = [...prev];
 
             updated[optimisticIndex] = {
-              ...newMessage,
-              _id: newMessage._id,
+              ...normalizedMessage,
+              _id: normalizedMessage._id,
               tempId: undefined,
-              content: optimisticMsg.content,
+              content: optimisticMsg.content || normalizedMessage.content,
               status: "sent" as MessageStatus,
-              attachments: optimisticMsg.attachments,
+              attachments:
+                optimisticMsg.attachments.length > 0
+                  ? optimisticMsg.attachments
+                  : normalizedMessage.attachments,
             };
 
             return updated;
           }
 
-          if (prev.some((m) => m._id === newMessage._id)) return prev;
+          if (prev.some((m) => m._id === normalizedMessage._id)) return prev;
           return prev;
         });
         return;
       }
 
       try {
-        const processedMessage = await processMessage(newMessage);
+        console.log(
+          `🔐 [SOCKET] Processing message ${normalizedMessage._id} BEFORE adding to UI...`
+        );
+
+        const processedMessage = await processMessage(normalizedMessage);
+
+        const hasEncryptedText =
+          processedMessage.encrypted_content && !processedMessage.content;
+        const hasEncryptedFiles = processedMessage.attachments.some(
+          (att) => att.is_encrypted && !att.decryptedUri
+        );
+
+        if (hasEncryptedText || hasEncryptedFiles) {
+          console.warn(
+            `⚠️ [SOCKET] Message ${processedMessage._id} not fully decrypted yet:`,
+            {
+              hasEncryptedText,
+              hasEncryptedFiles,
+              encryptedFileCount: processedMessage.attachments.filter(
+                (att) => att.is_encrypted && !att.decryptedUri
+              ).length,
+            }
+          );
+
+          return;
+        }
+
+        console.log(
+          `✅ [SOCKET] Message ${processedMessage._id} FULLY processed, adding to UI`
+        );
 
         setMessages((prev) => {
           if (prev.some((msg) => msg._id === processedMessage._id)) {
-            console.log(`⚠️ [SOCKET] Duplicate detected in final update`);
+            console.log(`⚠️ [SOCKET] Duplicate detected`);
             return prev;
           }
 
           setTimeout(() => {
             if (conversationId) {
               const cached = toCachedMessage(processedMessage, conversationId);
-              messageCacheService.saveMessages([cached]);
+              messageCacheService.saveMessages([cached]).catch((err) => {
+                console.error("❌ [SOCKET] Cache save failed:", err);
+              });
             }
           }, 0);
 
@@ -1637,22 +2149,13 @@ export const useMessages = (
           return [...prev, processedMessage];
         });
       } catch (error) {
-        console.error("❌ Failed to process message:", error);
+        console.error("❌ [SOCKET] Failed to process message:", error);
+
+        console.error(
+          "❌ [SOCKET] Message will not be displayed:",
+          normalizedMessage._id
+        );
       }
-    };
-
-    const handleTyping = (data: any) => {
-      if (data.conversation_id !== conversationId) return;
-      if (data.user_id === user?.id) return;
-
-      setTypingUsers((prev) => {
-        if (data.is_typing) {
-          if (prev.some((u) => u.userId === data.user_id)) return prev;
-          return [...prev, { userId: data.user_id, userName: data.user_name }];
-        } else {
-          return prev.filter((u) => u.userId !== data.user_id);
-        }
-      });
     };
 
     const handleReactionUpdate = async (data: any) => {
@@ -1735,16 +2238,166 @@ export const useMessages = (
     };
 
     on("newMessage", handleNewMessage);
-    on("userTyping", handleTyping);
     on("newReaction", handleReactionUpdate);
     on("deleteReaction", handleReactionRemove);
     return () => {
       off("newMessage", handleNewMessage);
-      off("userTyping", handleTyping);
       off("newReaction", handleReactionUpdate);
       off("deleteReaction", handleReactionRemove);
     };
   }, [socket, conversationId, on, off, user?.id, processMessage]);
+
+  useEffect(() => {
+    if (!socket || !conversationId) return;
+
+    const handleUpdateMessage = async (data: any) => {
+      console.log("📝 [SOCKET] Received updateMessage:", data);
+
+      if (data.conversation_id !== conversationId) {
+        console.log("⏭️ [SOCKET] Different conversation, skipping");
+        return;
+      }
+
+      if (!data.message) {
+        console.warn("⚠️ [SOCKET] Missing message data");
+        return;
+      }
+
+      if (data.user_id === user?.id) {
+        console.log("✅ [SOCKET] Own update, already applied");
+        return;
+      }
+
+      try {
+        const updatedMessage = data.message;
+
+        let processedMessage = updatedMessage;
+
+        if (
+          updatedMessage.encrypted_content &&
+          !updatedMessage.content &&
+          encryptionInitialized
+        ) {
+          console.log(
+            `🔐 [SOCKET] Decrypting edited message ${updatedMessage._id}`
+          );
+
+          const decryptedContent = await decryptMessage(
+            updatedMessage.sender.clerkId,
+            updatedMessage.encrypted_content
+          );
+
+          processedMessage = {
+            ...updatedMessage,
+            content: decryptedContent,
+          };
+
+          console.log("✅ [SOCKET] Message decrypted");
+        }
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === processedMessage._id
+              ? {
+                  ...processedMessage,
+                  is_edited: true,
+                  edited_at: new Date(data.edited_at),
+                  status: "sent" as MessageStatus,
+                }
+              : msg
+          )
+        );
+
+        console.log(
+          `✅ [SOCKET] Message ${processedMessage._id} updated in UI`
+        );
+
+        if (conversationId) {
+          setTimeout(async () => {
+            try {
+              const cached = toCachedMessage(processedMessage, conversationId);
+              await messageCacheService.saveMessages([cached]);
+              console.log(
+                `💾 [SOCKET] Cache updated for ${processedMessage._id}`
+              );
+            } catch (error) {
+              console.error("❌ [SOCKET] Cache update failed:", error);
+            }
+          }, 0);
+        }
+      } catch (error) {
+        console.error("❌ [SOCKET] Failed to process updateMessage:", error);
+      }
+    };
+
+    on("updateMessage", handleUpdateMessage);
+
+    return () => {
+      off("updateMessage", handleUpdateMessage);
+    };
+  }, [
+    socket,
+    conversationId,
+    user?.id,
+    on,
+    off,
+    decryptMessage,
+    encryptionInitialized,
+  ]);
+
+  useEffect(() => {
+    if (!socket || !conversationId) return;
+
+    const handleRecallMessage = async (data: any) => {
+      console.log("🔄 [SOCKET] Received recallMessage:", data);
+
+      if (data.conversation_id !== conversationId) return;
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === data.message_id
+            ? {
+                ...msg,
+                metadata: {
+                  ...msg.metadata,
+                  isRecalled: true,
+                  recalledAt: new Date(data.recalled_at),
+                  recalledBy: data.recalled_by,
+                },
+                status: "sent" as MessageStatus,
+              }
+            : msg
+        )
+      );
+
+      if (conversationId) {
+        setTimeout(async () => {
+          try {
+            const updatedMessage = messagesRef.current.find(
+              (m) => m._id === data.message_id
+            );
+
+            if (updatedMessage) {
+              const cached = toCachedMessage(updatedMessage, conversationId);
+              await messageCacheService.saveMessages([cached]);
+              console.log(`💾 [SOCKET] Recalled message cached`);
+            }
+          } catch (error) {
+            console.error(
+              "❌ [SOCKET] Failed to cache recalled message:",
+              error
+            );
+          }
+        }, 0);
+      }
+    };
+
+    on("recallMessage", handleRecallMessage);
+
+    return () => {
+      off("recallMessage", handleRecallMessage);
+    };
+  }, [socket, conversationId, on, off]);
 
   useEffect(() => {
     if (conversationId && encryptionInitialized) {
@@ -1763,6 +2416,7 @@ export const useMessages = (
     error,
     sendMessage,
     editMessage,
+    recallMessage,
     deleteMessage,
     addReaction,
     removeReaction,

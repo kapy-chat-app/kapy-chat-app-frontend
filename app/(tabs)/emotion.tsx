@@ -1,12 +1,13 @@
-// app/(tabs)/emotion/index.tsx
+// app/(tabs)/emotion/index.tsx - UPDATED WITH COUNSELOR
 import { EmotionCard } from "@/components/page/emotion/EmotionCard";
+import { EmotionCounselorCard } from "@/components/page/emotion/EmotionCounselorCard";
 import { FilterModal } from "@/components/page/emotion/FilterModal";
 import { StatsOverview } from "@/components/page/emotion/StatsOverview";
-import { useEmotion } from "@/hooks/ai/useEmotion";
+import { useEmotion, EmotionCounselingData } from "@/hooks/ai/useEmotion";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,10 +43,39 @@ export default function EmotionScreen() {
     averageScoresArray,
     topEmotion,
     emotionsByContext,
+    getEmotionCounseling, // ✅ NEW
   } = useEmotion({ days: 30 });
 
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTab, setSelectedTab] = useState<"history" | "stats">("history");
+
+  // ✅ NEW: Counseling states
+  const [counselingData, setCounselingData] = useState<EmotionCounselingData | null>(null);
+  const [counselingLoading, setCounselingLoading] = useState(false);
+
+  // ============================================
+  // ✅ LOAD COUNSELING DATA
+  // ============================================
+  const loadCounseling = useCallback(async () => {
+    setCounselingLoading(true);
+    try {
+      const result = await getEmotionCounseling(7); // Last 7 days
+      if (result.success && result.data) {
+        setCounselingData(result.data);
+      } else {
+        console.error('Failed to load counseling:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading counseling:', error);
+    } finally {
+      setCounselingLoading(false);
+    }
+  }, [getEmotionCounseling]);
+
+  // ✅ Load counseling on mount
+  useEffect(() => {
+    loadCounseling();
+  }, []);
 
   // ============================================
   // HANDLE DELETE
@@ -63,6 +93,8 @@ export default function EmotionScreen() {
             const result = await deleteEmotion(emotionId);
             if (result.success) {
               Alert.alert(t('success'), t('emotion.delete.success'));
+              // ✅ Refresh counseling after delete
+              loadCounseling();
             } else {
               Alert.alert(t('error'), result.error || t('emotion.delete.failed'));
             }
@@ -71,6 +103,14 @@ export default function EmotionScreen() {
       ]
     );
   };
+
+  // ============================================
+  // ✅ HANDLE REFRESH (includes counseling)
+  // ============================================
+  const handleRefresh = useCallback(() => {
+    refresh();
+    loadCounseling();
+  }, [refresh, loadCounseling]);
 
   // ============================================
   // RENDER EMPTY STATE
@@ -111,7 +151,7 @@ export default function EmotionScreen() {
           </Text>
           <TouchableOpacity
             className="mt-5 px-6 py-3 bg-[#F57206] rounded-lg"
-            onPress={refresh}
+            onPress={handleRefresh}
           >
             <Text className="text-white text-base font-semibold">{t('emotion.tryAgain')}</Text>
           </TouchableOpacity>
@@ -192,11 +232,19 @@ export default function EmotionScreen() {
             <EmotionCard item={item} onDelete={handleDelete} />
           )}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          // ✅ ADD COUNSELOR CARD AS HEADER
+          ListHeaderComponent={
+            <EmotionCounselorCard
+              loading={counselingLoading}
+              data={counselingData}
+              onRefresh={loadCounseling}
+            />
+          }
           refreshControl={
             <RefreshControl
               refreshing={loading}
-              onRefresh={refresh}
+              onRefresh={handleRefresh}
               colors={["#F57206"]}
               tintColor="#F57206"
             />
@@ -218,7 +266,7 @@ export default function EmotionScreen() {
           refreshControl={
             <RefreshControl
               refreshing={statsLoading}
-              onRefresh={refresh}
+              onRefresh={handleRefresh}
               colors={["#F57206"]}
               tintColor="#F57206"
             />

@@ -1,25 +1,22 @@
 // components/page/message/media/VideoPlayer.tsx
-// ✅ FIXED: Added stream endpoint support for encrypted files
+// ✅ UPDATED: Support optimistic messages with local URIs (decryptedUri priority)
 
 import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
-import { useAuth } from "@clerk/clerk-expo";
 
 const GALLERY_WIDTH = 260;
 
 interface VideoPlayerProps {
   videos: any[];
-  localUris?: string[];
   isSending: boolean;
   onLongPress?: () => void;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   videos,
-  localUris,
   isSending,
   onLongPress,
 }) => {
@@ -31,7 +28,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     [key: string]: { uri: string | null; valid: boolean; checked: boolean };
   }>({});
 
-  const { getToken } = useAuth();
+  /**
+   * ✅ PRIORITY: decryptedUri (local OR decrypted) > url
+   * For optimistic messages: decryptedUri = local file://
+   * For encrypted messages: decryptedUri = decrypted file://
+   * For regular messages: url = server URL
+   */
+  const getVideoUri = useCallback((attachment: any): string | null => {
+    console.log('🎥 [VIDEO] getVideoUri:', {
+      id: attachment._id,
+      hasDecryptedUri: !!attachment.decryptedUri,
+      hasUrl: !!attachment.url,
+      decryptedUriType: attachment.decryptedUri?.substring(0, 10),
+    });
+    
+    // Priority 1: decryptedUri (for both optimistic and decrypted)
+    if (attachment.decryptedUri) return attachment.decryptedUri;
+    
+    // Priority 2: url (for non-encrypted server files)
+    if (attachment.url) return attachment.url;
+    
+    return null;
+  }, []);
 
   /**
    * ✅ CRITICAL: Validate file URI before rendering
@@ -89,7 +107,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       console.log(`✅ [VIDEO] Valid data URI: ${attachmentId}`);
       return { uri, valid: true };
     } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
-      // HTTP URI validation (including stream endpoint)
+      // HTTP URI validation
       console.log(`✅ [VIDEO] Valid HTTP URI: ${attachmentId}`);
       return { uri, valid: true };
     } else {
@@ -97,34 +115,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       return { uri: null, valid: false };
     }
   }, []);
-
-  /**
-   * ✅ Get video URI - SIMPLIFIED (no stream endpoint for mobile)
-   */
-  const getVideoUri = useCallback((attachment: any, index: number): string | null => {
-    // Priority 1: Decrypted URI (highest priority)
-    if (attachment.decryptedUri) {
-      return attachment.decryptedUri;
-    }
-
-    // Priority 2: Local URI (for sending)
-    if (isSending && localUris && localUris[index]) {
-      return localUris[index];
-    }
-
-    // ✅ For encrypted files without decryptedUri, return null
-    // This will show "Decrypting..." state
-    if (attachment.is_encrypted) {
-      return null;
-    }
-
-    // Priority 3: Remote URL (for non-encrypted files)
-    if (attachment.url) {
-      return attachment.url;
-    }
-
-    return null;
-  }, [isSending, localUris]);
 
   /**
    * ✅ Validate URIs on mount and when they change
@@ -135,7 +125,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       for (let i = 0; i < videos.length; i++) {
         const att = videos[i];
-        const uri = getVideoUri(att, i); // ✅ Now synchronous
+        const uri = getVideoUri(att);
         
         if (uri) {
           const validation = await validateVideoUri(att._id, uri);
@@ -156,7 +146,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     };
 
     validateAllUris();
-  }, [videos, localUris, isSending, validateVideoUri]); // ✅ Removed getVideoUri from deps
+  }, [videos, validateVideoUri, getVideoUri]);
 
   const handleVideoError = useCallback((attachmentId: string, error?: any) => {
     console.error(`❌ [VIDEO] Load error: ${attachmentId}`, error);
@@ -166,9 +156,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       const validation = validatedUris[attachmentId];
       console.error(`   URI: ${validation?.uri || 'N/A'}`);
       console.error(`   Valid: ${validation?.valid}`);
-      console.error(`   Type: ${validation?.uri?.startsWith('file://') ? 'FILE' : 
-                              validation?.uri?.startsWith('data:') ? 'DATA_URI' : 
-                              validation?.uri?.startsWith('http') ? 'HTTP' : 'UNKNOWN'}`);
     }
     
     setVideoLoadStates((prev) => ({ ...prev, [attachmentId]: "error" }));
@@ -216,11 +203,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 <Text className="text-red-400 text-xs mt-2">
                   {att.decryption_error ? "Decryption failed" : "Failed to load"}
                 </Text>
-                {__DEV__ && validation?.uri && (
-                  <Text className="text-gray-500 text-[10px] mt-1 px-2 text-center" numberOfLines={1}>
-                    {validation.uri.substring(0, 40)}...
-                  </Text>
-                )}
               </TouchableOpacity>
             )}
 
@@ -294,13 +276,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 {loadState === "loading" && (
                   <View className="absolute inset-0 bg-black/60 items-center justify-center">
                     <ActivityIndicator size="small" color="white" />
-                  </View>
-                )}
-
-                {/* ✅ Debug info (dev only) */}
-                {__DEV__ && loadState === "ready" && (
-                  <View className="absolute top-1 right-1 bg-green-500/80 px-1 py-0.5 rounded">
-                    <Text className="text-white text-[8px] font-bold">✓</Text>
                   </View>
                 )}
               </TouchableOpacity>

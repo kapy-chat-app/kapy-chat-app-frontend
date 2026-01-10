@@ -1,4 +1,4 @@
-// hooks/ai/useEmotion.ts - UPDATED WITH BACKEND AI
+// hooks/ai/useEmotion.ts - UPDATED WITH EMOTION COUNSELING
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '@clerk/clerk-expo';
@@ -75,6 +75,21 @@ export interface RecommendationData {
     dominant_pattern?: string;
     confidence?: number;
   };
+}
+
+// ✅ NEW: Emotion Counseling Data Type
+export interface EmotionCounselingData {
+  hasData: boolean;
+  recommendations: string[];
+  supportMessage: string;
+  actionSuggestion?: string;
+  currentEmotion: string;
+  emotionIntensity: number;
+  negativeRatio?: number;
+  isAcuteSituation?: boolean;
+  emotionCounts?: { [key: string]: number };
+  averageScores?: EmotionScores;
+  analysisDate?: string;
 }
 
 // ============================================
@@ -245,6 +260,46 @@ export const useEmotion = (initialFilters: FilterOptions = {}) => {
   }, [getToken]);
 
   // ============================================
+  // ✅ API: GET AI EMOTION COUNSELING (NEW)
+  // ============================================
+  const getEmotionCounseling = useCallback(async (days: number = 7): Promise<{
+    success: boolean;
+    data?: EmotionCounselingData;
+    error?: string;
+  }> => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        return { success: false, error: 'No authentication token' };
+      }
+
+      const lang = language === 'vi' ? 'vi' : language === 'zh' ? 'zh' : 'en';
+      
+      const response = await axios.get(
+        `${API_URL}/api/emotion-analysis/recommendations?language=${lang}&days=${days}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.data.success) {
+        return { success: true, data: response.data.data };
+      } else {
+        return { success: false, error: response.data.error };
+      }
+    } catch (err: any) {
+      console.error('Error getting emotion counseling:', err);
+      return {
+        success: false,
+        error: err.response?.data?.error || 'Failed to get counseling',
+      };
+    }
+  }, [getToken, language]);
+
+  // ============================================
   // ✅ API: GET RECOMMENDATIONS (BACKEND AI)
   // ============================================
   const getRecommendations = useCallback(async (): Promise<RecommendationData | null> => {
@@ -252,14 +307,11 @@ export const useEmotion = (initialFilters: FilterOptions = {}) => {
       const token = await getToken();
       if (!token) return null;
 
-      // Xác định ngôn ngữ
       const lang = language === 'vi' ? 'vi' : language === 'zh' ? 'zh' : 'en';
       
-      // Gọi backend AI thông qua AIAPIService
       const response = await AIAPIService.getEmotionRecommendation(token, lang);
 
       if (response.success && response.data) {
-        // Convert backend format sang RecommendationData
         const recommendations = [
           response.data.recommendation,
           response.data.supportMessage,
@@ -490,7 +542,8 @@ export const useEmotion = (initialFilters: FilterOptions = {}) => {
     deleteEmotion,
     analyzeText,
     fetchPatterns,
-    getRecommendations, // ✅ Backend AI recommendations
+    getRecommendations,
+    getEmotionCounseling, // ✅ NEW: Emotion counseling
     
     // Computed data
     chartData,

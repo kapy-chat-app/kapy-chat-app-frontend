@@ -1,4 +1,5 @@
 // components/page/message/MessageMediaGallery.tsx
+// ✅ UPDATED: Support optimistic messages with local URIs
 // ✅ FIXED: Pass onLongPress to media components for action menu
 
 import React from 'react';
@@ -13,7 +14,7 @@ interface MessageMediaGalleryProps {
   isOwnMessage: boolean;
   isSending: boolean;
   isDark: boolean;
-  onLongPress?: () => void; // ✅ NEW: Receive onLongPress from MessageItem
+  onLongPress?: () => void;
 }
 
 export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
@@ -21,33 +22,83 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
   isOwnMessage,
   isSending,
   isDark,
-  onLongPress, // ✅ NEW
+  onLongPress,
 }) => {
+  // ✅ CRITICAL: Validate attachments exist and is array
+  if (!message?.attachments || !Array.isArray(message.attachments)) {
+    console.warn("⚠️ [GALLERY] Invalid attachments:", message?.attachments);
+    return null;
+  }
+
+  // ✅ Filter out invalid attachments
+  const safeAttachments = message.attachments.filter((att: any) => {
+    if (!att || typeof att !== 'object') {
+      console.warn("⚠️ [GALLERY] Invalid attachment object:", att);
+      return false;
+    }
+    
+    if (!att._id) {
+      console.warn("⚠️ [GALLERY] Attachment missing _id:", att);
+      return false;
+    }
+
+    // ✅ NEW: Check if has valid URI for rendering (including optimistic local URIs)
+    // For optimistic messages: decryptedUri contains local file://
+    // For encrypted messages: decryptedUri contains decrypted file://
+    // For regular messages: url contains server URL
+    const hasValidUri = att.decryptedUri 
+      ? Boolean(att.decryptedUri && typeof att.decryptedUri === 'string')
+      : Boolean(att.url && typeof att.url === 'string');
+
+    if (!hasValidUri) {
+      console.warn(`⚠️ [GALLERY] Attachment ${att._id} has no valid URI:`, {
+        hasDecryptedUri: !!att.decryptedUri,
+        hasUrl: !!att.url,
+        isSending: message.status === 'sending',
+        isEncrypted: att.is_encrypted,
+      });
+    }
+
+    return hasValidUri;
+  });
+
+  // ✅ If no valid attachments after filtering, return null
+  if (safeAttachments.length === 0) {
+    console.warn("⚠️ [GALLERY] No valid attachments to render");
+    return null;
+  }
+
+  console.log(`📎 [GALLERY] Rendering ${safeAttachments.length} attachments`, {
+    messageId: message._id,
+    isSending: message.status === 'sending',
+    hasLocalUris: safeAttachments.some(att => att.decryptedUri?.startsWith('file://')),
+  });
+
   // ✅ Better file type detection including file extensions
-  const imageAttachments = message.attachments?.filter((att: any) => {
+  const imageAttachments = safeAttachments.filter((att: any) => {
     const fileType = att.file_type?.toLowerCase() || '';
     const fileName = att.file_name?.toLowerCase() || '';
     return fileType.startsWith('image/') || 
            fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/);
-  }) || [];
+  });
   
-  const videoAttachments = message.attachments?.filter((att: any) => {
+  const videoAttachments = safeAttachments.filter((att: any) => {
     const fileType = att.file_type?.toLowerCase() || '';
     const fileName = att.file_name?.toLowerCase() || '';
     
     return fileType.startsWith('video/') || 
            fileName.match(/\.(mp4|mov|avi|mkv|webm|m4v|flv|wmv)$/);
-  }) || [];
+  });
   
-  const audioAttachments = message.attachments?.filter((att: any) => {
+  const audioAttachments = safeAttachments.filter((att: any) => {
     const fileType = att.file_type?.toLowerCase() || '';
     const fileName = att.file_name?.toLowerCase() || '';
     return fileType.startsWith('audio/') || 
            fileName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/);
-  }) || [];
+  });
   
   // ✅ Files are ONLY non-media files
-  const fileAttachments = message.attachments?.filter((att: any) => {
+  const fileAttachments = safeAttachments.filter((att: any) => {
     const fileType = att.file_type?.toLowerCase() || '';
     const fileName = att.file_name?.toLowerCase() || '';
     
@@ -56,7 +107,7 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
     const isAudio = fileType.startsWith('audio/') || fileName.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/);
     
     return !isImage && !isVideo && !isAudio;
-  }) || [];
+  });
 
   return (
     <View>
@@ -64,9 +115,8 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
       {imageAttachments.length > 0 && (
         <ImageGallery 
           images={imageAttachments}
-          localUris={message.localUri}
           isSending={isSending}
-          onLongPress={onLongPress} // ✅ PASS onLongPress to ImageGallery
+          onLongPress={onLongPress}
         />
       )}
 
@@ -75,9 +125,8 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
         <View className={imageAttachments.length > 0 ? "mt-1" : ""}>
           <VideoPlayer 
             videos={videoAttachments}
-            localUris={message.localUri}
             isSending={isSending}
-            onLongPress={onLongPress} // ✅ TODO: Add to VideoPlayer too
+            onLongPress={onLongPress}
           />
         </View>
       )}
@@ -90,7 +139,7 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
             isOwnMessage={isOwnMessage}
             isSending={isSending}
             isDark={isDark}
-            onLongPress={onLongPress} // ✅ TODO: Add to AudioPlayer too
+            onLongPress={onLongPress}
           />
         </View>
       )}
@@ -103,7 +152,7 @@ export const MessageMediaGallery: React.FC<MessageMediaGalleryProps> = ({
             isOwnMessage={isOwnMessage}
             isSending={isSending}
             isDark={isDark}
-            onLongPress={onLongPress} // ✅ TODO: Add to FileAttachment too
+            onLongPress={onLongPress}
           />
         </View>
       )}

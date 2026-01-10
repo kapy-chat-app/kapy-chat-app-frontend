@@ -1,4 +1,4 @@
-// app/(root)/(tabs)/conversations.tsx - OPTIMIZED VERSION
+// app/(root)/(tabs)/conversations.tsx - UPDATED VERSION
 import FloatingRecommendation from "@/components/page/ai/FloatingRecommendation";
 import ConversationItem from "@/components/page/message/ConversationItem";
 import CreateConversationModal from "@/components/page/message/CreateConversationModel";
@@ -7,12 +7,11 @@ import Sidebar from "@/components/shared/Sidebar";
 import SearchInput from "@/components/ui/SearchInput";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useEmotion } from "@/hooks/ai/useEmotion";
+import { useEmotion, EmotionCounselingData } from "@/hooks/ai/useEmotion";
 import { useConversations } from "@/hooks/message/useConversations";
 import { useSocket } from "@/hooks/message/useSocket";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -25,10 +24,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const RECOMMENDATION_STORAGE_KEY = "emotion_recommendation_dismissed";
-const CHECK_INTERVAL = 2 * 60 * 1000;
-const DISMISS_COOLDOWN = 15 * 60 * 1000;
 
 export default function ConversationsScreen() {
   const { actualTheme } = useTheme();
@@ -53,160 +48,73 @@ export default function ConversationsScreen() {
     refreshConversations,
   } = useConversations();
 
-  const { getRecommendations } = useEmotion();
+  const { getEmotionCounseling } = useEmotion({ days: 7 });
 
-  // Recommendation state
+  // ✅ NEW: Floating recommendation states
   const [showFloatingRec, setShowFloatingRec] = useState(false);
-  const [recommendations, setRecommendations] = useState<string[]>([]);
-  const [dominantEmotion, setDominantEmotion] = useState<string>("neutral");
-  const [emotionConfidence, setEmotionConfidence] = useState<number>(0);
-  const [hasNewRecommendations, setHasNewRecommendations] = useState(false);
-  const [lastCheckTime, setLastCheckTime] = useState<number>(0);
+  const [counselingData, setCounselingData] = useState<EmotionCounselingData | null>(null);
+  const [counselingLoading, setCounselingLoading] = useState(false);
 
   // ✅ Log online users for debugging
   useEffect(() => {
     console.log("👥 Online users updated:", onlineUsers.length);
   }, [onlineUsers]);
 
-  // ✅ REMOVED: Manual decryption logic - now handled in useConversations
-
-  // Check recommendations on mount
+  // ✅ Load counseling data on mount
   useEffect(() => {
-    checkAndShowRecommendations();
-    const interval = setInterval(checkAndShowRecommendations, CHECK_INTERVAL);
-    return () => clearInterval(interval);
+    loadCounselingData();
   }, []);
 
-  // Socket listeners for recommendations
+  const loadCounselingData = async () => {
+    setCounselingLoading(true);
+    try {
+      const result = await getEmotionCounseling(7); // Last 7 days
+      if (result.success && result.data) {
+        setCounselingData(result.data);
+        console.log("📊 Counseling data loaded:", result.data);
+      } else {
+        console.error("Failed to load counseling:", result.error);
+      }
+    } catch (error) {
+      console.error("Error loading counseling:", error);
+    } finally {
+      setCounselingLoading(false);
+    }
+  };
+
+  // ✅ Socket listeners for real-time emotion updates
   useEffect(() => {
     if (!socket) return;
-    socket.on("emotionAlert", (data: any) => {
-      console.log("🚨 Emotion alert from backend AI:", data);
-
-      handleNewRecommendations(
-        [
-          data.recommendation,
-          data.supportMessage,
-          data.actionSuggestion,
-        ].filter(Boolean),
-        data.emotion,
-        data.intensity
-      );
-    });
-    socket.on("sendRecommendations", (data: any) => {
-      handleNewRecommendations(
-        data.recommendations,
-        data.based_on?.emotion || data.emotion,
-        data.based_on?.confidence
-      );
-    });
 
     socket.on("emotionAnalysisComplete", (data: any) => {
-      const emotion = data.emotion_data.dominant_emotion;
-      const confidence = data.emotion_data.confidence_score;
-
-      if (confidence > 0.6) {
-        checkAndShowRecommendations();
-      }
+      console.log("🎯 Emotion analysis complete, refreshing counseling data");
+      loadCounselingData();
     });
 
     socket.on("emotionAnalyzedWithRecommendations", (data: any) => {
-      if (data.recommendations && data.recommendations.length > 0) {
-        handleNewRecommendations(
-          data.recommendations,
-          data.emotion_data.emotion,
-          data.emotion_data.confidence
-        );
-      }
-    });
-
-    socket.on("emotionRecommendations", (data: any) => {
-      handleNewRecommendations(
-        data.recommendations,
-        data.emotion || data.based_on?.emotion,
-        data.based_on?.confidence
-      );
+      console.log("🎯 Emotion analyzed with recommendations, refreshing");
+      loadCounselingData();
     });
 
     return () => {
-      socket.off("emotionAlert");
-      socket.off("sendRecommendations");
       socket.off("emotionAnalysisComplete");
       socket.off("emotionAnalyzedWithRecommendations");
-      socket.off("emotionRecommendations");
     };
   }, [socket]);
 
-  const checkAndShowRecommendations = async () => {
-    try {
-      const now = Date.now();
-      const dismissed = await AsyncStorage.getItem(RECOMMENDATION_STORAGE_KEY);
-      const dismissedTime = dismissed ? parseInt(dismissed) : 0;
-
-      if (now - dismissedTime < DISMISS_COOLDOWN) return;
-      if (now - lastCheckTime < 60000) return;
-
-      setLastCheckTime(now);
-
-      const data = await getRecommendations();
-
-      if (data?.recommendations && data.recommendations.length > 0) {
-        const emotion = data.based_on?.dominant_pattern || "neutral";
-        const confidence = data.based_on?.confidence || 0.5;
-
-        if (confidence > 0.5) {
-          handleNewRecommendations(data.recommendations, emotion, confidence);
-        } else {
-          setHasNewRecommendations(true);
-          setRecommendations(data.recommendations);
-          setDominantEmotion(emotion);
-          setEmotionConfidence(confidence);
-        }
-      }
-    } catch (error) {
-      console.error("Error checking recommendations:", error);
-    }
+  // ✅ Toggle floating recommendation
+  const toggleFloatingRec = () => {
+    setShowFloatingRec(!showFloatingRec);
   };
 
-  const handleNewRecommendations = (
-    recs: string[],
-    emotion: string = "neutral",
-    confidence: number = 0.5
-  ) => {
-    setRecommendations(recs);
-    setDominantEmotion(emotion);
-    setEmotionConfidence(confidence);
-    setHasNewRecommendations(true);
-
-    if (confidence > 0.5) {
-      setShowFloatingRec(true);
-    }
-  };
-
-  const handleCloseFloating = async () => {
+  // ✅ Navigate to emotion tab
+  const handleViewFullCounseling = () => {
     setShowFloatingRec(false);
-    await AsyncStorage.setItem(
-      RECOMMENDATION_STORAGE_KEY,
-      Date.now().toString()
-    );
+    // Navigate to emotion tab
+    router.push("/(tabs)/emotion");
   };
 
-  const handleAIChatPress = async (fromFloating: boolean = false) => {
-    setHasNewRecommendations(false);
-    setShowFloatingRec(false);
-
-    router.push({
-      pathname: "/ai-chat",
-      params: {
-        emotion: dominantEmotion,
-        confidence: emotionConfidence.toString(),
-        hasRecommendations: fromFloating ? "true" : "false",
-        recommendationCount: recommendations.length.toString(),
-      },
-    });
-  };
-
-  // ✅ SIMPLIFIED: Filter conversations
+  // ✅ Filter conversations
   useEffect(() => {
     if (searchText.trim() === "") {
       setFilteredConversations(conversations);
@@ -243,7 +151,7 @@ export default function ConversationsScreen() {
     setRefreshing(true);
     try {
       await refreshConversations();
-      await checkAndShowRecommendations();
+      await loadCounselingData();
     } catch (error) {
       Alert.alert(t("error"), t("conversations.error.tryAgain"));
     } finally {
@@ -293,12 +201,10 @@ export default function ConversationsScreen() {
       const message = conversation.last_message;
       const isMyMessage = message.sender?.clerkId === userId;
 
-      // ✅ Get message content based on type
       let messageContent = "";
 
       switch (message.type) {
         case "text":
-          // ✅ CRITICAL: Show content directly, never show encrypted placeholder
           messageContent =
             message.content || t("conversations.messageTypes.message");
           break;
@@ -330,7 +236,6 @@ export default function ConversationsScreen() {
           messageContent = t("conversations.messageTypes.message");
       }
 
-      // Prefix logic
       if (conversation.type === "group") {
         if (isMyMessage) {
           return `${t("conversations.messagePrefix.you")} ${messageContent}`;
@@ -370,6 +275,7 @@ export default function ConversationsScreen() {
   const renderConversation = ({ item }: { item: any }) => {
     let isOnline = false;
     let avatarUrl = item.avatar;
+    let otherUserId = null;
 
     if (item.type === "private") {
       const otherParticipant = item.participants?.find(
@@ -378,6 +284,7 @@ export default function ConversationsScreen() {
       if (otherParticipant) {
         isOnline = isUserOnline(otherParticipant.clerkId);
         avatarUrl = otherParticipant.avatar;
+        otherUserId = otherParticipant.clerkId;
       }
     }
 
@@ -390,6 +297,7 @@ export default function ConversationsScreen() {
       avatar: avatarUrl,
       type: item.type,
       isOnline: isOnline,
+      otherUserId: otherUserId,
     };
 
     return (
@@ -455,6 +363,10 @@ export default function ConversationsScreen() {
     );
   }
 
+  // ✅ Check if there's counseling data with recommendations
+  const hasRecommendations = counselingData?.recommendations && 
+    counselingData.recommendations.length > 0;
+
   return (
     <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
       <StatusBar
@@ -478,9 +390,10 @@ export default function ConversationsScreen() {
               />
             </TouchableOpacity>
 
+            {/* ✅ NEW: Toggle button for floating recommendation */}
             <TouchableOpacity
               className="p-1 relative"
-              onPress={() => handleAIChatPress(false)}
+              onPress={toggleFloatingRec}
             >
               <View
                 className={`w-10 h-10 rounded-full border-2 border-orange-500 justify-center items-center ${isDark ? "bg-orange-900/20" : "bg-orange-50"}`}
@@ -488,12 +401,13 @@ export default function ConversationsScreen() {
                 <Ionicons name="happy" size={20} color="#F97316" />
               </View>
 
-              {hasNewRecommendations && (
+              {/* ✅ Badge showing if there are recommendations */}
+              {hasRecommendations && !showFloatingRec && (
                 <View
                   className={`absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 items-center justify-center border-2 ${isDark ? "border-black" : "border-white"}`}
                 >
                   <Text className="text-white text-[9px] font-bold">
-                    {recommendations.length}
+                    {counselingData.recommendations.length}
                   </Text>
                 </View>
               )}
@@ -534,13 +448,13 @@ export default function ConversationsScreen() {
         />
       )}
 
+      {/* ✅ NEW: Floating Recommendation with counseling data */}
       <FloatingRecommendation
         visible={showFloatingRec}
-        recommendations={recommendations}
-        dominantEmotion={dominantEmotion}
-        confidence={emotionConfidence}
-        onClose={handleCloseFloating}
-        onOpenAIChat={() => handleAIChatPress(true)}
+        counselingData={counselingData}
+        loading={counselingLoading}
+        onClose={() => setShowFloatingRec(false)}
+        onViewFull={handleViewFullCounseling}
       />
 
       <Sidebar

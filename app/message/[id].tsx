@@ -1,10 +1,14 @@
-// MessageScreen.tsx - FIXED VERSION WITH TYPING LISTENER
-// ✅ Added socket listener for typing indicator
+// MessageScreen.tsx - FIXED TYPING INDICATOR WITH USERNAME
+// ✅ Proper event naming: sendTypingIndicator (send) vs userTyping (receive)
+// ✅ Debounced typing events
+// ✅ Cleanup on unmount
+// ✅ userName from conversation participants
 
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
 import { TypingIndicator } from "@/components/page/message/TypingIndicator";
+import { UserLastSeen } from "@/components/page/profile/UserLastSeen";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useConversations } from "@/hooks/message/useConversations";
@@ -29,6 +33,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -36,11 +41,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SafeAreaView } from "react-native-safe-area-context";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-// Memoize MessageItem
 const MemoizedMessageItem = memo(MessageItem, (prevProps, nextProps) => {
   return (
     prevProps.message._id === nextProps.message._id &&
@@ -91,8 +95,10 @@ export default function MessageScreen() {
   const firstVisibleItemRef = useRef<string | null>(null);
 
   const scrollDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-const markedAsReadRef = useRef<Set<string>>(new Set());
+  const markedAsReadRef = useRef<Set<string>>(new Set());
   const isDark = actualTheme === "dark";
+
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { isInitialized: encryptionReady, loading: encryptionLoading } =
     useEncryption();
@@ -103,6 +109,7 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     error,
     sendMessage,
     editMessage,
+    recallMessage,
     deleteMessage,
     addReaction,
     removeReaction,
@@ -119,38 +126,28 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
   const { socket, isConnected, isUserOnline } = useSocket();
   const { conversations } = useConversations();
 
-  // ✅ FIX: Add typing indicator listener
   useEffect(() => {
-    if (!socket || !id) return;
-
-    const handleTyping = (data: any) => {
-      console.log("⌨️ [CLIENT] Received typing event:", data);
-      
-      if (data.conversation_id !== id) {
-        console.log("⌨️ [CLIENT] Ignoring - different conversation");
-        return;
-      }
-
-      if (data.user_id === userId) {
-        console.log("⌨️ [CLIENT] Ignoring - own typing event");
-        return;
-      }
-
-      // This will be handled by useMessages hook's typingUsers state
-      console.log(`⌨️ [CLIENT] User ${data.user_name} typing: ${data.is_typing}`);
-    };
-
-    socket.on("userTyping", handleTyping);
-
-    console.log("✅ [CLIENT] Typing listener registered for conversation:", id);
+    console.log("✅ [MessageScreen] Mounted for conversation:", id);
+    console.log("✅ [MessageScreen] Socket connected:", isConnected);
+    console.log("✅ [MessageScreen] Current typing users:", typingUsers);
 
     return () => {
-      socket.off("userTyping", handleTyping);
-      console.log("🧹 [CLIENT] Typing listener cleaned up");
-    };
-  }, [socket, id, userId]);
+      console.log("🧹 [MessageScreen] Unmounting, cleaning up...");
 
-  // Memoize expensive computations
+      if (socket && id && userId) {
+        socket.emit("sendTypingIndicator", {
+          conversation_id: id,
+          user_id: userId,
+          is_typing: false,
+        });
+      }
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [id, isConnected, userId, socket]);
+
   const conversationTitle = useMemo(() => {
     if (!conversation) return "Chat";
     if (conversation.type === "group") {
@@ -177,33 +174,37 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     return otherParticipant?.avatar;
   }, [conversation, userId]);
 
-  const onlineStatus = useMemo(() => {
-    if (!conversation || conversation.type === "group") return null;
-    const otherParticipant = conversation.participants?.find(
-      (p: any) => p.clerkId !== userId
+  // ✅ NEW: Get current user's full_name from conversation participants
+  const currentUserName = useMemo(() => {
+    console.log("🔍 [DEBUG] conversation:", conversation);
+    console.log("🔍 [DEBUG] userId:", userId);
+    console.log("🔍 [DEBUG] participants:", conversation?.participants);
+
+    if (!conversation || !userId) {
+      console.log("❌ [DEBUG] No conversation or userId");
+      return "User";
+    }
+
+    const currentParticipant = conversation.participants?.find(
+      (p: any) => p.clerkId === userId
     );
-    if (!otherParticipant) return null;
 
-    if (isUserOnline(otherParticipant.clerkId)) {
-      return "Online";
-    }
+    console.log("🔍 [DEBUG] currentParticipant:", currentParticipant);
+    console.log("🔍 [DEBUG] full_name:", currentParticipant?.full_name);
+    console.log("🔍 [DEBUG] username:", currentParticipant?.username);
+    console.log("🔍 [DEBUG] email:", currentParticipant?.email);
 
-    if (otherParticipant?.last_seen) {
-      const lastSeen = new Date(otherParticipant.last_seen);
-      const now = new Date();
-      const diffMs = now.getTime() - lastSeen.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
+    // ✅ FALLBACK CHAIN: full_name → username → email → "User"
+    const name =
+      currentParticipant?.full_name ||
+      currentParticipant?.username ||
+      currentParticipant?.email ||
+      "User";
 
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins}m ago`;
-      const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours}h ago`;
-      const diffDays = Math.floor(diffHours / 24);
-      return `${diffDays}d ago`;
-    }
+    console.log("✅ [DEBUG] Final userName:", name);
 
-    return "Offline";
-  }, [conversation, userId, isUserOnline]);
+    return name;
+  }, [conversation, userId]);
 
   const isUserOnlineInConversation = useMemo((): boolean => {
     if (!conversation) return false;
@@ -218,7 +219,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     return false;
   }, [conversation, userId, isUserOnline]);
 
-  // Set conversation
   useEffect(() => {
     if (id && conversations.length > 0) {
       const currentConversation = conversations.find((conv) => conv._id === id);
@@ -226,7 +226,23 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     }
   }, [id, conversations]);
 
-  // Set recipient ID
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      "keyboardDidShow",
+      () => {
+        if (isNearBottom) {
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+    };
+  }, [isNearBottom]);
+
   useEffect(() => {
     if (conversation && conversation.type !== "group") {
       const recipient = conversation.participants?.find(
@@ -240,9 +256,10 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     }
   }, [conversation, userId]);
 
-  // Join/Leave conversation
   useEffect(() => {
     if (!socket || !id || !userId || !isConnected) return;
+
+    console.log("🚪 [MessageScreen] Joining conversation room:", id);
 
     socket.emit("joinConversation", {
       user_id: userId,
@@ -251,6 +268,8 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
 
     return () => {
       if (socket.connected) {
+        console.log("🚪 [MessageScreen] Leaving conversation room:", id);
+
         socket.emit("leaveConversation", {
           user_id: userId,
           conversation_id: id,
@@ -259,7 +278,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     };
   }, [socket, id, userId, isConnected]);
 
-  // Cleanup scroll timer on unmount
   useEffect(() => {
     return () => {
       if (scrollDebounceTimerRef.current) {
@@ -268,7 +286,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     };
   }, []);
 
-  // Auto scroll to bottom ONCE when messages load
   useEffect(() => {
     if (messages.length > 0 && !hasScrolledToBottom && !scrollToMessageId) {
       const timer = setTimeout(() => {
@@ -295,7 +312,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     scrollToMessageId,
   ]);
 
-  // Handle scroll to specific message
   useEffect(() => {
     if (scrollToMessageId && messages.length > 0 && hasScrolledToBottom) {
       const messageIndex = messages.findIndex(
@@ -320,7 +336,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     }
   }, [scrollToMessageId, messages.length, hasScrolledToBottom]);
 
-  // Handle LOAD MORE scroll restoration ONLY
   useEffect(() => {
     if (
       isLoadingMoreRef.current &&
@@ -366,7 +381,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     }
   }, [messages.length]);
 
-  // Handle NEW SOCKET MESSAGES separately
   useEffect(() => {
     if (isLoadingMoreRef.current) {
       console.log(`⏳ [SOCKET] Skipping - load more in progress`);
@@ -408,7 +422,6 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     }
   }, [socketMessageCount, isNearBottom, hasScrolledToBottom, messages.length]);
 
-  // Mark conversation as read
   useEffect(() => {
     if (!userId || !id || messages.length === 0 || hasMarkedAsReadRef.current) {
       return;
@@ -431,33 +444,31 @@ const markedAsReadRef = useRef<Set<string>>(new Set());
     hasMarkedAsReadRef.current = false;
   }, [id]);
 
-  // Mark individual messages as read
   useEffect(() => {
-  if (!userId) return;
+    if (!userId) return;
 
-  const unreadMessages = messages.filter(
-    (msg) =>
-      !msg.read_by?.some((r: any) => r.user === userId) &&
-      msg.sender?.clerkId !== userId &&
-      !markedAsReadRef.current.has(msg._id)  // ✅ Skip already marked
-  );
+    const unreadMessages = messages.filter(
+      (msg) =>
+        !msg.read_by?.some((r: any) => r.user === userId) &&
+        msg.sender?.clerkId !== userId &&
+        !markedAsReadRef.current.has(msg._id)
+    );
 
-  if (unreadMessages.length > 0) {
-    console.log(`📖 [READ] Marking ${unreadMessages.length} messages as read`);
-    
-    unreadMessages.forEach((msg) => {
-      markedAsReadRef.current.add(msg._id);  // ✅ Track it
-      markAsRead(msg._id);
-    });
-  }
-}, [messages, markAsRead, userId]);
+    if (unreadMessages.length > 0) {
+      console.log(
+        `📖 [READ] Marking ${unreadMessages.length} messages as read`
+      );
 
-useEffect(() => {
-  markedAsReadRef.current.clear();
-}, [id]);
-  // =============================================
-  // CALL HANDLERS
-  // =============================================
+      unreadMessages.forEach((msg) => {
+        markedAsReadRef.current.add(msg._id);
+        markAsRead(msg._id);
+      });
+    }
+  }, [messages, markAsRead, userId]);
+
+  useEffect(() => {
+    markedAsReadRef.current.clear();
+  }, [id]);
 
   const handleVideoCall = async () => {
     if (!id || isInitiatingCall) return;
@@ -595,49 +606,42 @@ useEffect(() => {
     }
   };
 
-  // =============================================
-  // MESSAGE HANDLERS
-  // =============================================
-
   const handleSendMessage = async (data: any) => {
-  try {
-    console.log("📥 [SCREEN] Received data:", {
-      type: typeof data,
-      isFormData: data instanceof FormData,
-      hasEncryptedContent: !!(data as any).encryptedContent,
-      hasEncryptionMetadata: !!(data as any).encryptionMetadata,
-      hasEncryptedFiles: !!(data as any).encryptedFiles,
-      dataType: data.type,
-      isOptimistic: !!(data as any).isOptimistic,
-    });
+    try {
+      console.log("📥 [SCREEN] Received data:", {
+        type: typeof data,
+        isFormData: data instanceof FormData,
+        hasEncryptedContent: !!(data as any).encryptedContent,
+        hasEncryptionMetadata: !!(data as any).encryptionMetadata,
+        hasEncryptedFiles: !!(data as any).encryptedFiles,
+        dataType: data.type,
+        isOptimistic: !!(data as any).isOptimistic,
+      });
 
-    // ✅ Handle optimistic message creation (don't send to server yet)
-    if ((data as any).isOptimistic === true) {
-      console.log("🎯 [SCREEN] Creating optimistic message locally");
-      // This creates a local preview message
-      // The actual server call will happen in the next onSendMessage call
-      return;
+      await sendMessage(data);
+
+      if (!(data as any).isOptimistic) {
+        setReplyTo(null);
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+
+        console.log("✅ [SCREEN] Message sent successfully");
+      } else {
+        console.log("✅ [SCREEN] Optimistic message created in FlatList");
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error: any) {
+      console.error("❌ [SCREEN] Failed to send message:", error);
+      Alert.alert(t("message.failed"), error.message || t("message.failed"), [
+        { text: t("ok") },
+      ]);
     }
-
-    // ✅ Pass data AS-IS to sendMessage
-    await sendMessage(data);
-
-    // ✅ Clear reply
-    setReplyTo(null);
-
-    // ✅ Scroll to bottom
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-
-    console.log("✅ [SCREEN] Message sent successfully");
-  } catch (error: any) {
-    console.error("❌ [SCREEN] Failed to send message:", error);
-    Alert.alert(t("message.failed"), error.message || t("message.failed"), [
-      { text: t("ok") },
-    ]);
-  }
-};
+  };
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
     try {
@@ -723,6 +727,14 @@ useEffect(() => {
     }
   }, [hasMore, loading, loadMoreMessages, messages]);
 
+  const handleRecallMessage = async (messageId: string) => {
+    try {
+      await recallMessage(messageId);
+    } catch (error: any) {
+      Alert.alert(t("error"), error.message || t("message.failed"));
+    }
+  };
+
   const handleScroll = useCallback(
     (event: any) => {
       const { contentOffset, contentSize, layoutMeasurement } =
@@ -780,18 +792,30 @@ useEffect(() => {
   }, []);
 
   const handleTypingStart = useCallback(() => {
-    console.log("⌨️ [CLIENT] Sending typing START");
+    console.log("⌨️ [CLIENT] User started typing");
+
     sendTypingIndicator(true);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      console.log("⌨️ [CLIENT] Auto-stop typing (timeout)");
+      sendTypingIndicator(false);
+    }, 3000);
   }, [sendTypingIndicator]);
 
   const handleTypingStop = useCallback(() => {
-    console.log("⌨️ [CLIENT] Sending typing STOP");
+    console.log("⌨️ [CLIENT] User stopped typing");
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
     sendTypingIndicator(false);
   }, [sendTypingIndicator]);
-
-  // =============================================
-  // RENDER FUNCTIONS
-  // =============================================
 
   const renderMessage = useCallback(
     ({ item, index }: { item: any; index: number }) => {
@@ -809,6 +833,7 @@ useEffect(() => {
           onReply={handleReply}
           onEdit={handleEditMessage}
           onDelete={handleDeleteMessage}
+          onRecall={handleRecallMessage}
           onReaction={handleAddReaction}
           onRemoveReaction={handleRemoveReaction}
           isHighlighted={isHighlighted}
@@ -823,6 +848,7 @@ useEffect(() => {
       handleReply,
       handleEditMessage,
       handleDeleteMessage,
+      handleRecallMessage,
       handleAddReaction,
       handleRemoveReaction,
       handleRetryDecryption,
@@ -868,6 +894,10 @@ useEffect(() => {
   const renderHeader = useMemo(() => {
     const isGroup = conversation?.type === "group";
 
+    const otherParticipant = !isGroup
+      ? conversation?.participants?.find((p: any) => p.clerkId !== userId)
+      : null;
+
     return (
       <View
         className={`flex-row items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-800" : "border-gray-200"}`}
@@ -912,9 +942,12 @@ useEffect(() => {
               </Text>
 
               {encryptionReady && (
-                <View className="ml-2 bg-green-500 rounded-full px-2 py-0.5">
-                  <Text className="text-white text-xs font-bold">🔒</Text>
-                </View>
+                <Ionicons
+                  name="lock-closed"
+                  size={16}
+                  color={isDark ? "#fff" : "#000"}
+                  style={{ marginLeft: 6 }}
+                />
               )}
             </View>
 
@@ -926,12 +959,12 @@ useEffect(() => {
               >
                 {conversation?.participants?.length || 0} members
               </Text>
-            ) : onlineStatus ? (
-              <Text
-                className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-              >
-                {onlineStatus}
-              </Text>
+            ) : otherParticipant ? (
+              <UserLastSeen
+                userId={otherParticipant.clerkId}
+                showDot={false}
+                textSize="sm"
+              />
             ) : null}
           </View>
         </View>
@@ -992,11 +1025,11 @@ useEffect(() => {
     conversationTitle,
     encryptionReady,
     typingUsers.length,
-    onlineStatus,
     isInitiatingCall,
     handleAudioCall,
     handleVideoCall,
     id,
+    userId,
   ]);
 
   const renderEmptyState = () => (
@@ -1063,10 +1096,6 @@ useEffect(() => {
     );
   };
 
-  // =============================================
-  // MAIN RENDER
-  // =============================================
-
   if (error) {
     return (
       <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
@@ -1094,7 +1123,10 @@ useEffect(() => {
   }
 
   return (
-    <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}>
+    <SafeAreaView
+      className={`flex-1 ${isDark ? "bg-black" : "bg-white"}`}
+      edges={["top", "left", "right"]}
+    >
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
         backgroundColor={isDark ? "#000000" : "#FFFFFF"}
@@ -1103,56 +1135,67 @@ useEffect(() => {
       {renderHeader}
 
       <KeyboardAvoidingView
-        className="flex-1"
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        {messages.length === 0 && !loading ? (
-          renderEmptyState()
-        ) : (
-          <>
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessage}
-              keyExtractor={keyExtractor}
-              className="flex-1 px-4"
-              showsVerticalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              inverted={false}
-              initialNumToRender={15}
-              maxToRenderPerBatch={10}
-              windowSize={10}
-              removeClippedSubviews={Platform.OS === "android"}
-              updateCellsBatchingPeriod={50}
-              ListHeaderComponent={renderLoadingHeader}
-              ListFooterComponent={renderTypingIndicator}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={{ viewAreaCoveragePercentThreshold: 10 }}
-              onScrollToIndexFailed={(info) => {
-                const wait = new Promise((resolve) => setTimeout(resolve, 100));
-                wait.then(() => {
-                  flatListRef.current?.scrollToIndex({
-                    index: info.index,
-                    animated: false,
-                    viewPosition: 0.5,
+        <View style={{ flex: 1 }}>
+          {messages.length === 0 && !loading ? (
+            renderEmptyState()
+          ) : (
+            <>
+              <FlatList
+                ref={flatListRef}
+                data={messages}
+                renderItem={renderMessage}
+                keyExtractor={keyExtractor}
+                contentContainerStyle={{
+                  paddingHorizontal: 16,
+                  flexGrow: 1,
+                }}
+                showsVerticalScrollIndicator={false}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                inverted={false}
+                initialNumToRender={15}
+                maxToRenderPerBatch={10}
+                windowSize={10}
+                removeClippedSubviews={Platform.OS === "android"}
+                updateCellsBatchingPeriod={50}
+                ListHeaderComponent={renderLoadingHeader}
+                ListFooterComponent={renderTypingIndicator}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={{ viewAreaCoveragePercentThreshold: 10 }}
+                onScrollToIndexFailed={(info) => {
+                  const wait = new Promise((resolve) =>
+                    setTimeout(resolve, 100)
+                  );
+                  wait.then(() => {
+                    flatListRef.current?.scrollToIndex({
+                      index: info.index,
+                      animated: false,
+                      viewPosition: 0.5,
+                    });
                   });
-                });
-              }}
-            />
-            {renderScrollToBottomButton()}
-          </>
-        )}
+                }}
+              />
+              {renderScrollToBottomButton()}
+            </>
+          )}
 
-        <MessageInput
-          conversationId={id}
-          recipientId={recipientId}
-          onSendMessage={handleSendMessage}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
-          onTyping={sendTypingIndicator}
-          disabled={!encryptionReady}
-        />
+          <MessageInput
+            conversationId={id}
+            recipientId={recipientId}
+            onSendMessage={handleSendMessage}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+            onTyping={sendTypingIndicator}
+            onTypingStart={handleTypingStart}
+            onTypingStop={handleTypingStop}
+            disabled={!encryptionReady}
+            userName={currentUserName}
+          />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
