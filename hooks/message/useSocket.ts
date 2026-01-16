@@ -1,7 +1,7 @@
-// hooks/useSocket.ts - Optimized with stable connection
-import { useEffect, useState, useRef, useCallback } from 'react';
-import io, { Socket } from 'socket.io-client';
-import { useUser } from '@clerk/clerk-expo';
+// hooks/message/useSocket.tsx - DEBOUNCED FIX
+import { useUser } from "@clerk/clerk-expo";
+import { useCallback, useEffect, useRef, useState } from "react";
+import io, { Socket } from "socket.io-client";
 
 interface OnlineUser {
   userId: string;
@@ -14,6 +14,7 @@ interface OnlineUser {
     email?: string;
   };
   lastActive: number;
+  last_seen?: Date;
 }
 
 interface UseSocketReturn {
@@ -26,6 +27,8 @@ interface UseSocketReturn {
   off: (event: string, callback?: (...args: any[]) => void) => void;
 }
 
+const ENABLE_DEBUG_LOGS = false; // ✅ TẮT LOG CHO PRODUCTION
+
 export const useSocket = (): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -33,49 +36,53 @@ export const useSocket = (): UseSocketReturn => {
   const { user } = useUser();
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // ✨ NEW: Prevent multiple addNewUsers calls
   const hasAddedUserRef = useRef(false);
   const addUserTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const activityIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const listenersRegistered = useRef(false);
+
+  // ✅ FIX: Debounce state updates
+  const updateDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingUpdatesRef = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
     if (!user) return;
 
     const connectSocket = () => {
-      const newSocket = io(process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:3000', {
-        transports: ['websocket'],
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        // ✨ NEW: Add timeout settings
-        timeout: 20000,
-      });
+      const newSocket = io(
+        process.env.EXPO_PUBLIC_SOCKET_URL || "http://localhost:3000",
+        {
+          transports: ["websocket"],
+          autoConnect: true,
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 20000,
+        }
+      );
 
       socketRef.current = newSocket;
       setSocket(newSocket);
 
-      newSocket.on('connect', () => {
-        console.log('✅ Socket connected:', newSocket.id);
+      newSocket.on("connect", () => {
+        if (ENABLE_DEBUG_LOGS) {
+          console.log("✅ Socket connected:", newSocket.id);
+        }
         setIsConnected(true);
-        
+
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
           reconnectTimeoutRef.current = null;
         }
-        
-        // ✨ IMPROVED: Debounce addNewUsers to prevent rapid calls
+
         if (addUserTimeoutRef.current) {
           clearTimeout(addUserTimeoutRef.current);
         }
 
         addUserTimeoutRef.current = setTimeout(() => {
           if (!hasAddedUserRef.current || newSocket.id !== socketRef.current?.id) {
-            console.log('👤 Adding user to online list...');
-            
-            // Add user to online users
-            newSocket.emit('addNewUsers', {
+            newSocket.emit("addNewUsers", {
               _id: user.id,
               username: user.username || user.fullName,
               full_name: user.fullName,
@@ -83,115 +90,158 @@ export const useSocket = (): UseSocketReturn => {
               email: user.primaryEmailAddress?.emailAddress,
             });
 
-            // ✅ Join personal room for friend events
             const userRoom = `user:${user.id}`;
-            newSocket.emit('joinRoom', userRoom);
-            console.log('🚪 Joined personal room:', userRoom);
-
+            newSocket.emit("joinRoom", userRoom);
             hasAddedUserRef.current = true;
           }
-        }, 300); // Small delay to batch rapid reconnects
+        }, 300);
       });
 
-      newSocket.on('disconnect', (reason) => {
-        console.log('❌ Socket disconnected:', reason);
+      newSocket.on("disconnect", (reason) => {
+        if (ENABLE_DEBUG_LOGS) {
+          console.log("❌ Socket disconnected:", reason);
+        }
         setIsConnected(false);
         hasAddedUserRef.current = false;
-        
-        // Only auto-reconnect if server disconnected us
-        if (reason === 'io server disconnect') {
+
+        if (reason === "io server disconnect") {
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('🔄 Attempting to reconnect...');
             newSocket.connect();
           }, 2000);
         }
       });
 
-      // ✨ IMPROVED: Listen for online users updates with deduplication
-      let lastUpdateTime = 0;
-      newSocket.on('getUsers', (users: OnlineUser[]) => {
-        const now = Date.now();
-        // Ignore rapid updates (< 500ms)
-        if (now - lastUpdateTime < 500) {
-          console.log('⏭️ Skipping rapid online users update');
-          return;
-        }
-        lastUpdateTime = now;
-        
-        console.log('👥 Online users updated:', users.length);
-        setOnlineUsers(users || []);
-      });
+      if (!listenersRegistered.current) {
+        let lastGetUsersTime = 0;
 
-      // ✨ NEW: Send heartbeat to keep connection alive
-      const heartbeatInterval = setInterval(() => {
+        // ✅ FIX: Throttle getUsers
+        newSocket.on("getUsers", (users: OnlineUser[]) => {
+          const now = Date.now();
+          if (now - lastGetUsersTime < 1000) { // ✅ Minimum 1s between updates
+            return;
+          }
+          lastGetUsersTime = now;
+
+          const usersWithDates = users.map((user) => ({
+            ...user,
+            last_seen: user.last_seen ? new Date(user.last_seen) : undefined,
+          }));
+
+          setOnlineUsers(usersWithDates);
+        });
+
+        // ✅ FIX: Debounced batch updates
+        const processPendingUpdates = () => {
+          if (pendingUpdatesRef.current.size === 0) return;
+
+          setOnlineUsers((prev) => {
+            let updated = [...prev];
+
+            pendingUpdatesRef.current.forEach((data, userId) => {
+              const index = updated.findIndex((u) => u.userId === userId);
+              
+              if (index !== -1) {
+                // Update existing user
+                updated[index] = {
+                  ...updated[index],
+                  lastActive: new Date(data.last_seen).getTime(),
+                  last_seen: new Date(data.last_seen),
+                };
+
+                // Remove if offline
+                if (!data.is_online) {
+                  updated = updated.filter((u) => u.userId !== userId);
+                }
+              }
+            });
+
+            return updated;
+          });
+
+          pendingUpdatesRef.current.clear();
+        };
+
+        // ✅ FIX: Batch userLastSeenUpdated events
+        newSocket.on(
+          "userLastSeenUpdated",
+          (data: {
+            user_id: string;
+            last_seen: string | Date;
+            is_online: boolean;
+          }) => {
+            // ✅ Accumulate updates
+            pendingUpdatesRef.current.set(data.user_id, data);
+
+            // ✅ Debounce processing
+            if (updateDebounceRef.current) {
+              clearTimeout(updateDebounceRef.current);
+            }
+
+            updateDebounceRef.current = setTimeout(() => {
+              processPendingUpdates();
+            }, 500); // ✅ Process batch every 500ms
+          }
+        );
+
+        // ✅ Friend events - NO LOGS unless debug
+        const friendEvents = [
+          "friendRequestReceived",
+          "friendRequestSent", 
+          "friendRequestAccepted",
+          "friendRequestDeclined",
+          "friendRequestCancelled",
+          "friendRemoved",
+          "friendBlocked",
+          "friendCountUpdated",
+          "friendRequestCountUpdated",
+          "friendStatusChanged",
+        ];
+
+        friendEvents.forEach((event) => {
+          newSocket.on(event, (data) => {
+            if (ENABLE_DEBUG_LOGS) {
+              console.log(`🔔 [Socket] ${event}:`, data);
+            }
+          });
+        });
+
+        newSocket.on("connect_error", (error) => {
+          console.error("Socket error:", error.message);
+          setIsConnected(false);
+        });
+
+        newSocket.on("reconnect", (attemptNumber) => {
+          if (ENABLE_DEBUG_LOGS) {
+            console.log("Reconnected after", attemptNumber, "attempts");
+          }
+          setIsConnected(true);
+          hasAddedUserRef.current = false;
+
+          const userRoom = `user:${user.id}`;
+          newSocket.emit("joinRoom", userRoom);
+        });
+
+        listenersRegistered.current = true;
+      }
+
+      // ✅ Send activity every 60s
+      activityIntervalRef.current = setInterval(() => {
         if (newSocket.connected && user) {
-          newSocket.emit('updateUserStatus', {
+          newSocket.emit("userActivity", {
             user_id: user.id,
-            status: 'online'
           });
         }
-      }, 30000); // Every 30 seconds
+      }, 60000);
 
-      // Friend event listeners (keep existing)
-      newSocket.on('friendRequestReceived', (data) => {
-        console.log('📬 [Socket] friendRequestReceived:', data);
-      });
-
-      newSocket.on('friendRequestSent', (data) => {
-        console.log('📤 [Socket] friendRequestSent:', data);
-      });
-
-      newSocket.on('friendRequestAccepted', (data) => {
-        console.log('✅ [Socket] friendRequestAccepted:', data);
-      });
-
-      newSocket.on('friendRequestDeclined', (data) => {
-        console.log('❌ [Socket] friendRequestDeclined:', data);
-      });
-
-      newSocket.on('friendRequestCancelled', (data) => {
-        console.log('🚫 [Socket] friendRequestCancelled:', data);
-      });
-
-      newSocket.on('friendRemoved', (data) => {
-        console.log('👋 [Socket] friendRemoved:', data);
-      });
-
-      newSocket.on('friendBlocked', (data) => {
-        console.log('🚫 [Socket] friendBlocked:', data);
-      });
-
-      newSocket.on('friendCountUpdated', (data) => {
-        console.log('🔢 [Socket] friendCountUpdated:', data);
-      });
-
-      newSocket.on('friendRequestCountUpdated', (data) => {
-        console.log('🔢 [Socket] friendRequestCountUpdated:', data);
-      });
-
-      newSocket.on('friendStatusChanged', (data) => {
-        console.log('👤 [Socket] friendStatusChanged:', data);
-      });
-
-      newSocket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-        setIsConnected(false);
-      });
-
-      newSocket.on('reconnect', (attemptNumber) => {
-        console.log('Socket reconnected after', attemptNumber, 'attempts');
-        setIsConnected(true);
-        hasAddedUserRef.current = false; // Allow re-adding user
-        
-        // Re-join room after reconnect
-        const userRoom = `user:${user.id}`;
-        newSocket.emit('joinRoom', userRoom);
-        console.log('🚪 Re-joined personal room after reconnect:', userRoom);
-      });
-
-      newSocket.on('reconnect_error', (error) => {
-        console.error('Socket reconnection error:', error);
-      });
+      // ✅ Heartbeat every 30s
+      const heartbeatInterval = setInterval(() => {
+        if (newSocket.connected && user) {
+          newSocket.emit("updateUserStatus", {
+            user_id: user.id,
+            status: "online",
+          });
+        }
+      }, 30000);
 
       return { socket: newSocket, heartbeatInterval };
     };
@@ -199,52 +249,69 @@ export const useSocket = (): UseSocketReturn => {
     const { socket: socketInstance, heartbeatInterval } = connectSocket();
 
     return () => {
-      console.log('🧹 Cleaning up socket connection...');
-      
       if (addUserTimeoutRef.current) {
         clearTimeout(addUserTimeoutRef.current);
       }
-      
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      
+
+      if (activityIntervalRef.current) {
+        clearInterval(activityIntervalRef.current);
+      }
+
+      if (updateDebounceRef.current) {
+        clearTimeout(updateDebounceRef.current);
+      }
+
       clearInterval(heartbeatInterval);
-      
+
       if (socketInstance) {
         socketInstance.disconnect();
         socketInstance.removeAllListeners();
       }
-      
+
+      pendingUpdatesRef.current.clear();
       hasAddedUserRef.current = false;
       socketRef.current = null;
+      listenersRegistered.current = false;
     };
-  }, [user?.id]); // Only reconnect if user ID changes
+  }, [user?.id]);
 
-  const emit = useCallback((event: string, data: any) => {
-    if (socket && isConnected) {
-      socket.emit(event, data);
-    } else {
-      console.warn(`Cannot emit ${event}: socket not connected`);
-    }
-  }, [socket, isConnected]);
+  const emit = useCallback(
+    (event: string, data: any) => {
+      if (socket && isConnected) {
+        socket.emit(event, data);
+      }
+    },
+    [socket, isConnected]
+  );
 
-  const on = useCallback((event: string, callback: (...args: any[]) => void) => {
-    if (socket) {
-      socket.on(event, callback);
-    }
-  }, [socket]);
+  const on = useCallback(
+    (event: string, callback: (...args: any[]) => void) => {
+      if (socket) {
+        socket.on(event, callback);
+      }
+    },
+    [socket]
+  );
 
-  const off = useCallback((event: string, callback?: (...args: any[]) => void) => {
-    if (socket) {
-      socket.off(event, callback);
-    }
-  }, [socket]);
+  const off = useCallback(
+    (event: string, callback?: (...args: any[]) => void) => {
+      if (socket) {
+        socket.off(event, callback);
+      }
+    },
+    [socket]
+  );
 
-  // ✨ IMPROVED: Check if a user is online with memoization
-  const isUserOnline = useCallback((userId: string): boolean => {
-    return onlineUsers.some(u => u.userId === userId);
-  }, [onlineUsers]);
+  const isUserOnline = useCallback(
+    (userId: string): boolean => {
+      return onlineUsers.some((u) => u.userId === userId);
+    },
+    [onlineUsers]
+  );
 
   return {
     socket,
@@ -255,4 +322,34 @@ export const useSocket = (): UseSocketReturn => {
     on,
     off,
   };
+};
+
+export const formatLastSeen = (lastSeen: Date | string | number): string => {
+  const now = Date.now();
+  const time = new Date(lastSeen).getTime();
+  const diffMs = now - time;
+
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 5) return "A few minutes ago";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return new Date(time).toLocaleDateString("en-US", {
+    day: "2-digit",
+    month: "short",
+  });
+};
+
+export const getLastSeen = (
+  userId: string,
+  onlineUsers: OnlineUser[]
+): Date | null => {
+  const user = onlineUsers.find((u) => u.userId === userId);
+  return user?.last_seen || null;
 };

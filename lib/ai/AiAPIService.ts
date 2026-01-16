@@ -1,12 +1,12 @@
 // mobile/lib/ai/AiAPIService.ts
-import axios from 'axios';
+import axios from "axios";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
 export interface AIChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
-  language?: 'vi' | 'en' | 'zh';
+  language?: "vi" | "en" | "zh";
   emotion?: string;
   timestamp: Date;
 }
@@ -40,7 +40,7 @@ class AIAPIService {
     token: string,
     message: string,
     conversationId?: string,
-    language?: 'vi' | 'en' | 'zh'
+    language?: "vi" | "en" | "zh"
   ) {
     try {
       const response = await axios.post(
@@ -54,17 +54,17 @@ class AIAPIService {
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
         }
       );
 
       return response.data;
     } catch (error: any) {
-      console.error('❌ Send message error:', error.response?.data || error);
+      console.error("❌ Send message error:", error.response?.data || error);
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to send message',
+        error: error.response?.data?.error || "Failed to send message",
       };
     }
   }
@@ -90,10 +90,10 @@ class AIAPIService {
 
       return response.data;
     } catch (error: any) {
-      console.error('❌ Get history error:', error.response?.data || error);
+      console.error("❌ Get history error:", error.response?.data || error);
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to get history',
+        error: error.response?.data?.error || "Failed to get history",
       };
     }
   }
@@ -118,10 +118,13 @@ class AIAPIService {
 
       return response.data;
     } catch (error: any) {
-      console.error('❌ Get conversations error:', error.response?.data || error);
+      console.error(
+        "❌ Get conversations error:",
+        error.response?.data || error
+      );
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to get conversations',
+        error: error.response?.data?.error || "Failed to get conversations",
       };
     }
   }
@@ -134,17 +137,20 @@ class AIAPIService {
       const response = await axios.delete(`${API_URL}/api/ai/conversations`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         data: { conversationId },
       });
 
       return response.data;
     } catch (error: any) {
-      console.error('❌ Delete conversation error:', error.response?.data || error);
+      console.error(
+        "❌ Delete conversation error:",
+        error.response?.data || error
+      );
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to delete conversation',
+        error: error.response?.data?.error || "Failed to delete conversation",
       };
     }
   }
@@ -154,7 +160,7 @@ class AIAPIService {
   // ============================================
   static async getEmotionRecommendation(
     token: string,
-    language: 'vi' | 'en' | 'zh' = 'vi'
+    language: "vi" | "en" | "zh" = "vi"
   ) {
     try {
       const response = await axios.get(
@@ -168,10 +174,38 @@ class AIAPIService {
 
       return response.data;
     } catch (error: any) {
-      console.error('❌ Get recommendation error:', error.response?.data || error);
+      console.error(
+        "❌ Get recommendation error:",
+        error.response?.data || error
+      );
       return {
         success: false,
-        error: error.response?.data?.error || 'Failed to get recommendation',
+        error: error.response?.data?.error || "Failed to get recommendation",
+      };
+    }
+  }
+
+  static async getSmartSuggestions(
+    token: string,
+    language: "vi" | "en" | "zh" = "vi",
+    limit: number = 4
+  ) {
+    try {
+      const response = await axios.get(
+        `${API_URL}/api/ai/suggestions?language=${language}&limit=${limit}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.error("❌ Get suggestions error:", error.response?.data || error);
+      return {
+        success: false,
+        error: error.response?.data?.error || "Failed to get suggestions",
       };
     }
   }

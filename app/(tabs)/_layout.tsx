@@ -26,7 +26,7 @@ export default function TabLayout() {
 
   const currentColors = isDark ? colors.dark : colors.light;
   const { registerForPushNotifications } = useNotification();
-  const { userId, isLoaded, isSignedIn } = useAuth(); // ✅ Clerk only provides userId, isLoaded, isSignedIn
+  const { userId, isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
     console.log("🔔 ========================================");
@@ -36,7 +36,6 @@ export default function TabLayout() {
     console.log("🔔 userId:", userId);
     console.log("🔔 ========================================");
 
-    // Đăng ký push notifications khi user đã login
     if (isLoaded && isSignedIn && userId) {
       console.log("🔔 ✅ User is logged in, registering push notifications...");
       console.log("🔔 User ID:", userId);
@@ -68,19 +67,9 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: t("tabs.home"),
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
+      {/* ❌ Xóa tab home */}
+      
+      {/* ✅ Conversations sẽ là tab đầu tiên */}
       <Tabs.Screen
         name="conversations"
         options={{
@@ -113,7 +102,7 @@ export default function TabLayout() {
           title: t("tabs.emotion"),
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? "sparkles" : "sparkles-outline"}
+              name={focused ? "happy" : "happy-outline"}
               size={size}
               color={color}
             />

@@ -1,11 +1,12 @@
 /* eslint-disable react/no-unescaped-entities */
 // components/emotion/EmotionCard.tsx
+import { getEmotionLottie } from "@/constants/emotionLottie";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { Ionicons } from "@expo/vector-icons";
+import LottieView from "lottie-react-native";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useLanguage } from "@/contexts/LanguageContext";
-
 interface EmotionCardProps {
   item: {
     _id: string;
@@ -21,7 +22,7 @@ interface EmotionCardProps {
 export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
-  const isDark = actualTheme === 'dark';
+  const isDark = actualTheme === "dark";
 
   // Map emotions to colors
   const emotionColors: Record<string, string> = {
@@ -35,8 +36,11 @@ export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
   };
 
   const emotionColor = emotionColors[item.dominant_emotion] || "#808080";
-  const emotionText = t(`emotion.emotions.${item.dominant_emotion}` as any) || item.dominant_emotion;
-  const contextText = t(`emotion.contexts.${item.context}` as any) || item.context;
+  const emotionText =
+    t(`emotion.emotions.${item.dominant_emotion}` as any) ||
+    item.dominant_emotion;
+  const contextText =
+    t(`emotion.contexts.${item.context}` as any) || item.context;
 
   return (
     <View
@@ -46,12 +50,15 @@ export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
       <View className="flex-row justify-between items-center mb-3">
         <View className="flex-row items-center flex-1">
           <View
-            className="w-12 h-12 rounded-full justify-center items-center mr-3"
-            style={{ backgroundColor: emotionColor + "20" }}
+            className="w-12 h-12 rounded-full justify-center items-center mr-3 overflow-hidden"
+            style={{ backgroundColor: emotionColor + "15" }}
           >
-            <View 
-              className="w-6 h-6 rounded-full"
-              style={{ backgroundColor: emotionColor }}
+            <LottieView
+              source={getEmotionLottie(item.dominant_emotion)}
+              autoPlay
+              loop
+              speed={0.9}
+              style={{ width: 40, height: 40 }}
             />
           </View>
 
@@ -64,7 +71,9 @@ export const EmotionCard: React.FC<EmotionCardProps> = ({ item, onDelete }) => {
             <Text
               className={`text-sm mt-0.5 ${isDark ? "text-gray-400" : "text-gray-600"}`}
             >
-              {t('emotion.stats.confidence', { percent: (item.confidence_score * 100).toFixed(0) })}
+              {t("emotion.stats.confidence", {
+                percent: (item.confidence_score * 100).toFixed(0),
+              })}
             </Text>
           </View>
         </View>

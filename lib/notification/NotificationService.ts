@@ -43,53 +43,34 @@ export class NotificationService {
   /**
    * ⭐ UPDATED: Get push token - FCM for Android, Expo for iOS
    */
-  private async getPushToken(): Promise<string | undefined> {
-    try {
-      if (Platform.OS === "android") {
-        // ⭐ ANDROID: Try to get native FCM token first
-        console.log("📱 Getting FCM token for Android...");
-        
-        try {
-          const devicePushToken = await Notifications.getDevicePushTokenAsync();
-          const fcmToken = devicePushToken.data;
-          
-          console.log("✅ FCM Token obtained:", fcmToken.substring(0, 30) + "...");
-          console.log("📊 Token type:", devicePushToken.type); // 'fcm' or 'apns'
-          
-          return fcmToken;
-        } catch (fcmError) {
-          console.warn("⚠️ Failed to get FCM token, falling back to Expo token:", fcmError);
-          
-          // Fallback to Expo token
-          const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-          if (!projectId) {
-            console.error("❌ No Expo project ID found in app.json");
-            return undefined;
-          }
-          
-          const expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
-          console.log("✅ Expo Token (fallback):", expoPushToken.data);
-          return expoPushToken.data;
-        }
-      } else {
-        // ⭐ iOS: Use Expo token
-        console.log("📱 Getting Expo token for iOS...");
-        
-        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-        if (!projectId) {
-          console.error("❌ No Expo project ID found in app.json");
-          return undefined;
-        }
-        
-        const expoPushToken = await Notifications.getExpoPushTokenAsync({ projectId });
-        console.log("✅ Expo Token obtained:", expoPushToken.data);
-        return expoPushToken.data;
-      }
-    } catch (error) {
-      console.error("❌ Error getting push token:", error);
+ private async getPushToken(): Promise<string | undefined> {
+  try {
+    console.log("📱 Getting Expo push token...");
+
+    const projectId =
+      Constants?.expoConfig?.extra?.eas?.projectId ??
+      Constants?.easConfig?.projectId;
+
+    console.log("📱 ProjectId:", projectId);
+
+    if (!projectId) {
+      console.error(
+        "❌ Missing EAS projectId. Check app.json -> expo.extra.eas.projectId"
+      );
       return undefined;
     }
+
+    const expoPushToken = await Notifications.getExpoPushTokenAsync({
+      projectId,
+    });
+
+    console.log("✅ Expo Push Token obtained:", expoPushToken.data);
+    return expoPushToken.data;
+  } catch (error) {
+    console.error("❌ Error getting Expo push token:", error);
+    return undefined;
   }
+}
 
   /**
    * ⭐ Register for push notifications

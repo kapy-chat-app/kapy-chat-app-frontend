@@ -376,6 +376,7 @@
     "actions": {
       "addFriend": "Add Friend",
       "message": "Message",
+      "creatingConversation": "Creating...",
       "requestSent": "Request Sent",
       "cancelRequest": "Cancel Request",
       "unfriend": "Unfriend",
@@ -433,6 +434,9 @@
     },
     "report": {
       "success": "User reported successfully"
+    },
+    "message": {
+      "failed": "Failed to create conversation. Please try again."
     }
   },
   "blockedUsers": {
@@ -522,6 +526,42 @@
       "averageScores": "Average Scores",
       "byContext": "By Context",
       "confidence": "{{percent}}% confidence"
+    },
+    "counselor": {
+      "title": "AI Emotion Counseling",
+      "analyzing": "Analyzing emotions...",
+      "noData": "Not enough data to analyze. Start recording your emotions!",
+      "acuteWarning": "You're experiencing strong emotions. Consider seeking support.",
+      "chatButton": "Chat with AI for Counseling",
+      "emotionBalance": "Emotion Balance",
+      "viewDetails": "View Details",
+      "refresh": "Refresh Analysis",
+      "loading": "Analyzing...",
+      "recommendations": "Suggestions",
+      "viewFull": "View Full Analysis",
+      "more": "more suggestions"
+    },
+    "filter": {
+      "title": "Filter",
+      "context": "Context",
+      "timeRange": "Time Range",
+      "days": "{{count}} days",
+      "clear": "Clear",
+      "apply": "Apply"
+    },
+
+    "contexts": {
+      "message": "Message",
+      "voice_note": "Voice Note",
+      "call": "Call",
+      "general": "General"
+    },
+
+    "delete": {
+      "confirmTitle": "Delete",
+      "confirmMessage": "Are you sure you want to delete this emotion record?",
+      "success": "Emotion record deleted successfully",
+      "failed": "Failed to delete emotion record"
     }
   },
 
@@ -562,7 +602,8 @@
       "title": "AI Suggestions for You",
       "showSuggestions": "Show Suggestions",
       "startWith": "Start with topics:",
-      "count": "{{count}} suggestions"
+      "count": "{{count}} suggestions",
+      "smartTitle": "Suggestions for you"
     },
 
     "empty": {
@@ -669,6 +710,8 @@
     "hoursAgo": "{{hours}}h ago",
     "daysAgo": "{{days}}d ago",
     "members": "{{count}} members",
+    "unknownUser": "Unknown",
+    "recalled": "This message was recalled",
     "ai": {
       "toxicWarning": "Inappropriate Content Detected",
       "toxicMessage": "This message contains potentially offensive content. Please be kind.",
@@ -679,7 +722,9 @@
       "imageToxicTitle": "Inappropriate Image",
       "imageToxicMessage": "This image contains inappropriate content: {{categories}}",
       "checkingImage": "Checking image for inappropriate content...",
-      "cannotEncrypt": "Cannot encrypt"
+      "cannotEncrypt": "Cannot encrypt",
+      "retry": "Retry",
+      "retryDecryption": "Retry Decryption"
     },
     "encryption": {
       "initializing": "🔐 Initializing encryption...",
@@ -710,15 +755,16 @@
     "actions": {
       "reply": "Reply",
       "react": "React",
-      "delete": "Delete",
       "edit": "Edit",
+      "recall": "Recall",
+      "delete": "Delete",
       "viewReads": "View Reads",
-      "deleteTitle": "Delete Message",
-      "deleteMessage": "Choose delete option:",
       "deleteForMe": "Delete for me",
       "deleteForEveryone": "Delete for everyone",
-      "deleteTitle": "Delete Conversation",
-      "deleteMessage": "Are you sure you want to delete this conversation? Messages will only be deleted on your side.",
+      "deleteTitle": "Delete Message",
+      "deleteMessage": "Choose delete option:",
+      "recallTitle": "Recall Message",
+      "recallMessage": "Are you sure you want to recall this message? All recipients will no longer be able to view the content.",
       "leaveGroup": "Leave Group",
       "leaveGroupConfirm": "Are you sure you want to leave this group?",
       "leaveGroupSuccess": "Left the group successfully",
@@ -735,6 +781,13 @@
     },
     "edited": "edited",
     "readBy": "Read by {{count}}",
+    "edit": {
+      "title": "Edit Message",
+      "placeholder": "Enter your message...",
+      "characters": "characters",
+      "emptyContent": "Message cannot be empty",
+      "failed": "Failed to edit message"
+    },
     "call": {
       "video": {
         "title": "Start Video Call",
@@ -971,6 +1024,11 @@
   },
   "encryption": {
     "initializing": "Initializing encryption...",
+    "setup": {
+      "mandatory": "Encryption Setup Required",
+      "required": "🔒 Encryption Required",
+      "description": "Create a backup password to secure your messages. You can skip and create it later."
+    },
     "backup": {
       "title": "Secure Your Messages",
       "description": "Create a backup password to recover your encrypted messages on other devices or if you reinstall the app.",
@@ -983,34 +1041,40 @@
       "hint": "Use a password you won't forget. You'll need it to restore messages.",
       "creating": "Creating Backup...",
       "createButton": "Create Secure Backup",
-      "skipButton": "Skip for Now (Not Recommended)",
-      "skipWarning": "Without a backup, you'll lose all messages if you reinstall the app or switch devices.",
+      "skipButton": "Skip for Now",
+      "skipTitle": "Skip Backup?",
+      "skipWarning": "You can create a backup later in Settings. Continue without backup?",
       "passwordTooShort": "Password must be at least 8 characters long",
       "passwordMismatch": "Passwords do not match",
       "recommendTitle": "Backup Your Keys",
-      "recommendMessage": "We recommend creating a backup password to protect your encryption keys. This will allow you to recover your messages if you lose your device.",
+      "recommendMessage": "Create a backup to protect your encryption keys",
       "createNow": "Create Now",
       "later": "Later",
       "createForExistingTitle": "Create Backup",
-      "createForExistingDescription": "Create a backup password to protect your existing encryption keys",
+      "createForExistingDescription": "Create a backup password to protect your encryption keys",
       "alreadyExists": "You already have a backup",
-      "created": "Backup created successfully"
+      "created": "Backup created successfully",
+      "required": "Backup Required",
+      "mandatoryForExisting": "Backup is required for existing users",
+      "warningMessage": "Without a backup password, you may permanently lose access to encrypted messages if you reinstall the app or change devices.",
+      "createdSuccess": "Backup created successfully"
     },
     "restore": {
-      "title": "Restore Your Messages",
-      "description": "Enter your backup password to restore your encrypted messages and continue your conversations.",
+      "title": "Restore Your Keys",
+      "description": "Enter your backup password to restore your encryption keys",
       "passwordLabel": "Backup Password",
       "passwordPlaceholder": "Enter your backup password",
-      "info": "This is the password you created when you first set up encryption. If you've forgotten it, you'll need to start fresh.",
-      "restoring": "Restoring Messages...",
-      "restoreButton": "Restore My Messages",
-      "startFreshButton": "Start Fresh (Lose Old Messages)",
+      "info": "This is the password you created when you first set up encryption.",
+      "restoring": "Restoring...",
+      "restoreButton": "Restore Keys",
+      "startFreshButton": "Start fresh instead",
       "startFreshTitle": "Start Fresh?",
-      "startFreshWarning": "This will create new encryption keys. You won't be able to read your old messages. Are you sure?",
+      "startFreshWarning": "This will create new keys. You will lose access to old messages.",
       "startFreshConfirm": "Start Fresh",
-      "passwordRequired": "Please enter your backup password",
-      "invalidPassword": "Invalid password or corrupted backup data. Please try again.",
-      "success": "Your messages have been restored successfully!"
+      "passwordRequired": "Password is required",
+      "invalidPassword": "Invalid password or corrupted backup",
+      "success": "Keys restored successfully"
     }
-  }
+  },
+  "continue": "Continue"
 }

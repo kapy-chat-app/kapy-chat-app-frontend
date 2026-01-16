@@ -403,7 +403,7 @@
     "website": "Website",
     "status": "Trạng thái",
     "friends": "Bạn bè",
-    "mutual": "Bạn chung",
+    "mutual": "Chung",
     "online": "Trực tuyến",
     "offline": "Ngoại tuyến",
     "recentlyOnline": "Vừa trực tuyến",
@@ -411,15 +411,16 @@
     "daysAgo": "{{days}} ngày trước",
     "blocked": {
       "title": "Người dùng này đã bị chặn",
-      "message": "Bạn đã chặn người dùng này và không thể xem hồ sơ của họ"
+      "message": "Bạn đã chặn người này và không thể xem hồ sơ"
     },
     "private": {
-      "title": "Hồ sơ này ở chế độ riêng tư",
-      "message": "Gửi lời mời kết bạn để xem thêm chi tiết"
+      "title": "Hồ sơ riêng tư",
+      "message": "Gửi lời mời kết bạn để xem chi tiết"
     },
     "actions": {
-      "addFriend": "Kết bạn",
+      "addFriend": "Thêm bạn",
       "message": "Nhắn tin",
+      "creatingConversation": "Đang tạo...",
       "requestSent": "Đã gửi lời mời",
       "cancelRequest": "Hủy lời mời",
       "unfriend": "Hủy kết bạn",
@@ -428,6 +429,9 @@
       "blockUser": "Chặn",
       "acceptRequest": "Chấp nhận",
       "declineRequest": "Từ chối"
+    },
+    "message": {
+      "failed": "Không thể tạo cuộc trò chuyện. Vui lòng thử lại."
     },
     "cancelRequest": {
       "title": "Hủy lời mời",
@@ -439,44 +443,44 @@
     },
     "unfriend": {
       "title": "Hủy kết bạn",
-      "message": "Bạn có chắc muốn hủy kết bạn với {{name}}?",
+      "message": "Bạn có chắc muốn xóa {{name}} khỏi danh sách bạn bè?",
       "confirm": "Hủy kết bạn",
-      "success": "Đã hủy kết bạn",
-      "failed": "Không thể hủy kết bạn"
+      "success": "Đã xóa bạn bè thành công",
+      "failed": "Không thể xóa bạn bè"
     },
     "declineRequest": {
       "title": "Từ chối lời mời",
       "message": "Bạn có chắc muốn từ chối lời mời kết bạn này?",
       "confirm": "Từ chối",
-      "success": "Đã từ chối lời mời",
+      "success": "Đã từ chối lời mời kết bạn",
       "failed": "Không thể từ chối lời mời"
     },
     "block": {
       "confirmTitle": "Chặn người dùng",
       "confirmMessage": "Bạn có chắc muốn chặn {{name}}? Họ sẽ không thể liên hệ hoặc xem hồ sơ của bạn.",
       "reasonTitle": "Lý do chặn (Tùy chọn)",
-      "reasonDescription": "Tại sao bạn chặn người dùng này? Điều này sẽ giúp chúng tôi cải thiện nền tảng.",
+      "reasonDescription": "Tại sao bạn chặn người này? Điều này giúp chúng tôi cải thiện nền tảng.",
       "reasonPlaceholder": "Nhập lý do (tùy chọn)...",
       "blocking": "Đang chặn...",
       "skip": "Bỏ qua",
       "block": "Chặn",
-      "success": "Đã chặn người dùng",
+      "success": "Đã chặn người dùng thành công",
       "failed": "Không thể chặn người dùng",
-      "unexpectedError": "Đã xảy ra lỗi khi chặn người dùng"
+      "unexpectedError": "Có lỗi xảy ra khi chặn người dùng"
     },
     "friendRequest": {
       "success": "Đã gửi lời mời kết bạn",
       "failed": "Không thể gửi lời mời kết bạn",
       "accepted": "Đã chấp nhận lời mời kết bạn",
       "acceptFailed": "Không thể chấp nhận lời mời",
-      "declineInfo": "Tính năng từ chối chưa được triển khai",
+      "declineInfo": "Chức năng từ chối chưa được triển khai",
       "notFound": "Không tìm thấy lời mời kết bạn"
     },
     "share": {
-      "info": "Tính năng chia sẻ chưa được triển khai"
+      "info": "Chức năng chia sẻ chưa được triển khai"
     },
     "report": {
-      "success": "Đã báo cáo người dùng"
+      "success": "Đã báo cáo người dùng thành công"
     }
   },
   "blockedUsers": {
@@ -521,6 +525,42 @@
       "averageScores": "Điểm trung bình",
       "byContext": "Theo ngữ cảnh",
       "confidence": "Độ tin cậy {{percent}}%"
+    },
+    "counselor": {
+      "title": "Tư vấn cảm xúc AI",
+      "analyzing": "Đang phân tích cảm xúc...",
+      "noData": "Chưa có đủ dữ liệu để phân tích. Hãy ghi nhận cảm xúc của bạn!",
+      "acuteWarning": "Bạn đang có cảm xúc mạnh. Hãy cân nhắc tìm kiếm sự hỗ trợ.",
+      "chatButton": "Trò chuyện với AI để được tư vấn",
+      "emotionBalance": "Cân bằng cảm xúc",
+      "viewDetails": "Xem chi tiết",
+      "refresh": "Làm mới phân tích",
+      "loading": "Đang phân tích...",
+      "recommendations": "Gợi ý",
+      "viewFull": "Xem đầy đủ phân tích",
+      "more": "gợi ý khác"
+    },
+    "filter": {
+      "title": "Bộ lọc",
+      "context": "Ngữ cảnh",
+      "timeRange": "Khoảng thời gian",
+      "days": "{{count}} ngày",
+      "clear": "Xóa bộ lọc",
+      "apply": "Áp dụng"
+    },
+
+    "contexts": {
+      "message": "Tin nhắn",
+      "voice_note": "Ghi âm",
+      "call": "Cuộc gọi",
+      "general": "Chung"
+    },
+
+    "delete": {
+      "confirmTitle": "Xóa",
+      "confirmMessage": "Bạn có chắc chắn muốn xóa bản ghi cảm xúc này?",
+      "success": "Đã xóa bản ghi cảm xúc thành công",
+      "failed": "Không thể xóa bản ghi cảm xúc"
     }
   },
 
@@ -561,7 +601,8 @@
       "title": "Gợi ý AI cho bạn",
       "showSuggestions": "Hiển thị gợi ý",
       "startWith": "Bắt đầu với các chủ đề:",
-      "count": "{{count}} gợi ý"
+      "count": "{{count}} gợi ý",
+      "smartTitle": "Gợi ý cho bạn"
     },
 
     "empty": {
@@ -668,6 +709,8 @@
     "hoursAgo": "{{hours}} giờ trước",
     "daysAgo": "{{days}} ngày trước",
     "members": "{{count}} thành viên",
+     "unknownUser": "Không rõ",
+    "recalled": "Tin nhắn đã bị thu hồi",
     "ai": {
       "toxicWarning": "Phát hiện nội dung không phù hợp",
       "toxicMessage": "Tin nhắn này có thể chứa nội dung xúc phạm. Hãy lịch sự hơn nhé.",
@@ -678,7 +721,9 @@
       "imageToxicTitle": "Hình ảnh không phù hợp",
       "imageToxicMessage": "Hình ảnh chứa nội dung không phù hợp: {{categories}}",
       "checkingImage": "Đang kiểm tra nội dung hình ảnh...",
-      "cannotEncrypt": "Không thể mã hóa"
+      "cannotEncrypt": "Không thể mã hóa",
+      "retry": "Thử lại",
+      "retryDecryption": "Thử giải mã lại"
     },
     "encryption": {
       "initializing": "🔐 Đang khởi tạo mã hóa...",
@@ -706,27 +751,29 @@
       "replyingTo": "Trả lời {{name}}",
       "cancel": "Hủy"
     },
+
     "actions": {
       "reply": "Trả lời",
-      "react": "Phản ứng",
-      "delete": "Xóa",
+      "react": "Thả cảm xúc",
       "edit": "Chỉnh sửa",
-      "viewReads": "Xem đã đọc",
+      "recall": "Thu hồi",
+      "delete": "Xóa",
+      "viewReads": "Xem ai đã đọc",
+      "deleteForMe": "Xóa với tôi",
+      "deleteForEveryone": "Xóa với mọi người",
       "deleteTitle": "Xóa tin nhắn",
-      "deleteMessage": "Chọn cách xóa:",
-      "deleteForMe": "Xóa ở phía tôi",
-      "deleteForEveryone": "Xóa ở mọi người",
-      "deleteTitle": "Xóa cuộc trò chuyện",
-      "deleteMessage": "Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Tin nhắn chỉ bị xóa ở phía bạn.",
+      "deleteMessage": "Chọn tùy chọn xóa:",
+      "recallTitle": "Thu hồi tin nhắn",
+      "recallMessage": "Bạn có chắc muốn thu hồi tin nhắn này? Tất cả người nhận sẽ không thể xem nội dung.",
       "leaveGroup": "Rời nhóm",
-      "leaveGroupConfirm": "Bạn có chắc chắn muốn rời khỏi nhóm này?",
-      "leaveGroupSuccess": "Đã rời khỏi nhóm thành công",
+      "leaveGroupConfirm": "Bạn có chắc muốn rời khỏi nhóm này?",
+      "leaveGroupSuccess": "Đã rời nhóm thành công",
       "removeMember": "Xóa thành viên",
-      "removeMemberConfirm": "Bạn có chắc chắn muốn xóa {{name}} khỏi nhóm?",
+      "removeMemberConfirm": "Bạn có chắc muốn xóa {{name}} khỏi nhóm?",
       "remove": "Xóa",
       "removeSuccess": "Đã xóa thành viên thành công",
       "transferAdmin": "Chuyển quyền quản trị",
-      "transferAdminConfirm": "Bạn có chắc chắn muốn chuyển quyền quản trị cho {{name}}?",
+      "transferAdminConfirm": "Bạn có chắc muốn chuyển quyền quản trị cho {{name}}?",
       "transfer": "Chuyển",
       "transferSuccess": "Đã chuyển quyền quản trị thành công",
       "deleteConversation": "Xóa cuộc trò chuyện",
@@ -734,6 +781,13 @@
     },
     "edited": "đã chỉnh sửa",
     "readBy": "Đã đọc bởi {{count}}",
+    "edit": {
+      "title": "Chỉnh sửa tin nhắn",
+      "placeholder": "Nhập tin nhắn của bạn...",
+      "characters": "ký tự",
+      "emptyContent": "Tin nhắn không được để trống",
+      "failed": "Không thể chỉnh sửa tin nhắn"
+    },
     "call": {
       "video": {
         "title": "Bắt đầu cuộc gọi video",
@@ -970,46 +1024,57 @@
   },
   "encryption": {
     "initializing": "Đang khởi tạo mã hóa...",
+    "setup": {
+      "mandatory": "🔐 Bắt buộc thiết lập mã hóa",
+      "required": "🔒 Yêu cầu mã hóa",
+      "description": "Tạo mật khẩu sao lưu để bảo vệ tin nhắn. Bạn có thể bỏ qua và tạo sau."
+    },
     "backup": {
-      "title": "Bảo Mật Tin Nhắn",
-      "description": "Tạo mật khẩu sao lưu để khôi phục tin nhắn mã hóa của bạn trên thiết bị khác hoặc khi cài đặt lại ứng dụng.",
-      "passwordLabel": "Mật Khẩu Sao Lưu",
+      "title": "Bảo mật tin nhắn",
+      "description": "Tạo mật khẩu sao lưu để khôi phục tin nhắn mã hóa trên thiết bị khác hoặc khi cài lại ứng dụng.",
+      "passwordLabel": "Mật khẩu sao lưu",
       "passwordPlaceholder": "Tạo mật khẩu mạnh (tối thiểu 8 ký tự)",
-      "confirmPasswordLabel": "Xác Nhận Mật Khẩu",
+      "confirmPasswordLabel": "Xác nhận mật khẩu",
       "confirmPasswordPlaceholder": "Nhập lại mật khẩu",
-      "requirements": "Yêu Cầu Mật Khẩu:",
-      "minLength": "Ít nhất 8 ký tự",
-      "hint": "Sử dụng mật khẩu mà bạn không quên. Bạn sẽ cần nó để khôi phục tin nhắn.",
-      "creating": "Đang Tạo Sao Lưu...",
-      "createButton": "Tạo Sao Lưu An Toàn",
-      "skipButton": "Bỏ Qua (Không Khuyến Nghị)",
-      "skipWarning": "Không có sao lưu, bạn sẽ mất tất cả tin nhắn nếu cài đặt lại ứng dụng hoặc đổi thiết bị.",
+      "requirements": "Yêu cầu mật khẩu:",
+      "minLength": "Tối thiểu 8 ký tự",
+      "hint": "Sử dụng mật khẩu bạn không quên. Bạn sẽ cần nó để khôi phục tin nhắn.",
+      "creating": "Đang tạo sao lưu...",
+      "createButton": "Tạo sao lưu bảo mật",
+      "skipButton": "Bỏ qua",
+      "skipTitle": "Bỏ qua sao lưu?",
+      "skipWarning": "Bạn có thể tạo sao lưu sau trong Cài đặt. Tiếp tục không có sao lưu?",
       "passwordTooShort": "Mật khẩu phải có ít nhất 8 ký tự",
       "passwordMismatch": "Mật khẩu không khớp",
-      "recommendTitle": "Sao Lưu Khóa Của Bạn",
-      "recommendMessage": "Chúng tôi khuyên bạn nên tạo mật khẩu sao lưu để bảo vệ khóa mã hóa của bạn. Điều này sẽ cho phép bạn khôi phục tin nhắn nếu mất thiết bị.",
-      "createNow": "Tạo Ngay",
-      "later": "Để Sau",
-      "createForExistingTitle": "Tạo Sao Lưu",
-      "createForExistingDescription": "Tạo mật khẩu sao lưu để bảo vệ khóa mã hóa hiện tại của bạn",
-      "alreadyExists": "Bạn đã có sao lưu rồi",
-      "created": "Tạo sao lưu thành công"
+      "recommendTitle": "Sao lưu khóa của bạn",
+      "recommendMessage": "Tạo sao lưu để bảo vệ khóa mã hóa",
+      "createNow": "Tạo ngay",
+      "later": "Để sau",
+      "createForExistingTitle": "Tạo sao lưu",
+      "createForExistingDescription": "Tạo mật khẩu sao lưu để bảo vệ khóa mã hóa",
+      "alreadyExists": "Bạn đã có sao lưu",
+      "created": "Tạo sao lưu thành công",
+      "required": "Bắt buộc tạo bản sao lưu",
+      "mandatoryForExisting": "Người dùng hiện tại bắt buộc phải tạo bản sao lưu",
+      "warningMessage": "Nếu không tạo mật khẩu sao lưu, bạn có thể mất vĩnh viễn quyền truy cập vào các tin nhắn đã mã hóa khi cài lại app hoặc đổi thiết bị.",
+      "createdSuccess": "Tạo bản sao lưu thành công"
     },
     "restore": {
-      "title": "Khôi Phục Tin Nhắn",
-      "description": "Nhập mật khẩu sao lưu để khôi phục tin nhắn mã hóa của bạn và tiếp tục cuộc trò chuyện.",
-      "passwordLabel": "Mật Khẩu Sao Lưu",
-      "passwordPlaceholder": "Nhập mật khẩu sao lưu của bạn",
-      "info": "Đây là mật khẩu bạn đã tạo khi thiết lập mã hóa lần đầu. Nếu bạn quên, bạn sẽ cần bắt đầu lại từ đầu.",
-      "restoring": "Đang Khôi Phục Tin Nhắn...",
-      "restoreButton": "Khôi Phục Tin Nhắn",
-      "startFreshButton": "Bắt Đầu Mới (Mất Tin Nhắn Cũ)",
-      "startFreshTitle": "Bắt Đầu Mới?",
-      "startFreshWarning": "Điều này sẽ tạo khóa mã hóa mới. Bạn sẽ không thể đọc tin nhắn cũ. Bạn có chắc không?",
-      "startFreshConfirm": "Bắt Đầu Mới",
-      "passwordRequired": "Vui lòng nhập mật khẩu sao lưu của bạn",
-      "invalidPassword": "Mật khẩu không đúng hoặc dữ liệu sao lưu bị hỏng. Vui lòng thử lại.",
-      "success": "Tin nhắn của bạn đã được khôi phục thành công!"
+      "title": "Khôi phục khóa",
+      "description": "Nhập mật khẩu sao lưu để khôi phục khóa mã hóa",
+      "passwordLabel": "Mật khẩu sao lưu",
+      "passwordPlaceholder": "Nhập mật khẩu sao lưu",
+      "info": "Đây là mật khẩu bạn đã tạo khi thiết lập mã hóa lần đầu.",
+      "restoring": "Đang khôi phục...",
+      "restoreButton": "Khôi phục khóa",
+      "startFreshButton": "Bắt đầu mới",
+      "startFreshTitle": "Bắt đầu mới?",
+      "startFreshWarning": "Điều này sẽ tạo khóa mới. Bạn sẽ mất quyền truy cập vào tin nhắn cũ.",
+      "startFreshConfirm": "Bắt đầu mới",
+      "passwordRequired": "Yêu cầu mật khẩu",
+      "invalidPassword": "Mật khẩu không hợp lệ hoặc sao lưu bị hỏng",
+      "success": "Khôi phục khóa thành công"
     }
-  }
+  },
+  "continue": "Tiếp tục"
 }

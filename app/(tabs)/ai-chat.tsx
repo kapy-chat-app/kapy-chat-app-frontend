@@ -1,4 +1,4 @@
-// app/(root)/ai-chat.tsx - UPDATED WITH SIDEBAR
+// app/(root)/ai-chat.tsx - FIXED KEYBOARD AVOIDING
 import ChatSidebar from "@/components/page/ai/ChatSidebar";
 import Header from "@/components/shared/Header";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -7,6 +7,7 @@ import { useChatbot } from "@/hooks/ai/useChatbot";
 import { useEmotion } from "@/hooks/ai/useEmotion";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import LottieView from "lottie-react-native";
 import React, {
   memo,
   useCallback,
@@ -19,16 +20,27 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Dimensions,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// ============================================
+// RESPONSIVE UTILITIES
+// ============================================
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const isSmallScreen = SCREEN_WIDTH < 375;
+const isMediumScreen = SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 414;
+const botLottie = require("@/assets/lottie/ai/bot.json");
 
 // ============================================
 // TYPES
@@ -85,11 +97,11 @@ const MessageBubble = memo(function MessageBubble({
         opacity: fadeAnim,
         transform: [{ translateX: slideAnim }],
       }}
-      className={`flex-row mb-4 ${isUser ? "justify-end" : "justify-start"}`}
+      className={`flex-row mb-3 ${isUser ? "justify-end" : "justify-start"}`}
     >
       {!isUser && (
         <View
-          className="w-10 h-10 rounded-full bg-orange-500 items-center justify-center mr-2.5"
+          className={`${isSmallScreen ? "w-8 h-8" : "w-10 h-10"} rounded-full bg-orange-500 items-center justify-center ${isSmallScreen ? "mr-2" : "mr-2.5"}`}
           style={{
             shadowColor: "#F97316",
             shadowOffset: { width: 0, height: 2 },
@@ -98,13 +110,22 @@ const MessageBubble = memo(function MessageBubble({
             elevation: 5,
           }}
         >
-          <Text className="text-lg">🤖</Text>
+          <LottieView
+            source={botLottie}
+            autoPlay
+            loop
+            speed={1}
+            style={{
+              width: isSmallScreen ? 26 : 32,
+              height: isSmallScreen ? 26 : 32,
+            }}
+          />
         </View>
       )}
 
       <View className={`max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
         <View
-          className={`rounded-3xl px-5 py-3.5 ${
+          className={`rounded-3xl ${isSmallScreen ? "px-3 py-2.5" : "px-5 py-3.5"} ${
             isUser
               ? "bg-orange-500"
               : isDark
@@ -130,7 +151,7 @@ const MessageBubble = memo(function MessageBubble({
           }
         >
           <Text
-            className={`text-[15px] leading-5 ${
+            className={`${isSmallScreen ? "text-sm" : "text-[15px]"} leading-5 ${
               isUser ? "text-white" : isDark ? "text-gray-100" : "text-gray-800"
             }`}
           >
@@ -139,10 +160,16 @@ const MessageBubble = memo(function MessageBubble({
         </View>
 
         {item.emotion && (
-          <View className="flex-row items-center mt-2 px-2">
-            <Text className="text-xs mr-1.5">{emoji}</Text>
+          <View
+            className={`flex-row items-center ${isSmallScreen ? "mt-1 px-1" : "mt-2 px-2"}`}
+          >
             <Text
-              className="text-xs font-medium capitalize"
+              className={`${isSmallScreen ? "text-[10px]" : "text-xs"} mr-1.5`}
+            >
+              {emoji}
+            </Text>
+            <Text
+              className={`${isSmallScreen ? "text-[10px]" : "text-xs"} font-medium capitalize`}
               style={{ color: emotionColor }}
             >
               {translateEmotion(item.emotion)}
@@ -151,7 +178,7 @@ const MessageBubble = memo(function MessageBubble({
         )}
 
         <Text
-          className={`text-[11px] mt-1.5 px-2 ${
+          className={`text-[10px] ${isSmallScreen ? "mt-1 px-1" : "mt-1.5 px-2"} ${
             isDark ? "text-gray-500" : "text-gray-400"
           }`}
         >
@@ -164,7 +191,7 @@ const MessageBubble = memo(function MessageBubble({
 
       {isUser && (
         <View
-          className="w-10 h-10 rounded-full bg-blue-500 items-center justify-center ml-2.5"
+          className={`${isSmallScreen ? "w-8 h-8" : "w-10 h-10"} rounded-full bg-blue-500 items-center justify-center ${isSmallScreen ? "ml-2" : "ml-2.5"}`}
           style={{
             shadowColor: "#3B82F6",
             shadowOffset: { width: 0, height: 2 },
@@ -173,7 +200,11 @@ const MessageBubble = memo(function MessageBubble({
             elevation: 5,
           }}
         >
-          <Ionicons name="person" size={18} color="white" />
+          <Ionicons
+            name="person"
+            size={isSmallScreen ? 14 : 18}
+            color="white"
+          />
         </View>
       )}
     </Animated.View>
@@ -219,11 +250,22 @@ const TypingIndicator = memo(function TypingIndicator({
 
   return (
     <View className="flex-row items-center mb-4">
-      <View className="w-10 h-10 rounded-full bg-orange-500 items-center justify-center mr-2.5">
-        <Text className="text-lg">🤖</Text>
+      <View
+        className={`${isSmallScreen ? "w-8 h-8" : "w-10 h-10"} rounded-full bg-orange-500 items-center justify-center ${isSmallScreen ? "mr-2" : "mr-2.5"}`}
+      >
+        <LottieView
+          source={botLottie}
+          autoPlay
+          loop
+          speed={1}
+          style={{
+            width: isSmallScreen ? 26 : 32,
+            height: isSmallScreen ? 26 : 32,
+          }}
+        />
       </View>
       <View
-        className={`rounded-3xl px-5 py-4 ${
+        className={`rounded-3xl ${isSmallScreen ? "px-3 py-3" : "px-5 py-4"} ${
           isDark ? "bg-gray-800" : "bg-white border border-gray-100"
         }`}
       >
@@ -252,18 +294,23 @@ const TypingIndicator = memo(function TypingIndicator({
 
 export default function AIChatbotScreen() {
   const { actualTheme } = useTheme();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const isDark = actualTheme === "dark";
   const router = useRouter();
   const params = useLocalSearchParams();
   const flatListRef = useRef<FlatList>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollMetricsRef = useRef({
+    layoutHeight: 0,
+    contentHeight: 0,
+    offsetY: 0,
+  });
 
   const [inputText, setInputText] = useState("");
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const hasLoadedRecommendations = useRef(false);
 
-  // ✅ UPDATED: Use new useChatbot with conversations
   const {
     messages,
     sendMessage,
@@ -279,15 +326,16 @@ export default function AIChatbotScreen() {
     conversationId,
     conversationTitle,
     emotionContext,
+    smartSuggestions,
+    suggestionsLoading,
+    loadSmartSuggestions,
   } = useChatbot(params.conversationId as string);
 
   const { getRecommendations, loading: emotionLoading } = useEmotion();
 
-  // ✅ Get current emotion from emotionContext (from backend)
   const currentEmotion = emotionContext?.emotion || "";
   const emotionConfidence = emotionContext?.confidence || 0;
 
-  // Load recommendations
   const [recommendations, setRecommendations] = useState<string[]>([]);
 
   const loadRecommendations = useCallback(async () => {
@@ -301,14 +349,28 @@ export default function AIChatbotScreen() {
     }
   }, [getRecommendations]);
 
-  // Load history if conversation ID exists
+  const scrollToBottom = () => {
+    // ✅ only scroll if user is at bottom
+    if (!isAtBottomRef.current) return;
+
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+  };
+
+  useEffect(() => {
+    const subShow = Keyboard.addListener("keyboardDidShow", () => {
+      scrollToBottom();
+    });
+
+    return () => subShow.remove();
+  }, []);
   useEffect(() => {
     if (params.conversationId) {
       loadHistory(params.conversationId as string);
     }
   }, [params.conversationId, loadHistory]);
 
-  // Load recommendations on mount
   useEffect(() => {
     if (!hasLoadedRecommendations.current) {
       hasLoadedRecommendations.current = true;
@@ -316,16 +378,12 @@ export default function AIChatbotScreen() {
     }
   }, [loadRecommendations]);
 
-  // Auto scroll
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      scrollToBottom();
     }
   }, [messages.length]);
 
-  // ✅ MEMOIZED FUNCTIONS
   const getEmotionEmoji = useCallback((emotion?: string) => {
     const emojiMap: Record<string, string> = {
       joy: "😊",
@@ -389,7 +447,19 @@ export default function AIChatbotScreen() {
     );
   }, [clearConversation, t]);
 
-  // ✅ NEW: Sidebar handlers
+  const handleSuggestionPress = useCallback(
+    async (suggestion: string) => {
+      setInputText(suggestion);
+      setTimeout(async () => {
+        if (!loading) {
+          setInputText("");
+          await sendMessage(suggestion);
+        }
+      }, 150);
+    },
+    [loading, sendMessage]
+  );
+
   const handleSelectConversation = useCallback(
     (convId: string) => {
       setSidebarVisible(false);
@@ -408,7 +478,6 @@ export default function AIChatbotScreen() {
     [deleteConversation, conversationId, clearConversation]
   );
 
-  // ✅ RENDER FUNCTIONS
   const renderMessage = useCallback(
     ({ item, index }: { item: any; index: number }) => {
       return (
@@ -432,102 +501,190 @@ export default function AIChatbotScreen() {
 
   const renderEmptyState = useCallback(
     () => (
-      <View className="flex-1 justify-center items-center px-8">
-        <View
-          className="w-24 h-24 rounded-full bg-orange-500 items-center justify-center mb-6"
-          style={{
-            shadowColor: "#F97316",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
-          }}
-        >
-          <Text className="text-5xl">🤖</Text>
-        </View>
-
-        <Text
-          className={`text-2xl font-bold text-center mb-2 ${
-            isDark ? "text-white" : "text-gray-900"
-          }`}
-        >
-          {t("aiChat.empty.title")}
-        </Text>
-
-        {currentEmotion && (
-          <View className="flex-row items-center mb-4">
-            <Text className="text-2xl mr-2">
-              {getEmotionEmoji(currentEmotion)}
-            </Text>
-            <View>
-              <Text
-                className="text-base font-semibold capitalize"
-                style={{ color: getEmotionColor(currentEmotion) }}
-              >
-                {translateEmotion(currentEmotion)}
-              </Text>
-              <Text
-                className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
-              >
-                {t("aiChat.empty.confidence", {
-                  percent: (emotionConfidence * 100).toFixed(0),
-                })}
-              </Text>
-            </View>
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: "center",
+          paddingHorizontal: isSmallScreen ? 16 : 24,
+          paddingBottom: 16,
+        }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="items-center">
+          <View
+            className={`${isSmallScreen ? "w-20 h-20" : "w-24 h-24"} rounded-full items-center justify-center mb-4`}
+          >
+            <LottieView
+              source={botLottie}
+              autoPlay
+              loop
+              speed={1}
+              style={{
+                width: isSmallScreen ? 80 : 92,
+                height: isSmallScreen ? 80 : 92,
+              }}
+            />
           </View>
-        )}
 
-        <Text
-          className={`text-center mb-8 leading-6 ${
-            isDark ? "text-gray-400" : "text-gray-600"
-          }`}
-        >
-          {t("aiChat.empty.subtitle")}
-        </Text>
+          <Text
+            className={`${isSmallScreen ? "text-xl" : "text-2xl"} font-bold text-center mb-2 ${
+              isDark ? "text-white" : "text-gray-900"
+            }`}
+          >
+            {t("aiChat.empty.title")}
+          </Text>
 
-        {recommendations.length > 0 && (
-          <View className="w-full">
-            <Text
-              className={`text-sm font-semibold mb-4 text-center ${
-                isDark ? "text-gray-400" : "text-gray-600"
-              }`}
-            >
-              💡 {t("aiChat.suggestions.startWith")}
-            </Text>
-            {recommendations.slice(0, 3).map((rec, index) => (
-              <TouchableOpacity
-                key={`empty-rec-${index}`}
-                onPress={() => setInputText(rec)}
-                className={`p-4 rounded-2xl mb-3 border-l-4 ${
-                  isDark
-                    ? "bg-orange-900/20 border-orange-800/30"
-                    : "bg-orange-50 border-orange-100"
-                }`}
-                style={{
-                  borderLeftColor: getEmotionColor(currentEmotion) || "#F97316",
-                }}
+          {currentEmotion && (
+            <View className="flex-row items-center mb-3">
+              <Text
+                className={isSmallScreen ? "text-xl mr-2" : "text-2xl mr-2"}
               >
+                {getEmotionEmoji(currentEmotion)}
+              </Text>
+              <View>
                 <Text
-                  className={`text-sm ${
+                  className={`${isSmallScreen ? "text-sm" : "text-base"} font-semibold capitalize`}
+                  style={{ color: getEmotionColor(currentEmotion) }}
+                >
+                  {translateEmotion(currentEmotion)}
+                </Text>
+                <Text
+                  className={`text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}
+                >
+                  {t("aiChat.empty.confidence", {
+                    percent: (emotionConfidence * 100).toFixed(0),
+                  })}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          <Text
+            className={`text-center mb-4 ${isSmallScreen ? "text-sm" : "text-base"} leading-6 ${
+              isDark ? "text-gray-400" : "text-gray-600"
+            }`}
+          >
+            {t("aiChat.empty.subtitle")}
+          </Text>
+
+          {smartSuggestions.length > 0 && (
+            <View className="w-full mb-4">
+              <View className="flex-row items-center justify-between mb-3">
+                <Text
+                  className={`${isSmallScreen ? "text-xs" : "text-sm"} font-semibold ${
                     isDark ? "text-orange-400" : "text-orange-600"
                   }`}
                 >
-                  {rec}
+                  💡 {t("aiChat.suggestions.smartTitle") || "Gợi ý cho bạn"}
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </View>
+                <TouchableOpacity
+                  onPress={loadSmartSuggestions}
+                  disabled={suggestionsLoading}
+                  className="p-1"
+                >
+                  {suggestionsLoading ? (
+                    <ActivityIndicator size="small" color="#F97316" />
+                  ) : (
+                    <Ionicons
+                      name="refresh"
+                      size={isSmallScreen ? 16 : 18}
+                      color="#F97316"
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {smartSuggestions.map((suggestion, index) => (
+                <TouchableOpacity
+                  key={`smart-suggestion-${index}`}
+                  onPress={() => handleSuggestionPress(suggestion)}
+                  className={`${isSmallScreen ? "p-3" : "p-4"} rounded-2xl mb-2.5 border-l-4 ${
+                    isDark
+                      ? "bg-gradient-to-r from-orange-900/20 to-transparent border-orange-800/40"
+                      : "bg-gradient-to-r from-orange-50 to-transparent border-orange-200"
+                  }`}
+                  style={{
+                    borderLeftColor:
+                      getEmotionColor(currentEmotion) || "#F97316",
+                  }}
+                >
+                  <View className="flex-row items-center">
+                    <Ionicons
+                      name="bulb-outline"
+                      size={isSmallScreen ? 14 : 16}
+                      color={isDark ? "#FB923C" : "#EA580C"}
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text
+                      className={`${isSmallScreen ? "text-xs" : "text-sm"} flex-1 ${
+                        isDark ? "text-orange-300" : "text-orange-700"
+                      }`}
+                      numberOfLines={3}
+                    >
+                      {suggestion}
+                    </Text>
+                    <Ionicons
+                      name="send"
+                      size={isSmallScreen ? 12 : 14}
+                      color={isDark ? "#9CA3AF" : "#D1D5DB"}
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {smartSuggestions.length === 0 && recommendations.length > 0 && (
+            <View className="w-full">
+              <Text
+                className={`${isSmallScreen ? "text-xs" : "text-sm"} font-semibold mb-3 text-center ${
+                  isDark ? "text-gray-400" : "text-gray-600"
+                }`}
+              >
+                💡 {t("aiChat.suggestions.startWith")}
+              </Text>
+              {recommendations.slice(0, 3).map((rec, index) => (
+                <TouchableOpacity
+                  key={`fallback-rec-${index}`}
+                  onPress={() => handleSuggestionPress(rec)}
+                  className={`${isSmallScreen ? "p-3" : "p-4"} rounded-2xl mb-2.5 border-l-4 ${
+                    isDark
+                      ? "bg-orange-900/20 border-orange-800/30"
+                      : "bg-orange-50 border-orange-100"
+                  }`}
+                  style={{
+                    borderLeftColor:
+                      getEmotionColor(currentEmotion) || "#F97316",
+                  }}
+                >
+                  <Text
+                    className={`${isSmallScreen ? "text-xs" : "text-sm"} ${
+                      isDark ? "text-orange-400" : "text-orange-600"
+                    }`}
+                    numberOfLines={3}
+                  >
+                    {rec}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
     ),
     [
       currentEmotion,
       emotionConfidence,
+      smartSuggestions,
+      suggestionsLoading,
       recommendations,
       isDark,
       getEmotionEmoji,
       getEmotionColor,
       translateEmotion,
+      handleSuggestionPress,
+      loadSmartSuggestions,
       t,
     ]
   );
@@ -536,16 +693,16 @@ export default function AIChatbotScreen() {
 
   const headerRightComponent = useMemo(
     () => (
-      <View className="flex-row items-center gap-2">
+      <View className="flex-row items-center gap-1">
         {currentEmotion && (
           <View
-            className={`flex-row items-center px-3 py-1 rounded-full ${isDark ? "bg-gray-800" : "bg-gray-100"}`}
+            className={`flex-row items-center ${isSmallScreen ? "px-2 py-0.5" : "px-3 py-1"} rounded-full ${isDark ? "bg-gray-800" : "bg-gray-100"}`}
           >
-            <Text className="text-sm mr-1">
+            <Text className={isSmallScreen ? "text-xs mr-1" : "text-sm mr-1"}>
               {getEmotionEmoji(currentEmotion)}
             </Text>
             <Text
-              className="text-xs font-semibold capitalize"
+              className={`${isSmallScreen ? "text-[10px]" : "text-xs"} font-semibold capitalize`}
               style={{ color: getEmotionColor(currentEmotion) }}
             >
               {translateEmotion(currentEmotion)}
@@ -554,10 +711,13 @@ export default function AIChatbotScreen() {
         )}
 
         {conversationId && (
-          <TouchableOpacity onPress={handleNewChat} className="p-2">
+          <TouchableOpacity
+            onPress={handleNewChat}
+            className={isSmallScreen ? "p-1" : "p-2"}
+          >
             <Ionicons
               name="add-circle-outline"
-              size={24}
+              size={isSmallScreen ? 20 : 24}
               color={isDark ? "#F97316" : "#FF8C42"}
             />
           </TouchableOpacity>
@@ -565,7 +725,7 @@ export default function AIChatbotScreen() {
 
         <TouchableOpacity
           onPress={handleRefreshRecommendations}
-          className="p-2"
+          className={isSmallScreen ? "p-1" : "p-2"}
           disabled={emotionLoading}
         >
           {emotionLoading ? (
@@ -576,20 +736,19 @@ export default function AIChatbotScreen() {
           ) : (
             <Ionicons
               name="refresh"
-              size={24}
+              size={isSmallScreen ? 20 : 24}
               color={isDark ? "#F97316" : "#FF8C42"}
             />
           )}
         </TouchableOpacity>
 
-        {/* ✅ NEW: Menu button for sidebar */}
         <TouchableOpacity
           onPress={() => setSidebarVisible(true)}
-          className="p-2"
+          className={isSmallScreen ? "p-1" : "p-2"}
         >
           <Ionicons
             name="menu"
-            size={24}
+            size={isSmallScreen ? 20 : 24}
             color={isDark ? "#F97316" : "#FF8C42"}
           />
         </TouchableOpacity>
@@ -619,12 +778,14 @@ export default function AIChatbotScreen() {
         rightComponent={headerRightComponent}
       />
 
+      {/* ✅ WRAP ALL CHAT UI */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1"
-        keyboardVerticalOffset={0}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
-        <View className="flex-1">
+        {/* CHAT LIST */}
+        <View style={{ flex: 1 }}>
           {messages.length === 0 ? (
             renderEmptyState()
           ) : (
@@ -633,29 +794,68 @@ export default function AIChatbotScreen() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={(item, index) => `message-${index}`}
-              contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
+              contentContainerStyle={{
+                padding: isSmallScreen ? 12 : 16,
+                paddingBottom: 12,
+              }}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={renderTypingIndicator}
+              // ✅ detect bottom
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                const { layoutMeasurement, contentOffset, contentSize } =
+                  e.nativeEvent;
+
+                const layoutHeight = layoutMeasurement.height;
+                const offsetY = contentOffset.y;
+                const contentHeight = contentSize.height;
+
+                scrollMetricsRef.current = {
+                  layoutHeight,
+                  offsetY,
+                  contentHeight,
+                };
+
+                // threshold = khoảng cách tính là "đang ở bottom"
+                const threshold = 80;
+                const distanceFromBottom =
+                  contentHeight - (offsetY + layoutHeight);
+
+                isAtBottomRef.current = distanceFromBottom <= threshold;
+              }}
+              // ✅ keep metrics correct when list changes size
+              onLayout={(e) => {
+                scrollMetricsRef.current.layoutHeight =
+                  e.nativeEvent.layout.height;
+              }}
               onContentSizeChange={() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
+                // ✅ khi content tăng (message mới), scroll chỉ khi user đang bottom
+                scrollToBottom();
               }}
               removeClippedSubviews={true}
               maxToRenderPerBatch={10}
               updateCellsBatchingPeriod={50}
               initialNumToRender={10}
               windowSize={10}
+              keyboardShouldPersistTaps="handled"
             />
           )}
         </View>
 
+        {/* ✅ INPUT BAR (NO keyboardHeight padding anymore) */}
         <View
-          className={`border-t px-4 py-3 ${
+          className={`border-t ${isSmallScreen ? "px-3 py-2" : "px-4 py-3"} ${
             isDark ? "border-gray-800 bg-black" : "border-gray-200 bg-white"
           }`}
+          style={{
+            paddingBottom: isSmallScreen ? 8 : 12,
+          }}
         >
-          <View className="flex-row items-end gap-2">
+          <View
+            className={`flex-row items-end ${isSmallScreen ? "gap-1.5" : "gap-2"}`}
+          >
             <View
-              className={`flex-1 rounded-3xl px-5 py-3 min-h-[44px] max-h-[120px] justify-center ${
+              className={`flex-1 rounded-3xl ${isSmallScreen ? "px-3 py-2" : "px-5 py-3"} min-h-[44px] max-h-[100px] justify-center ${
                 isDark
                   ? "bg-gray-800 border border-gray-700"
                   : "bg-gray-100 border border-gray-200"
@@ -666,20 +866,23 @@ export default function AIChatbotScreen() {
                 onChangeText={setInputText}
                 placeholder={t("aiChat.placeholder")}
                 placeholderTextColor={isDark ? "#9CA3AF" : "#6B7280"}
-                className={`text-[15px] leading-5 ${
+                className={`${isSmallScreen ? "text-sm" : "text-[15px]"} leading-5 ${
                   isDark ? "text-white" : "text-gray-900"
                 }`}
                 multiline
                 maxLength={500}
                 editable={!loading}
                 style={{ paddingTop: Platform.OS === "ios" ? 0 : 4 }}
+                onFocus={() => {
+                  scrollToBottom();
+                }}
               />
             </View>
 
             <TouchableOpacity
               onPress={handleSend}
               disabled={!inputHasText || loading}
-              className={`w-11 h-11 rounded-full items-center justify-center ${
+              className={`${isSmallScreen ? "w-10 h-10" : "w-11 h-11"} rounded-full items-center justify-center ${
                 inputHasText && !loading
                   ? "bg-orange-500"
                   : isDark
@@ -703,7 +906,7 @@ export default function AIChatbotScreen() {
               ) : (
                 <Ionicons
                   name="send"
-                  size={18}
+                  size={isSmallScreen ? 16 : 18}
                   color={
                     inputHasText && !loading
                       ? "white"
@@ -718,7 +921,7 @@ export default function AIChatbotScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* ✅ NEW: Sidebar Modal */}
+      {/* MODAL (KEEP SAME) */}
       <Modal
         visible={sidebarVisible}
         animationType="slide"
@@ -732,7 +935,9 @@ export default function AIChatbotScreen() {
             onPress={() => setSidebarVisible(false)}
           />
           <View
-            className={`w-80 ${isDark ? "bg-gray-900" : "bg-white"}`}
+            className={`${isSmallScreen ? "w-[85%]" : isMediumScreen ? "w-80" : "w-96"} ${
+              isDark ? "bg-gray-900" : "bg-white"
+            }`}
             style={{
               shadowColor: "#000",
               shadowOpacity: 0.5,

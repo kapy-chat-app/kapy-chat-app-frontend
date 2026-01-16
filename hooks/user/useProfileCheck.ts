@@ -1,69 +1,87 @@
-// hooks/useProfileCheck.ts
+// hooks/user/useProfileCheck.ts
 import { useEffect, useState } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-expo';
-import { useRouter } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
+import { useRouter, useSegments } from 'expo-router';
 import { useUserApi } from '@/hooks/user/useUserApi';
 
-let hasInitialized = false; // Global flag to avoid re-checking
-
 export const useProfileCheck = () => {
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { user, isLoaded: userLoaded } = useUser();
-  const { getUserProfile } = useUserApi(); // Use getUserProfile instead of checkUserProfile
+  const { isSignedIn, isLoaded } = useAuth();
+  const { getUserProfile } = useUserApi();
   const router = useRouter();
+  const segments = useSegments();
   
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
-  const [isCheckingProfile, setIsCheckingProfile] = useState(false);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
 
   useEffect(() => {
-    // Only run once when app starts
-    if (!authLoaded || !userLoaded || hasInitialized) {
+    if (!isLoaded) {
       return;
     }
 
-    hasInitialized = true;
+    const checkProfile = async () => {
+      const inAuthGroup = segments[0] === "(auth)";
+      const inCompleteProfile = segments[0] === "complete-profile";
 
-    const performCheck = async () => {
+      console.log("🔍 [useProfileCheck] Current segments:", segments);
+      console.log("🔍 [useProfileCheck] isSignedIn:", isSignedIn);
+
+      // ⭐ Nếu không đăng nhập
       if (!isSignedIn) {
-        router.replace('/sign-in');
+        if (!inAuthGroup) {
+          console.log("⚠️ [useProfileCheck] Not signed in, redirecting to sign-in");
+          router.replace("/(auth)/sign-in");
+        }
+        setProfileComplete(false);
+        setIsCheckingProfile(false);
         return;
       }
 
-      setIsCheckingProfile(true);
-      
+      // ⭐ Nếu đang ở màn hình complete-profile thì KHÔNG check
+      if (inCompleteProfile) {
+        console.log("✅ [useProfileCheck] Already in complete-profile, skipping check");
+        setIsCheckingProfile(false);
+        return;
+      }
+
+      // ⭐ Đã đăng nhập -> kiểm tra profile
       try {
+        console.log("🔍 [useProfileCheck] Checking profile status...");
         const response = await getUserProfile();
-        console.log('Profile check response:', response);
-        
-        if (response.profileComplete === false) {
-          setProfileComplete(false);
-          router.replace('/complete-profile');
-        } else {
-          setProfileComplete(true);
-          // User has profile, stay on current route
+        console.log("📋 [useProfileCheck] Profile response:", response);
+
+        const hasProfile = response.profileComplete !== false && response.data !== null;
+        setProfileComplete(hasProfile);
+
+        if (!hasProfile && !inCompleteProfile) {
+          console.log("⚠️ [useProfileCheck] No profile found, redirecting to complete-profile");
+          router.replace("/complete-profile");
+        } else if (hasProfile && (inAuthGroup || inCompleteProfile)) {
+          console.log("✅ [useProfileCheck] Profile complete, redirecting to home");
+          router.replace("/");
         }
       } catch (error) {
-        console.error('Profile check error:', error);
+        console.error("❌ [useProfileCheck] Profile check error:", error);
+        // Nếu có lỗi và chưa ở complete-profile, redirect
+        if (!inCompleteProfile) {
+          router.replace("/complete-profile");
+        }
         setProfileComplete(false);
-        router.replace('/complete-profile');
       } finally {
         setIsCheckingProfile(false);
       }
     };
 
-    performCheck();
-  }, [authLoaded, userLoaded, isSignedIn, getUserProfile, router]);
+    checkProfile();
+  }, [isSignedIn, isLoaded, segments]);
 
-  const resetCheck = () => {
-    hasInitialized = false;
+  const markProfileComplete = () => {
+    setProfileComplete(true);
   };
 
   return {
     isCheckingProfile,
     profileComplete,
-    markProfileComplete: () => {
-      setProfileComplete(true);
-    },
-    resetCheck, // For testing or manual reset
+    hasProfile: profileComplete === true, // ⭐ NEW: Thêm hasProfile
+    markProfileComplete,
   };
 };

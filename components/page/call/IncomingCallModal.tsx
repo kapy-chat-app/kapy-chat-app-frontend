@@ -43,16 +43,19 @@ export default function IncomingCallModal({
   const pulseAnim = useState(new Animated.Value(1))[0];
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
+   useEffect(() => {
     if (visible && callData) {
       startVibration();
       startPulseAnimation();
+      setIsProcessing(false); // ⭐ Reset processing state when modal opens
     } else {
       stopVibration();
+      setIsProcessing(false); // ⭐ Reset processing state when modal closes
     }
 
     return () => {
       stopVibration();
+      setIsProcessing(false);
     };
   }, [visible, callData]);
 

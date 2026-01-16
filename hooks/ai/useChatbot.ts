@@ -40,14 +40,23 @@ export const useChatbot = (initialConversationId?: string) => {
 
   const isLoadingHistory = useRef(false);
   const hasLoadedConversations = useRef(false);
+
+  const [smartSuggestions, setSmartSuggestions] = useState<string[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   // Socket listeners
   useEffect(() => {
     if (!socket) return;
+
     socket.on("aiTyping", (data: any) => {
-      if (data.conversation_id === conversationId) setTyping(data.is_typing);
+      // ✅ Chấp nhận typing cho conversation hiện tại hoặc conversation mới
+      if (!conversationId || data.conversation_id === conversationId) {
+        setTyping(data.is_typing);
+      }
     });
+
     socket.on("aiChatResponse", (data: any) => {
-      if (data.conversation_id === conversationId) {
+      // ✅ FIX: Chấp nhận response cho conversation hiện tại HOẶC khi chưa có conversation
+      if (!conversationId || data.conversation_id === conversationId) {
         setMessages((prev) => [
           ...prev,
           {
@@ -59,14 +68,22 @@ export const useChatbot = (initialConversationId?: string) => {
         ]);
         setTyping(false);
         setLoading(false);
+
+        // ✅ Cập nhật conversation_id nếu đây là conversation mới
+        if (!conversationId && data.conversation_id) {
+          setConversationId(data.conversation_id);
+        }
+
         if (data.emotion_context) setEmotionContext(data.emotion_context);
       }
     });
+
     socket.on("aiChatError", (data: any) => {
       setError(data.error);
       setTyping(false);
       setLoading(false);
     });
+
     return () => {
       socket.off("aiTyping");
       socket.off("aiChatResponse");
@@ -214,7 +231,29 @@ export const useChatbot = (initialConversationId?: string) => {
     },
     [getToken, conversationId]
   );
+  const loadSmartSuggestions = useCallback(async () => {
+    try {
+      setSuggestionsLoading(true);
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
 
+      const currentLang =
+        language === "vi" ? "vi" : language === "zh" ? "zh" : "en";
+      const response = await AIAPIService.getSmartSuggestions(
+        token,
+        currentLang,
+        4
+      );
+
+      if (response.success && response.data) {
+        setSmartSuggestions(response.data.suggestions);
+      }
+    } catch (err: any) {
+      console.error("❌ Load suggestions error:", err);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, [getToken, language]);
   const clearConversation = useCallback(() => {
     setMessages([]);
     setConversationId(null);
@@ -229,7 +268,11 @@ export const useChatbot = (initialConversationId?: string) => {
       loadConversations();
     }
   }, []);
-
+  useEffect(() => {
+    if (!conversationId) {
+      loadSmartSuggestions();
+    }
+  }, [conversationId]);
   return {
     messages,
     sendMessage,
@@ -245,5 +288,8 @@ export const useChatbot = (initialConversationId?: string) => {
     conversationId,
     conversationTitle,
     emotionContext,
+    smartSuggestions,
+    suggestionsLoading,
+    loadSmartSuggestions,
   };
 };

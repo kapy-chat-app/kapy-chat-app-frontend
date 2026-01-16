@@ -297,6 +297,7 @@ export interface TranslationKeys {
     actions: {
       addFriend: string;
       message: string;
+      creatingConversation: string;
       requestSent: string;
       cancelRequest: string;
       unfriend: string;
@@ -355,6 +356,9 @@ export interface TranslationKeys {
     report: {
       success: string;
     };
+    message: {
+      failed: string;
+    };
   };
   emotion: {
     title: string;
@@ -363,27 +367,7 @@ export interface TranslationKeys {
       stats: string;
     };
     empty: string;
-    delete: {
-      confirmTitle: string;
-      confirmMessage: string;
-      success: string;
-      failed: string;
-    };
     tryAgain: string;
-    filter: {
-      title: string;
-      context: string;
-      timeRange: string;
-      clear: string;
-      apply: string;
-      days: string;
-    };
-    contexts: {
-      message: string;
-      voice_note: string;
-      call: string;
-      general: string;
-    };
     emotions: {
       joy: string;
       sadness: string;
@@ -401,6 +385,40 @@ export interface TranslationKeys {
       averageScores: string;
       byContext: string;
       confidence: string;
+    };
+    counselor: {
+      title: string;
+      analyzing: string;
+      noData: string;
+      acuteWarning: string;
+      chatButton: string;
+      emotionBalance: string;
+      viewDetails: string;
+      refresh: string;
+      loading: string;
+      recommendations: string;
+      viewFull: string;
+      more: string;
+    };
+    filter: {
+      title: string;
+      context: string;
+      timeRange: string;
+      days: string;
+      clear: string;
+      apply: string;
+    };
+    contexts: {
+      message: string;
+      voice_note: string;
+      call: string;
+      general: string;
+    };
+    delete: {
+      confirmTitle: string;
+      confirmMessage: string;
+      success: string;
+      failed: string;
     };
   };
   common: {
@@ -443,6 +461,7 @@ export interface TranslationKeys {
       showSuggestions: string;
       startWith: string;
       count: string;
+      smartTitle: string;
     };
     empty: {
       title: string;
@@ -545,6 +564,7 @@ export interface TranslationKeys {
     hoursAgo: string;
     daysAgo: string;
     members: string;
+    recalled:string;
     encryption: {
       initializing: string;
       enabled: string;
@@ -927,8 +947,15 @@ export interface TranslationKeys {
     noResults: string;
     noResultsDescription: string;
   };
+  continue: string;
+
   encryption: {
     initializing: string;
+    setup: {
+      mandatory: string;
+      required: string;
+      description: string;
+    };
     backup: {
       title: string;
       description: string;
@@ -942,11 +969,10 @@ export interface TranslationKeys {
       creating: string;
       createButton: string;
       skipButton: string;
+      skipTitle: string;
       skipWarning: string;
       passwordTooShort: string;
       passwordMismatch: string;
-
-      // ✅ NEW: For old users
       recommendTitle: string;
       recommendMessage: string;
       createNow: string;
@@ -955,6 +981,10 @@ export interface TranslationKeys {
       createForExistingDescription: string;
       alreadyExists: string;
       created: string;
+      createdSuccess: string;
+      required: string;
+      mandatoryForExisting: string;
+      warningMessage: string;
     };
     restore: {
       title: string;
