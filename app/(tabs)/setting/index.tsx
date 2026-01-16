@@ -1,23 +1,23 @@
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Alert,
-  RefreshControl,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useAuth } from '@clerk/clerk-expo';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useLanguage } from '@/contexts/LanguageContext';
-import { useUserApi, UserProfile } from '@/hooks/user/useUserApi';
-import { useFocusEffect } from '@react-navigation/native';
 import Header from '@/components/shared/Header';
 import Sidebar from '@/components/shared/Sidebar';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTheme } from '@/contexts/ThemeContext';
+import { UserProfile, useUserApi } from '@/hooks/user/useUserApi';
+import { useAuth } from '@clerk/clerk-expo';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  Alert,
+  Image,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface SettingItem {
   id: string;
@@ -204,6 +204,7 @@ export default function MainSettingScreen() {
       <Header
         title={t('settings')}
         onMenuPress={() => setIsSidebarVisible(true)}
+        showFloatingRec={true}
       />
 
       <ScrollView

@@ -36,7 +36,7 @@ function PiPOverlayManager() {
 
     console.log("🎬 Expanding PiP to full screen");
     maximizeCall();
-    
+
     router.push({
       pathname: "/call/[id]" as any,
       params: {
@@ -130,7 +130,7 @@ function ProtectedLayout() {
       <View className="flex-1 justify-center items-center bg-gray-50 dark:bg-gray-900">
         <ActivityIndicator size="large" color="#f97316" />
         <Text className="mt-4 text-gray-600 dark:text-gray-400">
-          Loading...
+          Checking profile...
         </Text>
       </View>
     );

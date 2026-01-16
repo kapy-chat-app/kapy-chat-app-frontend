@@ -1,3 +1,4 @@
+// app/(auth)/sign-up.tsx
 /* eslint-disable react/no-unescaped-entities */
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -83,7 +84,13 @@ export default function SignUpScreen() {
 
       if (signUpAttempt.status === "complete") {
         await setActive?.({ session: signUpAttempt.createdSessionId });
-        router.push("/complete-profile");
+        
+        // ⭐ QUAN TRỌNG: Đợi session được set xong
+        console.log("✅ Sign up complete, redirecting to complete-profile");
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // ⭐ DÙNG replace thay vì push để tránh bị useProfileCheck override
+        router.replace("/complete-profile");
       } else {
         console.error(JSON.stringify(signUpAttempt, null, 2));
         Alert.alert(

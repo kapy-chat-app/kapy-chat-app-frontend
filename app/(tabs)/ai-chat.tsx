@@ -1,4 +1,4 @@
-// app/(root)/ai-chat.tsx - RESPONSIVE & SCROLLABLE FIX
+// app/(root)/ai-chat.tsx - FIXED KEYBOARD AVOIDING
 import ChatSidebar from "@/components/page/ai/ChatSidebar";
 import Header from "@/components/shared/Header";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -7,6 +7,7 @@ import { useChatbot } from "@/hooks/ai/useChatbot";
 import { useEmotion } from "@/hooks/ai/useEmotion";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import LottieView from "lottie-react-native";
 import React, {
   memo,
   useCallback,
@@ -21,6 +22,7 @@ import {
   Animated,
   Dimensions,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -38,6 +40,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const isSmallScreen = SCREEN_WIDTH < 375;
 const isMediumScreen = SCREEN_WIDTH >= 375 && SCREEN_WIDTH < 414;
+const botLottie = require("@/assets/lottie/ai/bot.json");
 
 // ============================================
 // TYPES
@@ -107,7 +110,16 @@ const MessageBubble = memo(function MessageBubble({
             elevation: 5,
           }}
         >
-          <Text className={isSmallScreen ? "text-base" : "text-lg"}>🤖</Text>
+          <LottieView
+            source={botLottie}
+            autoPlay
+            loop
+            speed={1}
+            style={{
+              width: isSmallScreen ? 26 : 32,
+              height: isSmallScreen ? 26 : 32,
+            }}
+          />
         </View>
       )}
 
@@ -148,8 +160,14 @@ const MessageBubble = memo(function MessageBubble({
         </View>
 
         {item.emotion && (
-          <View className={`flex-row items-center ${isSmallScreen ? "mt-1 px-1" : "mt-2 px-2"}`}>
-            <Text className={`${isSmallScreen ? "text-[10px]" : "text-xs"} mr-1.5`}>{emoji}</Text>
+          <View
+            className={`flex-row items-center ${isSmallScreen ? "mt-1 px-1" : "mt-2 px-2"}`}
+          >
+            <Text
+              className={`${isSmallScreen ? "text-[10px]" : "text-xs"} mr-1.5`}
+            >
+              {emoji}
+            </Text>
             <Text
               className={`${isSmallScreen ? "text-[10px]" : "text-xs"} font-medium capitalize`}
               style={{ color: emotionColor }}
@@ -182,7 +200,11 @@ const MessageBubble = memo(function MessageBubble({
             elevation: 5,
           }}
         >
-          <Ionicons name="person" size={isSmallScreen ? 14 : 18} color="white" />
+          <Ionicons
+            name="person"
+            size={isSmallScreen ? 14 : 18}
+            color="white"
+          />
         </View>
       )}
     </Animated.View>
@@ -228,8 +250,19 @@ const TypingIndicator = memo(function TypingIndicator({
 
   return (
     <View className="flex-row items-center mb-4">
-      <View className={`${isSmallScreen ? "w-8 h-8" : "w-10 h-10"} rounded-full bg-orange-500 items-center justify-center ${isSmallScreen ? "mr-2" : "mr-2.5"}`}>
-        <Text className={isSmallScreen ? "text-base" : "text-lg"}>🤖</Text>
+      <View
+        className={`${isSmallScreen ? "w-8 h-8" : "w-10 h-10"} rounded-full bg-orange-500 items-center justify-center ${isSmallScreen ? "mr-2" : "mr-2.5"}`}
+      >
+        <LottieView
+          source={botLottie}
+          autoPlay
+          loop
+          speed={1}
+          style={{
+            width: isSmallScreen ? 26 : 32,
+            height: isSmallScreen ? 26 : 32,
+          }}
+        />
       </View>
       <View
         className={`rounded-3xl ${isSmallScreen ? "px-3 py-3" : "px-5 py-4"} ${
@@ -266,6 +299,12 @@ export default function AIChatbotScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const flatListRef = useRef<FlatList>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollMetricsRef = useRef({
+    layoutHeight: 0,
+    contentHeight: 0,
+    offsetY: 0,
+  });
 
   const [inputText, setInputText] = useState("");
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -310,6 +349,22 @@ export default function AIChatbotScreen() {
     }
   }, [getRecommendations]);
 
+  const scrollToBottom = () => {
+    // ✅ only scroll if user is at bottom
+    if (!isAtBottomRef.current) return;
+
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+  };
+
+  useEffect(() => {
+    const subShow = Keyboard.addListener("keyboardDidShow", () => {
+      scrollToBottom();
+    });
+
+    return () => subShow.remove();
+  }, []);
   useEffect(() => {
     if (params.conversationId) {
       loadHistory(params.conversationId as string);
@@ -325,9 +380,7 @@ export default function AIChatbotScreen() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      scrollToBottom();
     }
   }, [messages.length]);
 
@@ -446,7 +499,6 @@ export default function AIChatbotScreen() {
     return <TypingIndicator isDark={isDark} />;
   }, [typing, isDark]);
 
-  // ✅ IMPROVED EMPTY STATE - SCROLLABLE
   const renderEmptyState = useCallback(
     () => (
       <ScrollView
@@ -461,16 +513,18 @@ export default function AIChatbotScreen() {
       >
         <View className="items-center">
           <View
-            className={`${isSmallScreen ? "w-20 h-20" : "w-24 h-24"} rounded-full bg-orange-500 items-center justify-center mb-4`}
-            style={{
-              shadowColor: "#F97316",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-              elevation: 8,
-            }}
+            className={`${isSmallScreen ? "w-20 h-20" : "w-24 h-24"} rounded-full items-center justify-center mb-4`}
           >
-            <Text className={isSmallScreen ? "text-4xl" : "text-5xl"}>🤖</Text>
+            <LottieView
+              source={botLottie}
+              autoPlay
+              loop
+              speed={1}
+              style={{
+                width: isSmallScreen ? 80 : 92,
+                height: isSmallScreen ? 80 : 92,
+              }}
+            />
           </View>
 
           <Text
@@ -483,7 +537,9 @@ export default function AIChatbotScreen() {
 
           {currentEmotion && (
             <View className="flex-row items-center mb-3">
-              <Text className={isSmallScreen ? "text-xl mr-2" : "text-2xl mr-2"}>
+              <Text
+                className={isSmallScreen ? "text-xl mr-2" : "text-2xl mr-2"}
+              >
                 {getEmotionEmoji(currentEmotion)}
               </Text>
               <View>
@@ -512,7 +568,6 @@ export default function AIChatbotScreen() {
             {t("aiChat.empty.subtitle")}
           </Text>
 
-          {/* ✅ SMART SUGGESTIONS - SCROLLABLE */}
           {smartSuggestions.length > 0 && (
             <View className="w-full mb-4">
               <View className="flex-row items-center justify-between mb-3">
@@ -531,7 +586,11 @@ export default function AIChatbotScreen() {
                   {suggestionsLoading ? (
                     <ActivityIndicator size="small" color="#F97316" />
                   ) : (
-                    <Ionicons name="refresh" size={isSmallScreen ? 16 : 18} color="#F97316" />
+                    <Ionicons
+                      name="refresh"
+                      size={isSmallScreen ? 16 : 18}
+                      color="#F97316"
+                    />
                   )}
                 </TouchableOpacity>
               </View>
@@ -546,7 +605,8 @@ export default function AIChatbotScreen() {
                       : "bg-gradient-to-r from-orange-50 to-transparent border-orange-200"
                   }`}
                   style={{
-                    borderLeftColor: getEmotionColor(currentEmotion) || "#F97316",
+                    borderLeftColor:
+                      getEmotionColor(currentEmotion) || "#F97316",
                   }}
                 >
                   <View className="flex-row items-center">
@@ -575,7 +635,6 @@ export default function AIChatbotScreen() {
             </View>
           )}
 
-          {/* ✅ FALLBACK RECOMMENDATIONS - SCROLLABLE */}
           {smartSuggestions.length === 0 && recommendations.length > 0 && (
             <View className="w-full">
               <Text
@@ -595,7 +654,8 @@ export default function AIChatbotScreen() {
                       : "bg-orange-50 border-orange-100"
                   }`}
                   style={{
-                    borderLeftColor: getEmotionColor(currentEmotion) || "#F97316",
+                    borderLeftColor:
+                      getEmotionColor(currentEmotion) || "#F97316",
                   }}
                 >
                   <Text
@@ -651,7 +711,10 @@ export default function AIChatbotScreen() {
         )}
 
         {conversationId && (
-          <TouchableOpacity onPress={handleNewChat} className={isSmallScreen ? "p-1" : "p-2"}>
+          <TouchableOpacity
+            onPress={handleNewChat}
+            className={isSmallScreen ? "p-1" : "p-2"}
+          >
             <Ionicons
               name="add-circle-outline"
               size={isSmallScreen ? 20 : 24}
@@ -715,12 +778,13 @@ export default function AIChatbotScreen() {
         rightComponent={headerRightComponent}
       />
 
-      {/* ✅ FIXED: Better KeyboardAvoidingView with proper offset */}
+      {/* ✅ WRAP ALL CHAT UI */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
+        {/* CHAT LIST */}
         <View style={{ flex: 1 }}>
           {messages.length === 0 ? (
             renderEmptyState()
@@ -730,14 +794,43 @@ export default function AIChatbotScreen() {
               data={messages}
               renderItem={renderMessage}
               keyExtractor={(item, index) => `message-${index}`}
-              contentContainerStyle={{ 
-                padding: isSmallScreen ? 12 : 16, 
-                paddingBottom: 8 
+              contentContainerStyle={{
+                padding: isSmallScreen ? 12 : 16,
+                paddingBottom: 12,
               }}
               showsVerticalScrollIndicator={false}
               ListFooterComponent={renderTypingIndicator}
+              // ✅ detect bottom
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                const { layoutMeasurement, contentOffset, contentSize } =
+                  e.nativeEvent;
+
+                const layoutHeight = layoutMeasurement.height;
+                const offsetY = contentOffset.y;
+                const contentHeight = contentSize.height;
+
+                scrollMetricsRef.current = {
+                  layoutHeight,
+                  offsetY,
+                  contentHeight,
+                };
+
+                // threshold = khoảng cách tính là "đang ở bottom"
+                const threshold = 80;
+                const distanceFromBottom =
+                  contentHeight - (offsetY + layoutHeight);
+
+                isAtBottomRef.current = distanceFromBottom <= threshold;
+              }}
+              // ✅ keep metrics correct when list changes size
+              onLayout={(e) => {
+                scrollMetricsRef.current.layoutHeight =
+                  e.nativeEvent.layout.height;
+              }}
               onContentSizeChange={() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
+                // ✅ khi content tăng (message mới), scroll chỉ khi user đang bottom
+                scrollToBottom();
               }}
               removeClippedSubviews={true}
               maxToRenderPerBatch={10}
@@ -749,13 +842,18 @@ export default function AIChatbotScreen() {
           )}
         </View>
 
-        {/* ✅ RESPONSIVE INPUT BAR */}
+        {/* ✅ INPUT BAR (NO keyboardHeight padding anymore) */}
         <View
           className={`border-t ${isSmallScreen ? "px-3 py-2" : "px-4 py-3"} ${
             isDark ? "border-gray-800 bg-black" : "border-gray-200 bg-white"
           }`}
+          style={{
+            paddingBottom: isSmallScreen ? 8 : 12,
+          }}
         >
-          <View className={`flex-row items-end ${isSmallScreen ? "gap-1.5" : "gap-2"}`}>
+          <View
+            className={`flex-row items-end ${isSmallScreen ? "gap-1.5" : "gap-2"}`}
+          >
             <View
               className={`flex-1 rounded-3xl ${isSmallScreen ? "px-3 py-2" : "px-5 py-3"} min-h-[44px] max-h-[100px] justify-center ${
                 isDark
@@ -775,6 +873,9 @@ export default function AIChatbotScreen() {
                 maxLength={500}
                 editable={!loading}
                 style={{ paddingTop: Platform.OS === "ios" ? 0 : 4 }}
+                onFocus={() => {
+                  scrollToBottom();
+                }}
               />
             </View>
 
@@ -820,7 +921,7 @@ export default function AIChatbotScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* ✅ RESPONSIVE SIDEBAR */}
+      {/* MODAL (KEEP SAME) */}
       <Modal
         visible={sidebarVisible}
         animationType="slide"
@@ -834,7 +935,9 @@ export default function AIChatbotScreen() {
             onPress={() => setSidebarVisible(false)}
           />
           <View
-            className={`${isSmallScreen ? "w-[85%]" : isMediumScreen ? "w-80" : "w-96"} ${isDark ? "bg-gray-900" : "bg-white"}`}
+            className={`${isSmallScreen ? "w-[85%]" : isMediumScreen ? "w-80" : "w-96"} ${
+              isDark ? "bg-gray-900" : "bg-white"
+            }`}
             style={{
               shadowColor: "#000",
               shadowOpacity: 0.5,

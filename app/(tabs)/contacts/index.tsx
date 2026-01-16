@@ -480,7 +480,7 @@ const FriendsScreen = () => {
   if (searchQuery.trim()) {
     return (
       <SafeAreaView className={`flex-1 ${isDark ? "bg-black" : "bg-gray-50"}`}>
-        <Header title={t("friends.title")} onMenuPress={handleMenuPress} />
+        <Header title={t("friends.title")} onMenuPress={handleMenuPress}  showFloatingRec={true}/>
 
         <SearchInput
           placeholder={t("friends.searchPlaceholder")}

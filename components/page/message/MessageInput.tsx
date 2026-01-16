@@ -22,15 +22,12 @@ import {
   Animated,
   FlatList,
   Image,
-  Keyboard,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GiphyPicker } from "./GiphyPicker";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -53,6 +50,7 @@ interface MessageInputProps {
   onTyping?: (isTyping: boolean, userName?: string) => void;
   disabled?: boolean;
   userName?: string;
+  onFocusInput?: () => void;
 }
 
 function getMimeType(fileName: string): string {
@@ -94,13 +92,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
   onTyping,
   disabled = false,
   userName,
+  onFocusInput,
 }) => {
-  const insets = useSafeAreaInsets();
-  
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const expandAnimation = useRef(new Animated.Value(0)).current;
-  
+
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentPreview[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -129,37 +125,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
     checkImageToxicity,
   } = useOnDeviceAI();
 
-  useEffect(() => {
-    const showSubscription = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => {
-        setKeyboardVisible(true);
-      }
-    );
-    
-    const hideSubscription = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => {
-        setKeyboardVisible(false);
-      }
-    );
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
   const toggleExpand = () => {
     const toValue = isExpanded ? 0 : 1;
-    
+
     Animated.spring(expandAnimation, {
       toValue,
       useNativeDriver: false,
       friction: 8,
       tension: 40,
     }).start();
-    
+
     setIsExpanded(!isExpanded);
   };
 
@@ -223,7 +198,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
 
       try {
-        console.log("🔍 [AI] Analyzing: \"" + text.substring(0, 20) + "...\"");
+        console.log('🔍 [AI] Analyzing: "' + text.substring(0, 20) + '..."');
         const analysis = await analyzeTextMessage(text);
         setEmotionAnalysis(analysis);
       } catch (error) {
@@ -284,15 +259,47 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
 
     try {
-      const messageData = {
+      const tempId = `temp-${Date.now()}-${Math.random()}`;
+
+      // ✅ Step 1: INSTANT optimistic UI
+      console.log("🚀 [GIF] Creating optimistic message");
+
+      const optimisticData = {
+        tempId,
         content: messageContent || undefined,
         type: type,
-        richMedia: richMedia,
+        richMedia: richMedia, // ✅ Pass full object for optimistic UI
         replyTo: currentReplyTo,
+        isOptimistic: true,
       };
 
-      onSendMessage(messageData);
-      console.log(`✅ ${type} message sent`);
+      onSendMessage(optimisticData);
+
+      // ✅ Step 2: BACKGROUND - Send to server as JSON (NOT FormData)
+      setTimeout(async () => {
+        try {
+          const jsonPayload = {
+            content: messageContent || undefined,
+            type: type,
+            richMedia: richMedia, // ✅ Send as object (will be auto-stringified by fetch)
+            replyTo: currentReplyTo,
+            tempId: tempId,
+          };
+
+          console.log("📤 [GIF] Sending to server as JSON:", {
+            type,
+            hasContent: !!messageContent,
+            richMediaProvider: richMedia.provider,
+            richMediaUrl: richMedia.media_url,
+          });
+
+          await onSendMessage(jsonPayload);
+          console.log("✅ [GIF] Message sent successfully");
+        } catch (error: any) {
+          console.error("❌ [GIF] Failed:", error);
+          Alert.alert(t("error"), error.message || `Failed to send ${type}`);
+        }
+      }, 0);
     } catch (error: any) {
       console.error(`❌ Failed to send ${type}:`, error);
       Alert.alert(t("error"), error.message || `Failed to send ${type}`);
@@ -337,9 +344,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const isTextOnly = currentAttachments.length === 0 && messageContent;
 
     if (isTextOnly) {
-      console.log("⚡ [SEND] TEXT-ONLY MESSAGE - INSTANT FLOW");
+      console.log("⚡ [SEND] TEXT-ONLY MESSAGE - ULTRA FAST");
 
-      // ✅ STEP 1: CREATE OPTIMISTIC MESSAGE INSTANTLY
+      // ✅ STEP 1: Optimistic UI
       const optimisticData = {
         tempId,
         content: messageContent,
@@ -349,53 +356,47 @@ const MessageInput: React.FC<MessageInputProps> = ({
       };
 
       onSendMessage(optimisticData);
-      console.log("✅ [SEND] Optimistic text message sent to UI");
 
-      // ✅ STEP 2: BACKGROUND ENCRYPTION + SEND (NON-BLOCKING)
+      // ✅ FIX: Save emotion for TEXT-ONLY messages too
+      if (messageContent && aiReady && conversationId) {
+        saveEmotionInBackground(messageContent, conversationId);
+      }
+
+      // ✅ STEP 2: Background encryption (FAST - uses cache)
       setTimeout(async () => {
         try {
-          // 🔥 Background emotion analysis (fire-and-forget, lowest priority)
-          if (aiReady && conversationId) {
-            saveEmotionInBackground(messageContent, conversationId);
+          if (!encryptionInitialized) {
+            throw new Error("Encryption not ready");
           }
 
-          // 🔐 ENCRYPT + SEND
-          if (encryptionInitialized && recipientId) {
-            console.log("🔐 [SEND] Encrypting text message in background...");
-
-            const encrypted = await encryptMessage(
-              recipientId,
-              messageContent
-            );
-
-            console.log("🔐 [SEND] Encryption complete");
-
-            const textData = {
-              content: messageContent,
-              encryptedContent: encrypted.encryptedContent,
-              encryptionMetadata: encrypted.encryptionMetadata,
-              type: "text" as const,
-              replyTo: currentReplyTo,
-              tempId: tempId,
-            };
-
-            console.log("📤 [SEND] Sending encrypted text...");
-
-            onSendMessage(textData);
-
-            console.log("✅ [SEND] Encrypted text sent");
-          } else {
-            console.error("❌ [SEND] Encryption not ready");
-            Alert.alert(t("error"), "Encryption not ready. Please wait...");
-            return;
+          if (!recipientId) {
+            throw new Error("Recipient not found");
           }
+
+          console.log("🔐 [SEND] Encrypting (using cached keys)...");
+
+          const encrypted = await encryptMessage(recipientId, messageContent);
+
+          console.log("✅ [SEND] Encrypted instantly from cache!");
+
+          const textData = {
+            content: messageContent,
+            encryptedContent: encrypted.encryptedContent,
+            encryptionMetadata: encrypted.encryptionMetadata,
+            type: "text" as const,
+            replyTo: currentReplyTo,
+            tempId: tempId,
+          };
+
+          await onSendMessage(textData);
+          console.log("✅ [SEND] Message sent!");
         } catch (error: any) {
-          console.error("❌ [SEND] Background encryption failed:", error);
-          Alert.alert(t("error"), `Failed to encrypt: ${error.message}`);
+          console.error("❌ [SEND] Failed:", error);
+          Alert.alert(t("error"), error.message);
         }
-      }, 0); // Immediate background task
+      }, 0);
 
-      return; // ✅ TEXT MESSAGE SENT - DONE!
+      return;
     }
 
     // ============================================
@@ -963,14 +964,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const isSendDisabled =
     disabled || (!message.trim() && attachments.length === 0);
 
-  const dynamicPaddingBottom = keyboardVisible ? 0 : Math.max(insets.bottom, 16);
-
   return (
     <View
       style={[
         styles.container,
         isDark ? styles.borderDark : styles.borderLight,
-        { paddingBottom: dynamicPaddingBottom },
       ]}
     >
       {replyTo && (
@@ -1111,7 +1109,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
           <TextInput
             value={message}
             onChangeText={handleTyping}
-            onFocus={handleTextInputFocus}
+            onFocus={() => {
+              handleTextInputFocus();
+              onFocusInput?.();
+            }}
             placeholder={t("message.input.placeholder")}
             placeholderTextColor={isDark ? "#999" : "#666"}
             multiline
@@ -1186,7 +1187,7 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 16,
     paddingHorizontal: 16,
-    paddingBottom: 0,
+    paddingBottom: 16,
     borderTopWidth: 1,
   },
   borderLight: {

@@ -12,7 +12,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import LottieView from "lottie-react-native";
+import { getEmotionLottie } from "@/constants/emotionLottie";
 interface EmotionRecommendationData {
   hasData: boolean;
   recommendations: string[]; // ✅ Array of recommendations
@@ -169,11 +170,17 @@ export function EmotionCounselorCard({
         <View className="flex-row items-center justify-between mb-4">
           <View className="flex-row items-center flex-1">
             <View
-              className="w-12 h-12 rounded-full items-center justify-center mr-3"
-              style={{ backgroundColor: emotionColor + "20" }}
-            >
-              <Text className="text-2xl">{emotionEmoji}</Text>
-            </View>
+  className="w-12 h-12 rounded-full items-center justify-center mr-3 overflow-hidden"
+  style={{ backgroundColor: emotionColor + "20" }}
+>
+  <LottieView
+    source={getEmotionLottie(data.currentEmotion)}
+    autoPlay
+    loop
+    speed={0.9}
+    style={{ width: 44, height: 44 }}
+  />
+</View>
             <View className="flex-1">
               <Text
                 className={`text-lg font-bold ${isDark ? "text-white" : "text-gray-900"}`}

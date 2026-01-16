@@ -297,6 +297,7 @@ export interface TranslationKeys {
     actions: {
       addFriend: string;
       message: string;
+      creatingConversation: string;
       requestSent: string;
       cancelRequest: string;
       unfriend: string;
@@ -354,6 +355,9 @@ export interface TranslationKeys {
     };
     report: {
       success: string;
+    };
+    message: {
+      failed: string;
     };
   };
   emotion: {
@@ -560,6 +564,7 @@ export interface TranslationKeys {
     hoursAgo: string;
     daysAgo: string;
     members: string;
+    recalled:string;
     encryption: {
       initializing: string;
       enabled: string;
@@ -942,8 +947,15 @@ export interface TranslationKeys {
     noResults: string;
     noResultsDescription: string;
   };
+  continue: string;
+
   encryption: {
     initializing: string;
+    setup: {
+      mandatory: string;
+      required: string;
+      description: string;
+    };
     backup: {
       title: string;
       description: string;
@@ -957,11 +969,10 @@ export interface TranslationKeys {
       creating: string;
       createButton: string;
       skipButton: string;
+      skipTitle: string;
       skipWarning: string;
       passwordTooShort: string;
       passwordMismatch: string;
-
-      // ✅ NEW: For old users
       recommendTitle: string;
       recommendMessage: string;
       createNow: string;
@@ -970,6 +981,10 @@ export interface TranslationKeys {
       createForExistingDescription: string;
       alreadyExists: string;
       created: string;
+      createdSuccess: string;
+      required: string;
+      mandatoryForExisting: string;
+      warningMessage: string;
     };
     restore: {
       title: string;

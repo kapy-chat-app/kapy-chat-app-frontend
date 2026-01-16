@@ -1,9 +1,4 @@
 // MessageScreen.tsx - FIXED TYPING INDICATOR WITH USERNAME
-// ✅ Proper event naming: sendTypingIndicator (send) vs userTyping (receive)
-// ✅ Debounced typing events
-// ✅ Cleanup on unmount
-// ✅ userName from conversation participants
-
 import MessageInput from "@/components/page/message/MessageInput";
 import MessageItem from "@/components/page/message/MessageItem";
 import SystemMessage from "@/components/page/message/SystemMessage";
@@ -46,6 +41,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const MemoizedMessageItem = memo(MessageItem, (prevProps, nextProps) => {
+  // Check if message is recalled - this must trigger re-render
+  const prevRecalled = prevProps.message.metadata?.isRecalled || false;
+  const nextRecalled = nextProps.message.metadata?.isRecalled || false;
+  
+  if (prevRecalled !== nextRecalled) {
+    console.log(`🔄 [MEMO] Message ${nextProps.message._id} recall state changed: ${prevRecalled} -> ${nextRecalled}`);
+    return false; // Force re-render
+  }
+
   return (
     prevProps.message._id === nextProps.message._id &&
     prevProps.message.content === nextProps.message.content &&
@@ -74,6 +78,12 @@ export default function MessageScreen() {
   const { actualTheme } = useTheme();
   const { t } = useLanguage();
   const flatListRef = useRef<FlatList>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollMetricsRef = useRef({
+    layoutHeight: 0,
+    contentHeight: 0,
+    offsetY: 0,
+  });
   const [replyTo, setReplyTo] = useState<any>(null);
   const [conversation, setConversation] = useState<any>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
@@ -100,8 +110,11 @@ export default function MessageScreen() {
 
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { isInitialized: encryptionReady, loading: encryptionLoading } =
-    useEncryption();
+  const {
+    isInitialized: encryptionReady,
+    loading: encryptionLoading,
+    prefetchConversationKeys, // ✅ NEW
+  } = useEncryption();
 
   const {
     messages,
@@ -219,6 +232,20 @@ export default function MessageScreen() {
     return false;
   }, [conversation, userId, isUserOnline]);
 
+  const scrollToBottomIfNeeded = (animated = true) => {
+    if (!isAtBottomRef.current) return;
+
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    }, 50);
+  };
+
+  const forceScrollToBottom = (animated = true) => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated });
+    }, 50);
+  };
+
   useEffect(() => {
     if (id && conversations.length > 0) {
       const currentConversation = conversations.find((conv) => conv._id === id);
@@ -227,21 +254,12 @@ export default function MessageScreen() {
   }, [id, conversations]);
 
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      "keyboardDidShow",
-      () => {
-        if (isNearBottom) {
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      }
-    );
+    const subShow = Keyboard.addListener("keyboardDidShow", () => {
+      scrollToBottomIfNeeded(true);
+    });
 
-    return () => {
-      keyboardDidShowListener.remove();
-    };
-  }, [isNearBottom]);
+    return () => subShow.remove();
+  }, []);
 
   useEffect(() => {
     if (conversation && conversation.type !== "group") {
@@ -396,7 +414,7 @@ export default function MessageScreen() {
 
       console.log(`🔔 [SOCKET] ${newSocketMessages} new message(s)`);
 
-      if (!isNearBottom) {
+      if (!isAtBottomRef.current) {
         console.log(
           `📍 [SOCKET] User scrolled up - showing button (${newSocketMessages} new)`
         );
@@ -411,10 +429,7 @@ export default function MessageScreen() {
         }).start();
       } else {
         console.log(`📍 [SOCKET] User at bottom - auto-scrolling`);
-
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        scrollToBottomIfNeeded(true);
       }
 
       lastMessageCountRef.current = messages.length;
@@ -470,70 +485,69 @@ export default function MessageScreen() {
     markedAsReadRef.current.clear();
   }, [id]);
 
+  // ✅ NEW: Prefetch keys when conversation loads
+  useEffect(() => {
+    const prefetchKeys = async () => {
+      if (!conversation || !encryptionReady) return;
+
+      console.log("🔄 [MessageScreen] Prefetching conversation keys...");
+
+      try {
+        const participantIds =
+          conversation.participants?.map((p: any) => p.clerkId) || [];
+
+        if (participantIds.length > 0) {
+          await prefetchConversationKeys(participantIds);
+          console.log("✅ [MessageScreen] Keys prefetched successfully");
+        }
+      } catch (error) {
+        console.error("❌ [MessageScreen] Key prefetch failed:", error);
+        // Don't block UI - encryption will fetch on-demand if needed
+      }
+    };
+
+    prefetchKeys();
+  }, [conversation, encryptionReady, prefetchConversationKeys]);
+
   const handleVideoCall = async () => {
     if (!id || isInitiatingCall) return;
 
     try {
       setIsInitiatingCall(true);
 
-      const isGroup = conversation?.type === "group";
+      const token = await getToken();
 
-      Alert.alert(
-        `Start Video Call`,
-        isGroup
-          ? `Do you want to start a video call in ${conversationTitle}?`
-          : `Do you want to start a video call with ${conversationTitle}?`,
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => setIsInitiatingCall(false),
+      const response = await axios.post(
+        `${API_URL}/api/calls/initiate`,
+        {
+          conversationId: id,
+          type: "video",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-          {
-            text: "Call",
-            onPress: async () => {
-              try {
-                const token = await getToken();
-
-                const response = await axios.post(
-                  `${API_URL}/api/calls/initiate`,
-                  {
-                    conversationId: id,
-                    type: "video",
-                  },
-                  {
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                    },
-                  }
-                );
-
-                const { call } = response.data;
-
-                router.push({
-                  pathname: "/call/[id]" as any,
-                  params: {
-                    id: call.id,
-                    channelName: call.channelName,
-                    conversationId: id,
-                    callType: "video",
-                  },
-                });
-              } catch (error: any) {
-                console.error("❌ Error starting video call:", error);
-                Alert.alert(
-                  "Error",
-                  error.response?.data?.error || "Failed to start video call"
-                );
-              } finally {
-                setIsInitiatingCall(false);
-              }
-            },
-          },
-        ]
+        }
       );
-    } catch (error) {
-      console.error("❌ Error:", error);
+
+      const { call } = response.data;
+
+      router.push({
+        pathname: "/call/[id]" as any,
+        params: {
+          id: call.id,
+          channelName: call.channelName,
+          conversationId: id,
+          callType: "video",
+        },
+      });
+    } catch (error: any) {
+      console.error("❌ Error starting video call:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.error || "Failed to start video call"
+      );
+    } finally {
       setIsInitiatingCall(false);
     }
   };
@@ -544,64 +558,39 @@ export default function MessageScreen() {
     try {
       setIsInitiatingCall(true);
 
-      const isGroup = conversation?.type === "group";
+      const token = await getToken();
 
-      Alert.alert(
-        `Start Audio Call`,
-        isGroup
-          ? `Do you want to start an audio call in ${conversationTitle}?`
-          : `Do you want to start an audio call with ${conversationTitle}?`,
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => setIsInitiatingCall(false),
+      const response = await axios.post(
+        `${API_URL}/api/calls/initiate`,
+        {
+          conversationId: id,
+          type: "audio",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-          {
-            text: "Call",
-            onPress: async () => {
-              try {
-                const token = await getToken();
-
-                const response = await axios.post(
-                  `${API_URL}/api/calls/initiate`,
-                  {
-                    conversationId: id,
-                    type: "audio",
-                  },
-                  {
-                    headers: {
-                      Authorization: `Bearer ${token}`,
-                    },
-                  }
-                );
-
-                const { call } = response.data;
-
-                router.push({
-                  pathname: "/call/[id]" as any,
-                  params: {
-                    id: call.id,
-                    channelName: call.channelName,
-                    conversationId: id,
-                    callType: "audio",
-                  },
-                });
-              } catch (error: any) {
-                console.error("❌ Error starting audio call:", error);
-                Alert.alert(
-                  "Error",
-                  error.response?.data?.error || "Failed to start audio call"
-                );
-              } finally {
-                setIsInitiatingCall(false);
-              }
-            },
-          },
-        ]
+        }
       );
-    } catch (error) {
-      console.error("❌ Error:", error);
+
+      const { call } = response.data;
+
+      router.push({
+        pathname: "/call/[id]" as any,
+        params: {
+          id: call.id,
+          channelName: call.channelName,
+          conversationId: id,
+          callType: "audio",
+        },
+      });
+    } catch (error: any) {
+      console.error("❌ Error starting audio call:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.error || "Failed to start audio call"
+      );
+    } finally {
       setIsInitiatingCall(false);
     }
   };
@@ -620,21 +609,22 @@ export default function MessageScreen() {
 
       await sendMessage(data);
 
+      // ✅ Case 1: server confirm
       if (!(data as any).isOptimistic) {
         setReplyTo(null);
 
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        // ✅ Messenger behavior: user sent -> ALWAYS scroll to bottom
+        forceScrollToBottom(true);
 
         console.log("✅ [SCREEN] Message sent successfully");
-      } else {
-        console.log("✅ [SCREEN] Optimistic message created in FlatList");
-
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        return;
       }
+
+      // ✅ Case 2: optimistic UI
+      console.log("✅ [SCREEN] Optimistic message created in FlatList");
+
+      // ✅ Messenger behavior: user sent -> ALWAYS scroll to bottom
+      forceScrollToBottom(true);
     } catch (error: any) {
       console.error("❌ [SCREEN] Failed to send message:", error);
       Alert.alert(t("message.failed"), error.message || t("message.failed"), [
@@ -745,6 +735,11 @@ export default function MessageScreen() {
 
       const distanceFromBottom = scrollHeight - scrollPosition - viewHeight;
       const isNear = distanceFromBottom < 100;
+
+      // ✅ ref: no rerender
+      isAtBottomRef.current = isNear;
+
+      // ✅ state: used for UI (scroll button, count...)
       setIsNearBottom(isNear);
 
       if (isNear && showScrollButton) {
@@ -1032,33 +1027,7 @@ export default function MessageScreen() {
     userId,
   ]);
 
-  const renderEmptyState = () => (
-    <View className="flex-1 justify-center items-center px-8">
-      <Text className="text-6xl mb-4">🔒</Text>
-      <Text
-        className={`text-center text-lg font-semibold ${isDark ? "text-gray-400" : "text-gray-500"}`}
-      >
-        No messages yet
-      </Text>
-      <Text
-        className={`text-center mt-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}
-      >
-        Send the first message to start the conversation
-      </Text>
-
-      {encryptionReady && (
-        <View
-          className={`mt-4 rounded-lg px-4 py-2 ${isDark ? "bg-green-900/20" : "bg-green-50"}`}
-        >
-          <Text
-            className={`text-sm font-medium text-center ${isDark ? "text-green-300" : "text-green-700"}`}
-          >
-            End-to-end encryption enabled
-          </Text>
-        </View>
-      )}
-    </View>
-  );
+  const renderEmptyState = () => <View className="flex-1" />;
 
   const renderScrollToBottomButton = () => {
     if (!showScrollButton) return null;
@@ -1134,69 +1103,47 @@ export default function MessageScreen() {
 
       {renderHeader}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
-      >
-        <View style={{ flex: 1 }}>
-          {messages.length === 0 && !loading ? (
-            renderEmptyState()
-          ) : (
-            <>
-              <FlatList
-                ref={flatListRef}
-                data={messages}
-                renderItem={renderMessage}
-                keyExtractor={keyExtractor}
-                contentContainerStyle={{
-                  paddingHorizontal: 16,
-                  flexGrow: 1,
-                }}
-                showsVerticalScrollIndicator={false}
-                onScroll={handleScroll}
-                scrollEventThrottle={16}
-                inverted={false}
-                initialNumToRender={15}
-                maxToRenderPerBatch={10}
-                windowSize={10}
-                removeClippedSubviews={Platform.OS === "android"}
-                updateCellsBatchingPeriod={50}
-                ListHeaderComponent={renderLoadingHeader}
-                ListFooterComponent={renderTypingIndicator}
-                onViewableItemsChanged={onViewableItemsChanged}
-                viewabilityConfig={{ viewAreaCoveragePercentThreshold: 10 }}
-                onScrollToIndexFailed={(info) => {
-                  const wait = new Promise((resolve) =>
-                    setTimeout(resolve, 100)
-                  );
-                  wait.then(() => {
-                    flatListRef.current?.scrollToIndex({
-                      index: info.index,
-                      animated: false,
-                      viewPosition: 0.5,
-                    });
-                  });
-                }}
-              />
-              {renderScrollToBottomButton()}
-            </>
-          )}
+<KeyboardAvoidingView
+  style={{ flex: 1 }}
+  behavior={Platform.OS === "ios" ? "padding" : "height"}   // ✅ giống AI Chat
+  keyboardVerticalOffset={0}
+>
+  {/* ✅ Chat Area */}
+  <View style={{ flex: 1 }}>
+    <FlatList
+      ref={flatListRef}
+      data={messages}
+      renderItem={renderMessage}
+      keyExtractor={keyExtractor}
+      contentContainerStyle={{
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+      }}
+      showsVerticalScrollIndicator={false}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
+      inverted={false}
+      removeClippedSubviews={Platform.OS === "android"}
+      keyboardShouldPersistTaps="handled"
+    />
 
-          <MessageInput
-            conversationId={id}
-            recipientId={recipientId}
-            onSendMessage={handleSendMessage}
-            replyTo={replyTo}
-            onCancelReply={() => setReplyTo(null)}
-            onTyping={sendTypingIndicator}
-            onTypingStart={handleTypingStart}
-            onTypingStop={handleTypingStop}
-            disabled={!encryptionReady}
-            userName={currentUserName}
-          />
-        </View>
-      </KeyboardAvoidingView>
+    {renderScrollToBottomButton()}
+  </View>
+
+  {/* ✅ Input */}
+  <MessageInput
+    conversationId={id}
+    recipientId={recipientId}
+    onSendMessage={handleSendMessage}
+    replyTo={replyTo}
+    onCancelReply={() => setReplyTo(null)}
+    onTyping={sendTypingIndicator}
+    disabled={!encryptionReady}
+    userName={currentUserName}
+    onFocusInput={() => scrollToBottomIfNeeded(true)}
+  />
+</KeyboardAvoidingView>
+
     </SafeAreaView>
   );
 }

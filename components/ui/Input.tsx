@@ -65,7 +65,7 @@ const Input = forwardRef<TextInput, InputProps>(({
     light: {
       background: '#FFFFFF',
       border: '#E5E5E5',
-      focusedBorder: '#007AFF',
+      focusedBorder: '#F97316', // 🔥 Màu cam khi focus
       text: '#000000',
       placeholder: '#8E8E93',
       icon: '#8E8E93',
@@ -75,7 +75,7 @@ const Input = forwardRef<TextInput, InputProps>(({
     dark: {
       background: '#1C1C1E',
       border: '#38383A',
-      focusedBorder: '#0A84FF',
+      focusedBorder: '#F97316', // 🔥 Màu cam khi focus
       text: '#FFFFFF',
       placeholder: '#8E8E93',
       icon: '#8E8E93',
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   focused: {
-    borderWidth: 2,
+    borderWidth: 2, // 🔥 Viền dày hơn khi focus để nổi bật
   },
   error: {
     // borderColor được set động ở trên

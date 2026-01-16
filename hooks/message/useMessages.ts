@@ -160,7 +160,7 @@ interface MessageHookReturn {
   refreshMessages: () => Promise<void>;
   clearMessages: () => void;
   socketMessageCount: number;
-  typingUsers: string[]; 
+  typingUsers: string[];
   sendTypingIndicator: (isTyping: boolean) => void;
   retryDecryption: (messageId: string) => Promise<void>;
   clearMessageCache: () => Promise<void>;
@@ -313,10 +313,49 @@ export const useMessages = (
   const decryptingFiles = useRef<Set<string>>(new Set());
   const isSyncingRef = useRef(false);
   const syncDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-const [typingUsers, setTypingUsers] = useState<string[]>([]); 
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   // ✅ NEW: Typing debounce refs
   const typingDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const isCurrentlyTypingRef = useRef(false);
+
+  const normalizeTime = (d: any): number => {
+    if (!d) return 0;
+    if (typeof d === "number") return d;
+    const t = new Date(d).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
+  const sortMessagesStable = (arr: Message[]) => {
+    return [...arr].sort((a, b) => {
+      const ta = normalizeTime(a.created_at);
+      const tb = normalizeTime(b.created_at);
+      if (ta !== tb) return ta - tb;
+
+      // tie-breaker: fallback to _id (stable)
+      return (a._id || "").localeCompare(b._id || "");
+    });
+  };
+
+  const mergeMessages = (prev: Message[], incoming: Message[]) => {
+    const map = new Map<string, Message>();
+
+    // keep latest version
+    [...prev, ...incoming].forEach((m) => {
+      if (!m?._id) return;
+      const existing = map.get(m._id);
+
+      // choose newer updated_at
+      if (!existing) map.set(m._id, m);
+      else {
+        const eu = normalizeTime(existing.updated_at);
+        const mu = normalizeTime(m.updated_at);
+
+        map.set(m._id, mu >= eu ? { ...existing, ...m } : existing);
+      }
+    });
+
+    return sortMessagesStable(Array.from(map.values()));
+  };
 
   const API_BASE_URL = useMemo(
     () => process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000",
@@ -517,6 +556,16 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const processMessage = useCallback(
     async (msg: Message): Promise<Message> => {
       try {
+        if (msg.metadata?.isRecalled === true) {
+          return {
+            ...msg,
+            content: "",
+            encrypted_content: undefined,
+            attachments: [],
+            rich_media: undefined,
+            status: "sent" as MessageStatus,
+          };
+        }
         if (isMessageFullyProcessed(msg)) {
           return { ...msg, status: "sent" as MessageStatus };
         }
@@ -637,7 +686,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
           if (cachedMessages.length > 0) {
             console.log(`✅ [FETCH] Found ${cachedMessages.length} in cache`);
 
-            const msgs = cachedMessages.map(fromCachedMessage).reverse();
+            const msgs = cachedMessages.map(fromCachedMessage);
 
             const messagesNeedingDecryption = msgs.filter((msg) => {
               if (
@@ -677,7 +726,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
               });
             }
 
-            setMessages(msgs);
+            setMessages(sortMessagesStable(msgs));
             setLoading(false);
             loadingRef.current = false;
             isInitialLoadRef.current = false;
@@ -812,7 +861,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
                         console.log(
                           `✅ [SYNC] Adding ${newMessages.length} new messages`
                         );
-                        return [...prev, ...newMessages];
+                        return mergeMessages(prev, newMessages);
                       });
                     } else {
                       console.log("✅ [SYNC] No new messages");
@@ -934,7 +983,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
             if (newOlderMessages.length === 0) return prev;
 
-            return [...newOlderMessages, ...prev];
+            return mergeMessages(prev, newOlderMessages);
           });
         } else {
           setMessages(processedMessages);
@@ -1107,6 +1156,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
               });
             }
 
+            // ❌ BUG: richMedia được thêm nhưng KHÔNG được stringify!
             if ((data as any).richMedia) {
               formData.append(
                 "richMedia",
@@ -1300,24 +1350,59 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const recallMessage = useCallback(
     async (id: string): Promise<void> => {
       try {
-        console.log(`🔄 [RECALL] Recalling message ${id}`);
+        console.log(`🔄 [RECALL] Starting recall for message ${id}`);
+        console.log(`   Current user: ${userId}`);
+        console.log(`   Conversation: ${conversationId}`);
+
+        // ✅ 1) Optimistic update: mark recalled + STRIP content
+        let recalledMessageToCache: Message | null = null;
 
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg._id === id
-              ? {
-                  ...msg,
-                  metadata: {
-                    ...msg.metadata,
-                    isRecalled: true,
-                    recalledAt: new Date(),
-                  },
-                  status: "sending" as MessageStatus,
-                }
-              : msg
-          )
+          prev.map((msg) => {
+            if (msg._id !== id) return msg;
+
+            const recalled: Message = {
+              ...msg,
+
+              // ✅ CRITICAL: never allow old content to show again
+              content: "",
+              encrypted_content: undefined,
+              attachments: [], // optional: nếu recall phải ẩn luôn file
+              rich_media: undefined,
+
+              metadata: {
+                ...msg.metadata,
+                isRecalled: true,
+                recalledAt: new Date(),
+                recalledBy: userId,
+              },
+              status: "sending" as MessageStatus,
+            };
+
+            recalledMessageToCache = recalled;
+            return recalled;
+          })
         );
 
+        console.log(`✅ [RECALL] Optimistic update applied (content stripped)`);
+
+        // ✅ 2) Update cache immediately (IMPORTANT)
+        if (conversationId && recalledMessageToCache) {
+          setTimeout(async () => {
+            try {
+              await messageCacheService.saveMessages([
+                toCachedMessage(recalledMessageToCache!, conversationId),
+              ]);
+              console.log(
+                `💾 [RECALL] Cached recalled message optimistic: ${id}`
+              );
+            } catch (e) {
+              console.error("❌ [RECALL] Cache optimistic recall failed:", e);
+            }
+          }, 0);
+        }
+
+        // ✅ 3) Call API recall
         const token = await getToken();
         const response = await fetch(
           `${API_BASE_URL}/api/conversations/${conversationId}/messages/${id}`,
@@ -1331,6 +1416,8 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
           }
         );
 
+        console.log(`📡 [RECALL] API response status: ${response.status}`);
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -1341,41 +1428,46 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
           throw new Error(result.error || "Failed to recall message");
         }
 
-        console.log(`✅ [RECALL] Message recalled successfully`);
+        console.log(`✅ [RECALL] Message recalled successfully on server`);
 
-        if (conversationId) {
-          setTimeout(async () => {
-            try {
-              const updatedMessage = messagesRef.current.find(
-                (m) => m._id === id
-              );
-              if (updatedMessage) {
-                const cached = toCachedMessage(updatedMessage, conversationId);
-                await messageCacheService.saveMessages([cached]);
-                console.log(`💾 [RECALL] Cache updated for ${id}`);
-              }
-            } catch (error) {
-              console.error("❌ [RECALL] Cache update failed:", error);
-            }
-          }, 0);
-        }
+        // ✅ 4) Finalize UI status (optional but recommended)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === id
+              ? {
+                  ...msg,
+                  status: "sent" as MessageStatus,
+                  metadata: {
+                    ...msg.metadata,
+                    isRecalled: true,
+                  },
+                }
+              : msg
+          )
+        );
       } catch (error) {
         console.error("❌ [RECALL] Failed:", error);
 
+        // rollback: nếu fail thì bỏ recalled
         setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg._id === id) {
-              const original = messagesRef.current.find((m) => m._id === id);
-              return original || msg;
-            }
-            return msg;
-          })
+          prev.map((msg) =>
+            msg._id === id
+              ? {
+                  ...msg,
+                  metadata: {
+                    ...msg.metadata,
+                    isRecalled: false,
+                  },
+                  status: "failed" as MessageStatus,
+                }
+              : msg
+          )
         );
 
         throw error;
       }
     },
-    [conversationId, getToken, API_BASE_URL]
+    [conversationId, getToken, API_BASE_URL, userId]
   );
 
   const deleteMessage = useCallback(
@@ -1865,7 +1957,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
       setTypingUsers((prev) => {
         console.log("⌨️ [CLIENT] Current typing users:", prev);
-        
+
         if (data.is_typing) {
           // Add user if not already typing
           if (prev.includes(data.user_name)) {
@@ -1906,7 +1998,16 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
         isCurrentlyTypingRef.current = false;
       }
     };
-  }, [socket, conversationId, on, off, emit, user?.id, user?.fullName, user?.username]); // ✅ REMOVED on, off, emit from dependencies
+  }, [
+    socket,
+    conversationId,
+    on,
+    off,
+    emit,
+    user?.id,
+    user?.fullName,
+    user?.username,
+  ]); // ✅ REMOVED on, off, emit from dependencies
 
   useEffect(() => {
     if (!socket || !conversationId) return;
@@ -2130,24 +2231,7 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
           `✅ [SOCKET] Message ${processedMessage._id} FULLY processed, adding to UI`
         );
 
-        setMessages((prev) => {
-          if (prev.some((msg) => msg._id === processedMessage._id)) {
-            console.log(`⚠️ [SOCKET] Duplicate detected`);
-            return prev;
-          }
-
-          setTimeout(() => {
-            if (conversationId) {
-              const cached = toCachedMessage(processedMessage, conversationId);
-              messageCacheService.saveMessages([cached]).catch((err) => {
-                console.error("❌ [SOCKET] Cache save failed:", err);
-              });
-            }
-          }, 0);
-
-          setSocketMessageCount((c) => c + 1);
-          return [...prev, processedMessage];
-        });
+        setMessages((prev) => mergeMessages(prev, [processedMessage]));
       } catch (error) {
         console.error("❌ [SOCKET] Failed to process message:", error);
 
@@ -2349,39 +2433,79 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
     if (!socket || !conversationId) return;
 
     const handleRecallMessage = async (data: any) => {
-      console.log("🔄 [SOCKET] Received recallMessage:", data);
+      console.log("🔄 [SOCKET] Received recallMessage:", {
+        message_id: data.message_id,
+        conversation_id: data.conversation_id,
+        recalled_by: data.recalled_by,
+        current_conversation: conversationId,
+      });
 
-      if (data.conversation_id !== conversationId) return;
+      if (data.conversation_id !== conversationId) {
+        console.log("⏭️ [SOCKET] Different conversation, skipping recall");
+        return;
+      }
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.message_id
-            ? {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  isRecalled: true,
-                  recalledAt: new Date(data.recalled_at),
-                  recalledBy: data.recalled_by,
-                },
-                status: "sent" as MessageStatus,
-              }
-            : msg
-        )
+      const messageExists = messagesRef.current.some(
+        (m) => m._id === data.message_id
       );
 
+      if (!messageExists) {
+        console.warn(
+          `⚠️ [SOCKET] Message ${data.message_id} not found in local state`
+        );
+        return;
+      }
+
+      console.log(`✅ [SOCKET] Applying recall to message ${data.message_id}`);
+
+      // ✅ IMPORTANT: do NOT cache stale version from messagesRef
+      // We build recalled version inside setMessages and cache exactly that.
+      let recalledMessageToCache: Message | null = null;
+
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg._id !== data.message_id) return msg;
+
+          const recalled: Message = {
+            ...msg,
+
+            // ✅ CRITICAL: strip sensitive content so it can NEVER reappear from cache/server
+            content: "",
+            encrypted_content: undefined,
+            attachments: [], // optional: if your recall should hide files too
+            rich_media: undefined,
+
+            metadata: {
+              ...msg.metadata,
+              isRecalled: true,
+              recalledAt: new Date(data.recalled_at || Date.now()),
+              recalledBy: data.recalled_by,
+            },
+            status: "sent" as MessageStatus,
+          };
+
+          recalledMessageToCache = recalled;
+
+          console.log(
+            `🔄 [SOCKET] Message ${msg._id} recalled -> stripped content`
+          );
+          return recalled;
+        })
+      );
+
+      // ✅ Cache recalled version (NOT stale)
       if (conversationId) {
         setTimeout(async () => {
           try {
-            const updatedMessage = messagesRef.current.find(
-              (m) => m._id === data.message_id
+            if (!recalledMessageToCache) return;
+            const cached = toCachedMessage(
+              recalledMessageToCache,
+              conversationId
             );
-
-            if (updatedMessage) {
-              const cached = toCachedMessage(updatedMessage, conversationId);
-              await messageCacheService.saveMessages([cached]);
-              console.log(`💾 [SOCKET] Recalled message cached`);
-            }
+            await messageCacheService.saveMessages([cached]);
+            console.log(
+              `💾 [SOCKET] Recalled message cached: ${data.message_id}`
+            );
           } catch (error) {
             console.error(
               "❌ [SOCKET] Failed to cache recalled message:",
@@ -2392,9 +2516,11 @@ const [typingUsers, setTypingUsers] = useState<string[]>([]);
       }
     };
 
+    console.log("✅ [useMessages] Setting up recallMessage listener");
     on("recallMessage", handleRecallMessage);
 
     return () => {
+      console.log("🧹 [useMessages] Cleaning up recallMessage listener");
       off("recallMessage", handleRecallMessage);
     };
   }, [socket, conversationId, on, off]);

@@ -1,4 +1,4 @@
-// hooks/useSocket.ts - OPTIMIZED VERSION
+// hooks/message/useSocket.tsx - DEBOUNCED FIX
 import { useUser } from "@clerk/clerk-expo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import io, { Socket } from "socket.io-client";
@@ -27,8 +27,7 @@ interface UseSocketReturn {
   off: (event: string, callback?: (...args: any[]) => void) => void;
 }
 
-// ✅ LOG CONFIG - Có thể bật/tắt log
-const ENABLE_DEBUG_LOGS = true; // Set false để tắt hầu hết logs
+const ENABLE_DEBUG_LOGS = false; // ✅ TẮT LOG CHO PRODUCTION
 
 export const useSocket = (): UseSocketReturn => {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -40,9 +39,11 @@ export const useSocket = (): UseSocketReturn => {
   const hasAddedUserRef = useRef(false);
   const addUserTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const activityIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ✅ Prevent duplicate listeners
   const listenersRegistered = useRef(false);
+
+  // ✅ FIX: Debounce state updates
+  const updateDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingUpdatesRef = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
     if (!user) return;
@@ -65,7 +66,9 @@ export const useSocket = (): UseSocketReturn => {
       setSocket(newSocket);
 
       newSocket.on("connect", () => {
-        console.log("✅ Socket connected:", newSocket.id);
+        if (ENABLE_DEBUG_LOGS) {
+          console.log("✅ Socket connected:", newSocket.id);
+        }
         setIsConnected(true);
 
         if (reconnectTimeoutRef.current) {
@@ -78,14 +81,7 @@ export const useSocket = (): UseSocketReturn => {
         }
 
         addUserTimeoutRef.current = setTimeout(() => {
-          if (
-            !hasAddedUserRef.current ||
-            newSocket.id !== socketRef.current?.id
-          ) {
-            if (ENABLE_DEBUG_LOGS) {
-              console.log("👤 Adding user to online list...");
-            }
-
+          if (!hasAddedUserRef.current || newSocket.id !== socketRef.current?.id) {
             newSocket.emit("addNewUsers", {
               _id: user.id,
               username: user.username || user.fullName,
@@ -96,51 +92,36 @@ export const useSocket = (): UseSocketReturn => {
 
             const userRoom = `user:${user.id}`;
             newSocket.emit("joinRoom", userRoom);
-
-            if (ENABLE_DEBUG_LOGS) {
-              console.log("🚪 Joined personal room:", userRoom);
-            }
-
             hasAddedUserRef.current = true;
           }
         }, 300);
       });
 
       newSocket.on("disconnect", (reason) => {
-        console.log("❌ Socket disconnected:", reason);
+        if (ENABLE_DEBUG_LOGS) {
+          console.log("❌ Socket disconnected:", reason);
+        }
         setIsConnected(false);
         hasAddedUserRef.current = false;
 
         if (reason === "io server disconnect") {
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log("🔄 Attempting to reconnect...");
             newSocket.connect();
           }, 2000);
         }
       });
 
-      // ✅ Chỉ register listeners 1 lần
       if (!listenersRegistered.current) {
-        let lastUpdateTime = 0;
+        let lastGetUsersTime = 0;
 
+        // ✅ FIX: Throttle getUsers
         newSocket.on("getUsers", (users: OnlineUser[]) => {
           const now = Date.now();
-          if (now - lastUpdateTime < 500) {
+          if (now - lastGetUsersTime < 1000) { // ✅ Minimum 1s between updates
             return;
           }
-          lastUpdateTime = now;
+          lastGetUsersTime = now;
 
-          console.log("👥 Online users updated:", users.length);
-
-          // // ✅ LOG FULL STRUCTURE của user đầu tiên
-          // if (users.length > 0) {
-          //   console.log(
-          //     "📊 Sample user structure:",
-          //     JSON.stringify(users[0], null, 2)
-          //   );
-          // }
-
-          // ✅ CONVERT last_seen từ string sang Date
           const usersWithDates = users.map((user) => ({
             ...user,
             last_seen: user.last_seen ? new Date(user.last_seen) : undefined,
@@ -149,7 +130,38 @@ export const useSocket = (): UseSocketReturn => {
           setOnlineUsers(usersWithDates);
         });
 
-        // ✅ Last seen updates - SILENT (không log)
+        // ✅ FIX: Debounced batch updates
+        const processPendingUpdates = () => {
+          if (pendingUpdatesRef.current.size === 0) return;
+
+          setOnlineUsers((prev) => {
+            let updated = [...prev];
+
+            pendingUpdatesRef.current.forEach((data, userId) => {
+              const index = updated.findIndex((u) => u.userId === userId);
+              
+              if (index !== -1) {
+                // Update existing user
+                updated[index] = {
+                  ...updated[index],
+                  lastActive: new Date(data.last_seen).getTime(),
+                  last_seen: new Date(data.last_seen),
+                };
+
+                // Remove if offline
+                if (!data.is_online) {
+                  updated = updated.filter((u) => u.userId !== userId);
+                }
+              }
+            });
+
+            return updated;
+          });
+
+          pendingUpdatesRef.current.clear();
+        };
+
+        // ✅ FIX: Batch userLastSeenUpdated events
         newSocket.on(
           "userLastSeenUpdated",
           (data: {
@@ -157,144 +169,71 @@ export const useSocket = (): UseSocketReturn => {
             last_seen: string | Date;
             is_online: boolean;
           }) => {
-            // ✅ THÊM LOG ĐỂ DEBUG
-            console.log("🕒 [Socket] userLastSeenUpdated received:", {
-              user_id: data.user_id,
-              last_seen: data.last_seen,
-              is_online: data.is_online,
-            });
+            // ✅ Accumulate updates
+            pendingUpdatesRef.current.set(data.user_id, data);
 
-            setOnlineUsers((prev) => {
-              console.log("📋 Current onlineUsers count:", prev.length);
+            // ✅ Debounce processing
+            if (updateDebounceRef.current) {
+              clearTimeout(updateDebounceRef.current);
+            }
 
-              const updated = prev.map((u) => {
-                if (u.userId === data.user_id) {
-                  console.log(
-                    `✏️ Updating user ${data.user_id} last_seen:`,
-                    data.last_seen
-                  );
-                  return {
-                    ...u,
-                    lastActive: new Date(data.last_seen).getTime(),
-                    last_seen: new Date(data.last_seen),
-                  };
-                }
-                return u;
-              });
-
-              // ✅ Nếu user offline, remove khỏi list
-              if (!data.is_online) {
-                console.log(
-                  `🚫 User ${data.user_id} is offline, removing from list`
-                );
-                return updated.filter((u) => u.userId !== data.user_id);
-              }
-
-              console.log("📋 Online users after update:", updated.length);
-              return updated;
-            });
+            updateDebounceRef.current = setTimeout(() => {
+              processPendingUpdates();
+            }, 500); // ✅ Process batch every 500ms
           }
         );
 
-        // ✅ Friend events - chỉ log khi debug
-        newSocket.on("friendRequestReceived", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("📬 [Socket] friendRequestReceived:", data);
-          }
-        });
+        // ✅ Friend events - NO LOGS unless debug
+        const friendEvents = [
+          "friendRequestReceived",
+          "friendRequestSent", 
+          "friendRequestAccepted",
+          "friendRequestDeclined",
+          "friendRequestCancelled",
+          "friendRemoved",
+          "friendBlocked",
+          "friendCountUpdated",
+          "friendRequestCountUpdated",
+          "friendStatusChanged",
+        ];
 
-        newSocket.on("friendRequestSent", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("📤 [Socket] friendRequestSent:", data);
-          }
-        });
-
-        newSocket.on("friendRequestAccepted", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("✅ [Socket] friendRequestAccepted:", data);
-          }
-        });
-
-        newSocket.on("friendRequestDeclined", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("❌ [Socket] friendRequestDeclined:", data);
-          }
-        });
-
-        newSocket.on("friendRequestCancelled", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("🚫 [Socket] friendRequestCancelled:", data);
-          }
-        });
-
-        newSocket.on("friendRemoved", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("👋 [Socket] friendRemoved:", data);
-          }
-        });
-
-        newSocket.on("friendBlocked", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("🚫 [Socket] friendBlocked:", data);
-          }
-        });
-
-        newSocket.on("friendCountUpdated", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("🔢 [Socket] friendCountUpdated:", data);
-          }
-        });
-
-        newSocket.on("friendRequestCountUpdated", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("🔢 [Socket] friendRequestCountUpdated:", data);
-          }
-        });
-
-        newSocket.on("friendStatusChanged", (data) => {
-          if (ENABLE_DEBUG_LOGS) {
-            console.log("👤 [Socket] friendStatusChanged:", data);
-          }
+        friendEvents.forEach((event) => {
+          newSocket.on(event, (data) => {
+            if (ENABLE_DEBUG_LOGS) {
+              console.log(`🔔 [Socket] ${event}:`, data);
+            }
+          });
         });
 
         newSocket.on("connect_error", (error) => {
-          console.error("Socket connection error:", error);
+          console.error("Socket error:", error.message);
           setIsConnected(false);
         });
 
         newSocket.on("reconnect", (attemptNumber) => {
-          console.log("Socket reconnected after", attemptNumber, "attempts");
+          if (ENABLE_DEBUG_LOGS) {
+            console.log("Reconnected after", attemptNumber, "attempts");
+          }
           setIsConnected(true);
           hasAddedUserRef.current = false;
 
           const userRoom = `user:${user.id}`;
           newSocket.emit("joinRoom", userRoom);
-
-          if (ENABLE_DEBUG_LOGS) {
-            console.log(
-              "🚪 Re-joined personal room after reconnect:",
-              userRoom
-            );
-          }
-        });
-
-        newSocket.on("reconnect_error", (error) => {
-          console.error("Socket reconnection error:", error);
         });
 
         listenersRegistered.current = true;
       }
 
-      // ✅ Send activity mỗi 60s
+      // ✅ Send activity every 60s
       activityIntervalRef.current = setInterval(() => {
         if (newSocket.connected && user) {
           newSocket.emit("userActivity", {
             user_id: user.id,
           });
         }
-      }, 60000); // Every 60 seconds
+      }, 60000);
 
-      // ✅ Heartbeat mỗi 30s
+      // ✅ Heartbeat every 30s
       const heartbeatInterval = setInterval(() => {
         if (newSocket.connected && user) {
           newSocket.emit("updateUserStatus", {
@@ -310,10 +249,6 @@ export const useSocket = (): UseSocketReturn => {
     const { socket: socketInstance, heartbeatInterval } = connectSocket();
 
     return () => {
-      if (ENABLE_DEBUG_LOGS) {
-        console.log("🧹 Cleaning up socket connection...");
-      }
-
       if (addUserTimeoutRef.current) {
         clearTimeout(addUserTimeoutRef.current);
       }
@@ -326,6 +261,10 @@ export const useSocket = (): UseSocketReturn => {
         clearInterval(activityIntervalRef.current);
       }
 
+      if (updateDebounceRef.current) {
+        clearTimeout(updateDebounceRef.current);
+      }
+
       clearInterval(heartbeatInterval);
 
       if (socketInstance) {
@@ -333,6 +272,7 @@ export const useSocket = (): UseSocketReturn => {
         socketInstance.removeAllListeners();
       }
 
+      pendingUpdatesRef.current.clear();
       hasAddedUserRef.current = false;
       socketRef.current = null;
       listenersRegistered.current = false;
@@ -343,8 +283,6 @@ export const useSocket = (): UseSocketReturn => {
     (event: string, data: any) => {
       if (socket && isConnected) {
         socket.emit(event, data);
-      } else {
-        console.warn(`Cannot emit ${event}: socket not connected`);
       }
     },
     [socket, isConnected]
@@ -386,7 +324,6 @@ export const useSocket = (): UseSocketReturn => {
   };
 };
 
-// ✅ Helper function để format last seen
 export const formatLastSeen = (lastSeen: Date | string | number): string => {
   const now = Date.now();
   const time = new Date(lastSeen).getTime();
@@ -396,20 +333,19 @@ export const formatLastSeen = (lastSeen: Date | string | number): string => {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "Vừa xong";
-  if (diffMins < 5) return "Vài phút trước";
-  if (diffMins < 60) return `${diffMins} phút trước`;
-  if (diffHours < 24) return `${diffHours} giờ trước`;
-  if (diffDays === 1) return "Hôm qua";
-  if (diffDays < 7) return `${diffDays} ngày trước`;
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 5) return "A few minutes ago";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
 
-  return new Date(time).toLocaleDateString("vi-VN", {
+  return new Date(time).toLocaleDateString("en-US", {
     day: "2-digit",
     month: "short",
   });
 };
 
-// ✅ Helper function để get last seen từ onlineUsers
 export const getLastSeen = (
   userId: string,
   onlineUsers: OnlineUser[]
