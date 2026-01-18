@@ -44,9 +44,11 @@ const MemoizedMessageItem = memo(MessageItem, (prevProps, nextProps) => {
   // Check if message is recalled - this must trigger re-render
   const prevRecalled = prevProps.message.metadata?.isRecalled || false;
   const nextRecalled = nextProps.message.metadata?.isRecalled || false;
-  
+
   if (prevRecalled !== nextRecalled) {
-    console.log(`🔄 [MEMO] Message ${nextProps.message._id} recall state changed: ${prevRecalled} -> ${nextRecalled}`);
+    console.log(
+      `🔄 [MEMO] Message ${nextProps.message._id} recall state changed: ${prevRecalled} -> ${nextRecalled}`
+    );
     return false; // Force re-render
   }
 
@@ -509,90 +511,112 @@ export default function MessageScreen() {
     prefetchKeys();
   }, [conversation, encryptionReady, prefetchConversationKeys]);
 
-  const handleVideoCall = async () => {
-    if (!id || isInitiatingCall) return;
+ const handleVideoCall = async () => {
+  if (!id || isInitiatingCall) return;
 
-    try {
-      setIsInitiatingCall(true);
+  try {
+    setIsInitiatingCall(true);
+    const token = await getToken();
 
-      const token = await getToken();
-
-      const response = await axios.post(
-        `${API_URL}/api/calls/initiate`,
-        {
-          conversationId: id,
-          type: "video",
+    const response = await axios.post(
+      `${API_URL}/api/calls/initiate`,
+      {
+        conversationId: id,
+        type: "video",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      }
+    );
 
-      const { call } = response.data;
+    console.log("📞 Full response:", JSON.stringify(response.data, null, 2));
 
-      router.push({
-        pathname: "/call/[id]" as any,
-        params: {
-          id: call.id,
-          channelName: call.channelName,
-          conversationId: id,
-          callType: "video",
-        },
-      });
-    } catch (error: any) {
-      console.error("❌ Error starting video call:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.error || "Failed to start video call"
-      );
-    } finally {
-      setIsInitiatingCall(false);
+    const { call } = response.data;
+
+    // ✅ FIX: Verify channelName exists
+    if (!call?.channelName) {
+      console.error("❌ Missing channelName in response:", response.data);
+      Alert.alert("Error", "Backend did not return channelName");
+      return;
     }
-  };
+
+    console.log("✅ Using channelName:", call.channelName);
+
+    router.push({
+      pathname: "/call/[id]" as any,
+      params: {
+        id: call.id,
+        channelName: call.channelName, // ✅ Must exist
+        conversationId: id,
+        callType: "video",
+        conversationType: conversation?.type || "private",
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Error starting video call:", error);
+    Alert.alert(
+      "Error",
+      error.response?.data?.error || "Failed to start video call"
+    );
+  } finally {
+    setIsInitiatingCall(false);
+  }
+};
 
   const handleAudioCall = async () => {
     if (!id || isInitiatingCall) return;
 
-    try {
-      setIsInitiatingCall(true);
+  try {
+    setIsInitiatingCall(true);
+    const token = await getToken();
 
-      const token = await getToken();
-
-      const response = await axios.post(
-        `${API_URL}/api/calls/initiate`,
-        {
-          conversationId: id,
-          type: "audio",
+    const response = await axios.post(
+      `${API_URL}/api/calls/initiate`,
+      {
+        conversationId: id,
+        type: "video",
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      }
+    );
 
-      const { call } = response.data;
+    console.log("📞 Full response:", JSON.stringify(response.data, null, 2));
 
-      router.push({
-        pathname: "/call/[id]" as any,
-        params: {
-          id: call.id,
-          channelName: call.channelName,
-          conversationId: id,
-          callType: "audio",
-        },
-      });
-    } catch (error: any) {
-      console.error("❌ Error starting audio call:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.error || "Failed to start audio call"
-      );
-    } finally {
-      setIsInitiatingCall(false);
+    const { call } = response.data;
+
+    // ✅ FIX: Verify channelName exists
+    if (!call?.channelName) {
+      console.error("❌ Missing channelName in response:", response.data);
+      Alert.alert("Error", "Backend did not return channelName");
+      return;
     }
+
+    console.log("✅ Using channelName:", call.channelName);
+
+    router.push({
+      pathname: "/call/[id]" as any,
+      params: {
+        id: call.id,
+        channelName: call.channelName, // ✅ Must exist
+        conversationId: id,
+        callType: "audio",
+        conversationType: conversation?.type || "private",
+      },
+    });
+  } catch (error: any) {
+    console.error("❌ Error starting video call:", error);
+    Alert.alert(
+      "Error",
+      error.response?.data?.error || "Failed to start video call"
+    );
+  } finally {
+    setIsInitiatingCall(false);
+  }
   };
 
   const handleSendMessage = async (data: any) => {
@@ -1103,47 +1127,46 @@ export default function MessageScreen() {
 
       {renderHeader}
 
-<KeyboardAvoidingView
-  style={{ flex: 1 }}
-  behavior={Platform.OS === "ios" ? "padding" : "height"}   // ✅ giống AI Chat
-  keyboardVerticalOffset={0}
->
-  {/* ✅ Chat Area */}
-  <View style={{ flex: 1 }}>
-    <FlatList
-      ref={flatListRef}
-      data={messages}
-      renderItem={renderMessage}
-      keyExtractor={keyExtractor}
-      contentContainerStyle={{
-        paddingHorizontal: 16,
-        paddingBottom: 12,
-      }}
-      showsVerticalScrollIndicator={false}
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-      inverted={false}
-      removeClippedSubviews={Platform.OS === "android"}
-      keyboardShouldPersistTaps="handled"
-    />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"} // ✅ giống AI Chat
+        keyboardVerticalOffset={0}
+      >
+        {/* ✅ Chat Area */}
+        <View style={{ flex: 1 }}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={{
+              paddingHorizontal: 16,
+              paddingBottom: 12,
+            }}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            inverted={false}
+            removeClippedSubviews={Platform.OS === "android"}
+            keyboardShouldPersistTaps="handled"
+          />
 
-    {renderScrollToBottomButton()}
-  </View>
+          {renderScrollToBottomButton()}
+        </View>
 
-  {/* ✅ Input */}
-  <MessageInput
-    conversationId={id}
-    recipientId={recipientId}
-    onSendMessage={handleSendMessage}
-    replyTo={replyTo}
-    onCancelReply={() => setReplyTo(null)}
-    onTyping={sendTypingIndicator}
-    disabled={!encryptionReady}
-    userName={currentUserName}
-    onFocusInput={() => scrollToBottomIfNeeded(true)}
-  />
-</KeyboardAvoidingView>
-
+        {/* ✅ Input */}
+        <MessageInput
+          conversationId={id}
+          recipientId={recipientId}
+          onSendMessage={handleSendMessage}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+          onTyping={sendTypingIndicator}
+          disabled={!encryptionReady}
+          userName={currentUserName}
+          onFocusInput={() => scrollToBottomIfNeeded(true)}
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -3,11 +3,13 @@
 // ✅ AI Analysis: Background only, fire-and-forget
 // ✅ Encryption: Background only, doesn't block UI
 // ✅ Typing indicator: Optimized with debounce
+// 🆕 GROUP CHAT: Support multi-recipient encryption
 
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useOnDeviceAI } from "@/hooks/ai/useOnDeviceAI";
 import { useChunkedFileEncryption } from "@/hooks/message/useChunkedFileEncryption";
+import { useConversations } from "@/hooks/message/useConversations"; // 🆕 Import
 import { useEncryption } from "@/hooks/message/useEncryption";
 import type { RichMediaDTO } from "@/hooks/message/useGiphy";
 import { useAuth } from "@clerk/clerk-expo";
@@ -16,7 +18,13 @@ import axios from "axios";
 import { Audio } from "expo-av";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   Animated,
@@ -114,16 +122,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const { encryptAndUploadFile, isReady: encryptionReady } =
     useChunkedFileEncryption();
 
-  const { encryptMessage, isInitialized: encryptionInitialized } =
-    useEncryption();
+  const {
+    encryptMessage,
+    encryptMessageForGroup,
+    isInitialized: encryptionInitialized,
+  } = useEncryption(); // 🆕 Add encryptMessageForGroup
 
-  const { getToken } = useAuth();
+  const { userId, getToken } = useAuth(); // 🆕 Get userId
+  const { conversations } = useConversations(); // 🆕 Get conversations
 
   const {
     isReady: aiReady,
     analyzeTextMessage,
     checkImageToxicity,
   } = useOnDeviceAI();
+
+  // 🆕 Find current conversation
+  const currentConversation = useMemo(() => {
+    return conversations.find((c) => c._id === conversationId);
+  }, [conversations, conversationId]);
 
   const toggleExpand = () => {
     const toValue = isExpanded ? 0 : 1;
@@ -173,7 +190,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     }
 
-    // ✅ OPTIMIZED: AI analysis in background, non-blocking
     analyzeWhileTyping(text);
   };
 
@@ -189,7 +205,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     };
   }, [onTyping, userName]);
 
-  // ✅ OPTIMIZED: AI analysis is fire-and-forget, doesn't block anything
   const analyzeWhileTyping = useCallback(
     debounce(async (text: string) => {
       if (!aiReady || text.trim().length < 10) {
@@ -261,27 +276,26 @@ const MessageInput: React.FC<MessageInputProps> = ({
     try {
       const tempId = `temp-${Date.now()}-${Math.random()}`;
 
-      // ✅ Step 1: INSTANT optimistic UI
       console.log("🚀 [GIF] Creating optimistic message");
 
       const optimisticData = {
         tempId,
         content: messageContent || undefined,
         type: type,
-        richMedia: richMedia, // ✅ Pass full object for optimistic UI
+        richMedia: richMedia,
         replyTo: currentReplyTo,
         isOptimistic: true,
       };
 
       onSendMessage(optimisticData);
 
-      // ✅ Step 2: BACKGROUND - Send to server as JSON (NOT FormData)
       setTimeout(async () => {
         try {
+          // ✅ FIX: Send as JSON instead of FormData
           const jsonPayload = {
             content: messageContent || undefined,
             type: type,
-            richMedia: richMedia, // ✅ Send as object (will be auto-stringified by fetch)
+            richMedia: richMedia, // ✅ No need to stringify - will be done in useMessages
             replyTo: currentReplyTo,
             tempId: tempId,
           };
@@ -307,12 +321,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   // ============================================
-  // 🚀 ULTRA-OPTIMIZED SEND FUNCTION
+  // 🚀 ULTRA-OPTIMIZED SEND FUNCTION - WITH GROUP SUPPORT
   // ============================================
   const handleSend = async () => {
     if (!message.trim() && attachments.length === 0) return;
 
-    // ✅ Stop typing indicator
     if (isTypingRef.current && onTyping) {
       console.log("⌨️ [SEND] Stopping typing indicator");
       isTypingRef.current = false;
@@ -327,7 +340,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const currentAttachments = [...attachments];
     const currentReplyTo = replyTo?._id;
 
-    // ✅ PRIORITY 1: INSTANT UI CLEAR - User can type immediately
     console.log("🚀 [SEND] INSTANT UI CLEAR");
     setMessage("");
     setAttachments([]);
@@ -339,14 +351,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const tempId = `temp-${Date.now()}-${Math.random()}`;
 
     // ============================================
-    // 🎯 PRIORITY 2: TEXT MESSAGE - INSTANT SEND (NO BLOCKING)
+    // 🎯 PRIORITY 2: TEXT MESSAGE - WITH GROUP SUPPORT
     // ============================================
     const isTextOnly = currentAttachments.length === 0 && messageContent;
 
     if (isTextOnly) {
       console.log("⚡ [SEND] TEXT-ONLY MESSAGE - ULTRA FAST");
 
-      // ✅ STEP 1: Optimistic UI
       const optimisticData = {
         tempId,
         content: messageContent,
@@ -357,32 +368,56 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
       onSendMessage(optimisticData);
 
-      // ✅ FIX: Save emotion for TEXT-ONLY messages too
       if (messageContent && aiReady && conversationId) {
         saveEmotionInBackground(messageContent, conversationId);
       }
 
-      // ✅ STEP 2: Background encryption (FAST - uses cache)
+      // 🆕 BACKGROUND ENCRYPTION - SUPPORT GROUP
       setTimeout(async () => {
         try {
           if (!encryptionInitialized) {
             throw new Error("Encryption not ready");
           }
 
-          if (!recipientId) {
-            throw new Error("Recipient not found");
+          console.log("🔐 [SEND] Encrypting message...");
+
+          let encryptedData;
+
+          // 🆕 CHECK: Is this a group chat?
+          if (currentConversation?.type === "group") {
+            // 🔥 GROUP CHAT: Encrypt for all participants
+            console.log(
+              "👥 [SEND] GROUP CHAT - encrypting for all participants"
+            );
+
+            if (!conversationId) {
+              throw new Error("Conversation ID required for group encryption");
+            }
+
+            // Encrypt for group (will encrypt for each participant)
+            encryptedData = await encryptMessageForGroup(
+              conversationId,
+              messageContent
+            );
+
+            console.log("✅ [SEND] Group encryption complete");
+          } else {
+            // 🔥 PRIVATE CHAT: Encrypt for single recipient (OLD LOGIC)
+            if (!recipientId) {
+              throw new Error("Recipient not found");
+            }
+
+            console.log("💬 [SEND] PRIVATE CHAT - encrypting for recipient");
+
+            encryptedData = await encryptMessage(recipientId, messageContent);
+
+            console.log("✅ [SEND] Private encryption complete");
           }
-
-          console.log("🔐 [SEND] Encrypting (using cached keys)...");
-
-          const encrypted = await encryptMessage(recipientId, messageContent);
-
-          console.log("✅ [SEND] Encrypted instantly from cache!");
 
           const textData = {
             content: messageContent,
-            encryptedContent: encrypted.encryptedContent,
-            encryptionMetadata: encrypted.encryptionMetadata,
+            encryptedContent: encryptedData.encryptedContent,
+            encryptionMetadata: encryptedData.encryptionMetadata,
             type: "text" as const,
             replyTo: currentReplyTo,
             tempId: tempId,
@@ -404,7 +439,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
     // ============================================
     console.log("📎 [SEND] MESSAGE WITH ATTACHMENTS");
 
-    // ✅ Check images first (if any)
     const imagesAreSafe = await checkImagesBeforeSend(currentAttachments);
     if (!imagesAreSafe) {
       console.log("🚫 [AI] Images contain toxic content - BLOCKED!");
@@ -424,7 +458,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       else messageType = "file";
     }
 
-    // ✅ Create optimistic message WITH localUris
     const optimisticData = {
       tempId,
       content: messageContent || undefined,
@@ -437,7 +470,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
       isOptimistic: true,
     };
 
-    // ✅ Send optimistic message IMMEDIATELY to UI
     onSendMessage(optimisticData);
 
     console.log("✅ [SEND] Optimistic message sent to UI with local URIs");
@@ -447,14 +479,13 @@ const MessageInput: React.FC<MessageInputProps> = ({
     // ============================================
     setTimeout(async () => {
       try {
-        // 🔥 Background emotion detection (fire-and-forget, lowest priority)
         if (messageContent && aiReady && conversationId) {
           saveEmotionInBackground(messageContent, conversationId);
         }
 
-        // 🚀 HANDLE FILE ENCRYPTION
+        // 🚀 HANDLE FILE ENCRYPTION - WORKS FOR BOTH 1-1 AND GROUP
         const shouldEncryptFiles =
-          encryptionReady && recipientId && currentAttachments.length > 0;
+          encryptionReady && conversationId && currentAttachments.length > 0; // 🔥 CHANGED: Use conversationId instead of recipientId
 
         if (shouldEncryptFiles) {
           console.log("🚀 [SEND] Starting STREAMING encrypt + upload...");
@@ -470,11 +501,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
               `🔒 [ENCRYPT] File ${i + 1}/${totalFiles}: ${att.name}`
             );
 
+            // 🔥 FIX: Pass conversationId, native method will handle multi-recipient
             const result = await encryptAndUploadFile(
               att.uri,
               att.name,
-              conversationId!,
-              recipientId,
+              conversationId!, // ✅ Only need conversationId - native handles group
+              undefined, // ✅ recipientId deprecated for native method
               {
                 onProgress: (progress) => {
                   console.log(
@@ -528,66 +560,10 @@ const MessageInput: React.FC<MessageInputProps> = ({
           return;
         }
 
-        // Handle non-encrypted attachments
-        if (currentAttachments.length > 0) {
-          const mediaFiles = currentAttachments.filter((att) =>
-            ["image", "video", "audio"].includes(att.type)
-          );
-          const documentFiles = currentAttachments.filter(
-            (att) => att.type === "file"
-          );
-
-          if (mediaFiles.length > 0) {
-            const mediaFormData = new FormData();
-            const firstMediaType = mediaFiles[0].type;
-            mediaFormData.append("type", firstMediaType);
-
-            if (messageContent) {
-              mediaFormData.append("content", messageContent);
-            }
-
-            if (currentReplyTo) {
-              mediaFormData.append("replyTo", currentReplyTo);
-            }
-
-            mediaFiles.forEach((att) => {
-              mediaFormData.append("files", {
-                uri: att.uri,
-                type: att.mimeType || "application/octet-stream",
-                name: att.name,
-              } as any);
-            });
-
-            mediaFormData.append("tempId", tempId);
-
-            onSendMessage(mediaFormData);
-          }
-
-          if (documentFiles.length > 0) {
-            const docFormData = new FormData();
-            docFormData.append("type", "file");
-
-            if (messageContent) {
-              docFormData.append("content", messageContent);
-            }
-
-            if (currentReplyTo) {
-              docFormData.append("replyTo", currentReplyTo);
-            }
-
-            documentFiles.forEach((att) => {
-              docFormData.append("files", {
-                uri: att.uri,
-                type: att.mimeType || "application/octet-stream",
-                name: att.name,
-              } as any);
-            });
-
-            docFormData.append("tempId", tempId);
-
-            onSendMessage(docFormData);
-          }
-        }
+        // ❌ REMOVE NON-ENCRYPTED ATTACHMENTS HANDLING - Force encryption
+        // Files should ALWAYS use encryption in both 1-1 and group
+        console.warn("⚠️ [SEND] No encryption - files not sent");
+        Alert.alert(t("error"), "File encryption not ready. Please try again.");
       } catch (error: any) {
         console.error("❌ [SEND] Error:", error);
         Alert.alert(t("error"), error.message || t("message.failed"));
@@ -595,13 +571,11 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }, 0);
   };
 
-  // ✅ OPTIMIZED: Fire-and-forget emotion saving
   const saveEmotionInBackground = async (
     text: string,
     convId: string,
     analysis?: any
   ) => {
-    // Use setTimeout to ensure this is truly fire-and-forget
     setTimeout(async () => {
       try {
         console.log("🔍 [Background] Saving emotion to backend...");
@@ -638,7 +612,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
         console.log("✅ [Background] Emotion saved to backend");
       } catch (error) {
         console.error("❌ [Background] Failed to save emotion:", error);
-        // Silent fail - doesn't affect user experience
       }
     }, 0);
   };

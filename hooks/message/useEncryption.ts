@@ -1,4 +1,4 @@
-// hooks/message/useEncryption.ts - OPTIMIZED VERSION
+// hooks/message/useEncryption.ts - WITH GROUP SUPPORT
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import { UnifiedEncryptionService } from "@/lib/encryption/UnifiedEncryptionService";
@@ -14,14 +14,12 @@ export const useEncryption = () => {
   
   const initCheckRef = useRef(false);
 
-  // ✅ Initialize and verify keys on mount
   useEffect(() => {
     const checkInitialization = async () => {
       if (initCheckRef.current) return;
       
       if (globalReady && userId) {
         try {
-          // Verify my key exists
           const myKey = await KeyCacheService.getMyKey();
           if (myKey && myKey.length > 0) {
             console.log('✅ [useEncryption] Initialized - my key available');
@@ -43,10 +41,6 @@ export const useEncryption = () => {
     checkInitialization();
   }, [globalReady, userId]);
 
-  /**
-   * ✅ Prefetch keys for conversation participants
-   * Call this when opening a conversation
-   */
   const prefetchConversationKeys = useCallback(
     async (participantIds: string[]) => {
       console.log(`🔄 [useEncryption] Prefetching keys for conversation...`);
@@ -57,7 +51,6 @@ export const useEncryption = () => {
       }
 
       try {
-        // Filter out my own ID
         const otherParticipants = participantIds.filter(id => id !== userId);
         
         if (otherParticipants.length === 0) {
@@ -69,14 +62,13 @@ export const useEncryption = () => {
         console.log('✅ [useEncryption] Prefetch complete');
       } catch (error: any) {
         console.error('❌ [useEncryption] Prefetch failed:', error);
-        // Don't throw - prefetch failure shouldn't block the app
       }
     },
     [isInitialized, userId, getToken]
   );
 
   /**
-   * ✅ Encrypt message using cached keys (NO NETWORK CALL)
+   * ✅ Encrypt message for 1-1 chat (EXISTING LOGIC - NO CHANGES)
    */
   const encryptMessage = useCallback(
     async (recipientUserId: string, message: string) => {
@@ -93,7 +85,6 @@ export const useEncryption = () => {
       try {
         const startTime = Date.now();
 
-        // ✅ Get keys from cache (FAST - no network)
         const [recipientKey, myKey] = await Promise.all([
           KeyCacheService.getKey(recipientUserId),
           KeyCacheService.getMyKey(),
@@ -102,11 +93,9 @@ export const useEncryption = () => {
         if (!recipientKey) {
           console.error('❌ [useEncryption] Recipient key not in cache');
           
-          // ✅ Try to fetch it now
           console.log('🔄 [useEncryption] Fetching missing recipient key...');
           await KeyCacheService.prefetchKeys([recipientUserId], getToken, API_BASE_URL);
           
-          // Try again
           const fetchedKey = await KeyCacheService.getKey(recipientUserId);
           if (!fetchedKey) {
             throw new Error("Recipient encryption key not available");
@@ -120,7 +109,6 @@ export const useEncryption = () => {
         const fetchDuration = Date.now() - startTime;
         console.log(`✅ [useEncryption] Keys retrieved from cache in ${fetchDuration}ms`);
 
-        // ✅ Encrypt
         console.log(`🔐 [useEncryption] Encrypting...`);
         const encryptStart = Date.now();
         
@@ -150,7 +138,123 @@ export const useEncryption = () => {
   );
 
   /**
-   * ✅ Decrypt message using cached keys (NO NETWORK CALL)
+   * 🆕 Encrypt message for GROUP CHAT
+   * Fetches participants from server, encrypts for each
+   */
+  const encryptMessageForGroup = useCallback(
+    async (conversationId: string, message: string) => {
+      console.log(`👥 [useEncryption] Encrypting GROUP message for conversation ${conversationId}...`);
+
+      if (!isInitialized) {
+        throw new Error("Encryption not ready - please wait");
+      }
+
+      if (!userId) {
+        throw new Error("User ID not available");
+      }
+
+      try {
+        const token = await getToken();
+        if (!token) {
+          throw new Error("No authentication token");
+        }
+
+        // 1️⃣ Fetch conversation participants
+        console.log("👥 [useEncryption] Fetching conversation participants...");
+        
+        const convResponse = await fetch(
+          `${API_BASE_URL}/api/conversations/${conversationId}`,
+          {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!convResponse.ok) {
+          throw new Error(`Failed to fetch conversation: ${convResponse.status}`);
+        }
+
+        const convResult = await convResponse.json();
+        const participants = convResult.data.participants || [];
+        
+        // Extract participant IDs (excluding myself)
+        const participantIds = participants
+          .map((p: any) => p.clerkId)
+          .filter((id: string) => id !== userId);
+
+        if (participantIds.length === 0) {
+          throw new Error("No participants found in group");
+        }
+
+        console.log(`✅ [useEncryption] Found ${participantIds.length} participants (excluding self)`);
+
+        // 2️⃣ Prefetch all participant keys
+        await prefetchConversationKeys(participantIds);
+
+        // 3️⃣ Get my key
+        const myKey = await KeyCacheService.getMyKey();
+        if (!myKey) {
+          throw new Error("Your encryption key not available");
+        }
+
+        // 4️⃣ Encrypt for each participant
+        console.log(`🔐 [useEncryption] Encrypting for ${participantIds.length} participants...`);
+
+        const recipientEncryptions = await Promise.all(
+          participantIds.map(async (participantId: string) => {
+            const participantKey = await KeyCacheService.getKey(participantId);
+            
+            if (!participantKey) {
+              console.warn(`⚠️ [useEncryption] No key for ${participantId}, skipping`);
+              return null;
+            }
+
+            const encrypted = await UnifiedEncryptionService.encryptMessage(message, participantKey);
+            
+            return {
+              userId: participantId,
+              encrypted: JSON.parse(encrypted.encryptedContent),
+            };
+          })
+        );
+
+        // Filter out failed encryptions
+        const validEncryptions = recipientEncryptions.filter((e) => e !== null);
+
+        if (validEncryptions.length === 0) {
+          throw new Error("Failed to encrypt for any participant");
+        }
+
+        console.log(`✅ [useEncryption] Successfully encrypted for ${validEncryptions.length}/${participantIds.length} participants`);
+
+        // 5️⃣ Encrypt for myself
+        const myEncryption = await UnifiedEncryptionService.encryptMessage(message, myKey);
+        const senderEncrypted = JSON.parse(myEncryption.encryptedContent);
+
+        // 6️⃣ Format result
+        return {
+          encryptedContent: JSON.stringify({
+            type: "group",
+            recipients: validEncryptions,
+            sender_encrypted: senderEncrypted,
+          }),
+          encryptionMetadata: {
+            type: "PreKeyWhisperMessage" as const,
+          },
+        };
+      } catch (error: any) {
+        console.error('❌ [useEncryption] Group encryption failed:', error.message);
+        throw new Error(`Failed to encrypt for group: ${error.message}`);
+      }
+    },
+    [isInitialized, userId, getToken, prefetchConversationKeys]
+  );
+
+  /**
+   * ✅ Decrypt message (EXISTING LOGIC - NO CHANGES)
    */
   const decryptMessage = useCallback(
     async (senderId: string, encryptedContent: string) => {
@@ -167,19 +271,40 @@ export const useEncryption = () => {
       try {
         const parsed = JSON.parse(encryptedContent);
 
-        // Determine which encrypted version to use
         let dataToDecrypt;
-        if (senderId === userId) {
-          dataToDecrypt = parsed.sender_encrypted;
+        
+        // 🆕 Handle group messages
+        if (parsed.type === "group") {
+          console.log("👥 [useEncryption] Decrypting GROUP message");
+          
+          if (senderId === userId) {
+            // I'm the sender, use sender_encrypted
+            dataToDecrypt = parsed.sender_encrypted;
+          } else {
+            // I'm a recipient, find my encryption
+            const myEncryption = parsed.recipients?.find(
+              (r: any) => r.userId === userId
+            );
+            
+            if (!myEncryption) {
+              throw new Error("No encryption found for current user in group message");
+            }
+            
+            dataToDecrypt = myEncryption.encrypted;
+          }
         } else {
-          dataToDecrypt = parsed.recipient_encrypted;
+          // 🔄 Handle 1-1 messages (EXISTING LOGIC)
+          if (senderId === userId) {
+            dataToDecrypt = parsed.sender_encrypted;
+          } else {
+            dataToDecrypt = parsed.recipient_encrypted;
+          }
         }
 
         if (!dataToDecrypt?.iv || !dataToDecrypt?.authTag || !dataToDecrypt?.data) {
           throw new Error("Invalid encrypted content");
         }
 
-        // ✅ Get key from cache (FAST)
         const myKey = await KeyCacheService.getMyKey();
         if (!myKey) {
           throw new Error("Decryption key not available");
@@ -207,8 +332,9 @@ export const useEncryption = () => {
   return {
     isInitialized,
     encryptMessage,
+    encryptMessageForGroup, // 🆕 Export new function
     decryptMessage,
-    prefetchConversationKeys, // ✅ NEW: Expose prefetch function
+    prefetchConversationKeys,
     loading: globalLoading,
     error: globalError,
   };

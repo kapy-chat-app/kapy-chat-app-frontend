@@ -1,4 +1,5 @@
-// app/call/[id].tsx - COMPLETE WITH PiP MINIMIZE BUTTON
+// app/call/[id].tsx - FIXED GROUP CALL WITH REJOIN SUPPORT
+import { usePiPCall } from "@/contexts/PiPCallContext";
 import { useCallEmotionCapture } from "@/hooks/call/useCallEmotionCapture";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,7 +33,6 @@ import {
 } from "react-native-agora";
 import { SafeAreaView } from "react-native-safe-area-context";
 import io, { Socket } from "socket.io-client";
-import { usePiPCall } from "@/contexts/PiPCallContext";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const SOCKET_URL =
@@ -48,7 +48,6 @@ interface Participant {
   isScreenSharing?: boolean;
   isMuted?: boolean;
   isVideoOff?: boolean;
-  // ⭐ NEW: Realtime emotion data
   currentEmotion?: string;
   emotionConfidence?: number;
 }
@@ -57,26 +56,24 @@ export default function VideoCallScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const { getToken, userId } = useAuth();
-  const {
-    id: callId,
-    channelName,
-    conversationId,
-    callType = "video",
-    conversationType = "private",
-  } = useLocalSearchParams<{
-    id: string;
-    channelName: string;
-    conversationId: string;
-    callType?: "video" | "audio";
-    conversationType?: "private" | "group";
-  }>();
+  const params = useLocalSearchParams();
+  const toStr = (v: any) => (Array.isArray(v) ? v[0] : v);
+
+  const callId = toStr(params.id);
+  const channelName = toStr(params.channelName);
+  const conversationId = toStr(params.conversationId);
+  const callType = (toStr(params.callType) || "video") as "video" | "audio";
+  const conversationType = (toStr(params.conversationType) || "private") as
+    | "private"
+    | "group";
+
   const agoraEngineRef = useRef<IRtcEngine | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const isEndingRef = useRef(false);
   const cameraRef = useRef<any>(null);
   const remoteVideoSetupRef = useRef<Set<number>>(new Set());
   const mainVideoViewRef = useRef(null);
-  
+
   // Call states
   const [joined, setJoined] = useState(false);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -92,7 +89,7 @@ export default function VideoCallScreen() {
   const [showParticipantsList, setShowParticipantsList] = useState(false);
   const [myUid, setMyUid] = useState<number>(0);
 
-  // ⭐ NEW: Emotion states
+  // Emotion states
   const [myCurrentEmotion, setMyCurrentEmotion] = useState<string | null>(null);
   const [myEmotionConfidence, setMyEmotionConfidence] = useState<number>(0);
   const [emotionCaptureEnabled, setEmotionCaptureEnabled] = useState(true);
@@ -108,10 +105,10 @@ export default function VideoCallScreen() {
 
   const isGroupCall = conversationType === "group";
 
-  // ⭐ PiP functionality
+  // PiP functionality
   const { minimizeCall } = usePiPCall();
 
-  // ⭐ Minimize to PiP handler
+  // Minimize to PiP handler
   const handleMinimize = () => {
     if (!agoraEngineRef.current) return;
 
@@ -134,7 +131,7 @@ export default function VideoCallScreen() {
     router.back();
   };
 
-  // ⭐ EMOTION CAPTURE HOOK - Captures every 10s
+  // Emotion capture hook
   const { isCapturing } = useCallEmotionCapture({
     callId: callId || "",
     enabled: emotionCaptureEnabled && joined,
@@ -144,7 +141,6 @@ export default function VideoCallScreen() {
     mainParticipantUid: mainParticipant?.uid || myUid,
   });
 
-  // ⭐ NEW: Toggle emotion capture
   const toggleEmotionCapture = () => {
     setEmotionCaptureEnabled(!emotionCaptureEnabled);
 
@@ -205,7 +201,7 @@ export default function VideoCallScreen() {
     }).start();
   };
 
-  // Cleanup and leave function with overlay
+  // ⭐ FIXED: Cleanup - for group calls, just leave silently
   const cleanupAndLeave = async (
     showMessage: boolean = false,
     message?: string
@@ -228,7 +224,8 @@ export default function VideoCallScreen() {
       }
 
       if (socketRef.current) {
-        socketRef.current.emit("leaveCallRoom", { callId });
+        // ⭐ Pass userId to track who left
+        socketRef.current.emit("leaveCallRoom", { callId, userId });
         socketRef.current.disconnect();
       }
     } catch (error) {
@@ -270,6 +267,37 @@ export default function VideoCallScreen() {
   };
 
   useEffect(() => {
+    if (!callId || !conversationId || !channelName) {
+      console.error("❌ Missing required params:", {
+        callId,
+        conversationId,
+        channelName,
+        allParams: params,
+      });
+
+      Alert.alert("Error", "Missing call parameters. Please try again.", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+      return;
+    }
+
+    console.log("✅ Call params validated:", {
+      callId,
+      channelName,
+      conversationId,
+      callType,
+      conversationType,
+    });
+  }, [callId, conversationId, channelName]);
+
+  useEffect(() => {
+    if (!callId || !conversationId || !channelName) {
+      Alert.alert("Error", "Missing call params");
+      router.back();
+    }
+  }, [callId, conversationId, channelName]);
+
+  useEffect(() => {
     return () => {
       if (adviceTimeoutRef.current) {
         clearTimeout(adviceTimeoutRef.current);
@@ -293,7 +321,8 @@ export default function VideoCallScreen() {
 
       const personalRoom = `user:${userId}`;
       socket.emit("join", personalRoom);
-      socket.emit("joinCallRoom", { callId, conversationId });
+      // ⭐ Pass userId to track participants
+      socket.emit("joinCallRoom", { callId, conversationId, userId });
     });
 
     socket.on(
@@ -308,22 +337,71 @@ export default function VideoCallScreen() {
       }
     );
 
+    // ⭐ FIXED: For group calls, only end if you receive "callEnded"
     socket.on("userLeftCall", (data: { userId: string; uid: number }) => {
       console.log("👤 User left call:", data);
 
       remoteVideoSetupRef.current.delete(data.uid);
 
-      if (!isGroupCall && participants.length === 1) {
+      const updatedParticipants = participants.filter(
+        (p) => p.uid !== data.uid
+      );
+
+      // ⭐ ONLY end if it's a 1-1 call AND other person left
+      if (
+        !isGroupCall &&
+        data.userId !== userId &&
+        updatedParticipants.length === 0
+      ) {
         console.log("🔚 Other participant left 1-1 call, ending...");
         cleanupAndLeave(true, "Call ended");
         return;
       }
 
-      setParticipants((prev) => prev.filter((p) => p.uid !== data.uid));
+      // For group calls, just update participants
+      setParticipants(updatedParticipants);
       if (mainParticipant?.uid === data.uid) {
         setMainParticipant(null);
       }
     });
+
+    // ⭐ NEW: Handle participant left (for group calls)
+    socket.on(
+      "participantLeftCall",
+      (data: {
+        call_id: string;
+        user_id: string;
+        user_name: string;
+        remaining_participants: number;
+      }) => {
+        console.log("👋 Participant left group call:", data);
+
+        // Just update UI, don't end call
+        const updatedParticipants = participants.filter(
+          (p) => p.userId !== data.user_id
+        );
+
+        setParticipants(updatedParticipants);
+        if (mainParticipant?.userId === data.user_id) {
+          setMainParticipant(null);
+        }
+      }
+    );
+
+    // ⭐ NEW: Handle when you left group call
+    socket.on(
+      "userLeftGroupCall",
+      (data: {
+        call_id: string;
+        user_id: string;
+        user_name: string;
+        remaining_participants: number;
+      }) => {
+        console.log("✅ You left the group call:", data);
+        // This is confirmation that you left successfully
+        // Don't need to do anything - already navigating back
+      }
+    );
 
     socket.on(
       "participantMuteStatusChanged",
@@ -389,7 +467,7 @@ export default function VideoCallScreen() {
       }
     });
 
-    // ⭐ NEW: Listen for realtime emotion updates
+    // Emotion update handler (unchanged)
     socket.on(
       "callEmotionUpdate",
       (data: {
@@ -403,96 +481,33 @@ export default function VideoCallScreen() {
         ai_advice?: string;
         transcription?: string;
       }) => {
-        console.log("🔥 ==========================================");
-        console.log("🔥 RAW callEmotionUpdate EVENT RECEIVED");
-        console.log("🔥 ==========================================");
-        console.log("🔥 Full data:", JSON.stringify(data, null, 2));
-        console.log("🔥 call_id:", data.call_id);
-        console.log("🔥 user_id:", data.user_id);
-        console.log("🔥 emotion:", data.emotion);
-        console.log("🔥 confidence:", data.confidence);
-        console.log("🔥 ai_advice:", data.ai_advice);
-        console.log("🔥 transcription:", data.transcription);
-        console.log("🔥 ==========================================");
-        console.log("🔥 VALIDATION:");
-        console.log("🔥 Current callId:", callId);
-        console.log("🔥 Current userId:", userId);
-        console.log("🔥 callId match?", data.call_id === callId);
-        console.log("🔥 userId match?", data.user_id === userId);
-        console.log("🔥 Has ai_advice?", !!data.ai_advice);
-        console.log("🔥 Advice length:", data.ai_advice?.length || 0);
-        console.log("🔥 ==========================================");
+        console.log("🔥 callEmotionUpdate EVENT RECEIVED");
 
         if (data.call_id !== callId) {
           console.log("❌ Call ID mismatch, ignoring event");
-          console.log("❌ Expected:", callId);
-          console.log("❌ Received:", data.call_id);
           return;
         }
 
-        console.log("✅ Call ID matched, processing emotion update");
-
         if (data.user_id === userId) {
-          console.log("🎯 ==========================================");
-          console.log("🎯 THIS IS MY EMOTION UPDATE");
-          console.log("🎯 ==========================================");
-
           setMyCurrentEmotion(data.emotion);
           setMyEmotionConfidence(data.confidence);
 
-          console.log("🎯 Updated myCurrentEmotion to:", data.emotion);
-          console.log("🎯 Updated myEmotionConfidence to:", data.confidence);
-
           if (data.ai_advice && data.ai_advice.trim().length > 0) {
-            console.log("🤖 ==========================================");
-            console.log("🤖 AI ADVICE DETECTED!");
-            console.log("🤖 ==========================================");
-            console.log("🤖 Advice content:", data.ai_advice);
-            console.log("🤖 Advice length:", data.ai_advice.length);
-            console.log("🤖 Trimmed length:", data.ai_advice.trim().length);
-
             if (adviceTimeoutRef.current) {
-              console.log("🤖 Clearing previous advice timeout");
               clearTimeout(adviceTimeoutRef.current);
             }
 
-            console.log("🤖 Setting aiAdvice state...");
             setAiAdvice(data.ai_advice);
-
-            console.log("🤖 Setting showAdvice to true...");
             setShowAdvice(true);
 
-            console.log("🤖 Setting 10s auto-hide timer...");
             adviceTimeoutRef.current = setTimeout(() => {
-              console.log("⏰ 10 seconds elapsed, hiding advice");
               setShowAdvice(false);
             }, 10000);
-
-            console.log("🤖 ✅ AI Advice UI should now be visible!");
-            console.log("🤖 ==========================================");
-          } else {
-            console.log("⚠️ ==========================================");
-            console.log("⚠️ NO AI ADVICE IN THIS UPDATE");
-            console.log("⚠️ ==========================================");
-            console.log("⚠️ ai_advice value:", data.ai_advice);
-            console.log("⚠️ ai_advice type:", typeof data.ai_advice);
-            console.log("⚠️ ai_advice is null?", data.ai_advice === null);
-            console.log(
-              "⚠️ ai_advice is undefined?",
-              data.ai_advice === undefined
-            );
-            console.log("⚠️ ai_advice is empty string?", data.ai_advice === "");
-            console.log("⚠️ ==========================================");
           }
-        } else {
-          console.log("ℹ️ This is another participant's emotion update");
-          console.log("ℹ️ Their userId:", data.user_id);
-          console.log("ℹ️ My userId:", userId);
         }
 
-        console.log("👥 Updating participants list with new emotion...");
-        setParticipants((prev) => {
-          const updated = prev.map((p) =>
+        setParticipants((prev) =>
+          prev.map((p) =>
             p.userId === data.user_id
               ? {
                   ...p,
@@ -500,14 +515,11 @@ export default function VideoCallScreen() {
                   emotionConfidence: data.confidence,
                 }
               : p
-          );
-          console.log("👥 Participants updated");
-          return updated;
-        });
+          )
+        );
 
         setMainParticipant((prev) => {
           if (prev?.userId === data.user_id) {
-            console.log("🎬 Updating main participant emotion");
             return {
               ...prev,
               currentEmotion: data.emotion,
@@ -516,29 +528,21 @@ export default function VideoCallScreen() {
           }
           return prev;
         });
-
-        console.log("✅ callEmotionUpdate processing complete");
-        console.log("==========================================");
       }
     );
 
+    // ⭐ CRITICAL: Only end YOUR call when you receive this
     socket.on("callEnded", (data: any) => {
       console.log("📞 Call ended event received:", data);
 
-      const endedByMe = data.ended_by === userId;
-
-      if (endedByMe) {
-        console.log("✅ I ended the call, just leave");
-        cleanupAndLeave(false);
-      } else {
-        console.log("🔚 Call ended by another participant");
-        cleanupAndLeave(true, "Call ended");
-      }
+      // Always clean up and leave when call officially ends
+      cleanupAndLeave(true, "Call ended");
     });
 
     socket.on("callRejected", (data: any) => {
       console.log("📞 Call rejected event received:", data);
 
+      // Only react if it's a full rejection (1-1 calls)
       if (data.rejection_type === "full") {
         const rejectedByMe = data.rejected_by === userId;
 
@@ -550,6 +554,7 @@ export default function VideoCallScreen() {
           cleanupAndLeave(true, "Call ended");
         }
       }
+      // For personal rejections in group calls, ignore
     });
 
     socketRef.current = socket;
@@ -557,7 +562,7 @@ export default function VideoCallScreen() {
     return () => {
       console.log("📞 Cleaning up socket in call screen");
       if (!isEndingRef.current) {
-        socket.emit("leaveCallRoom", { callId });
+        socket.emit("leaveCallRoom", { callId, userId });
         socket.disconnect();
       }
     };
@@ -583,7 +588,7 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Initialize Agora Engine
+  // Initialize Agora Engine (unchanged - works fine)
   useEffect(() => {
     const init = async () => {
       try {
@@ -595,6 +600,11 @@ export default function VideoCallScreen() {
         }
 
         const authToken = await getToken();
+        if (!channelName) {
+          Alert.alert("Error", "Missing channelName param");
+          router.back();
+          return;
+        }
         const response = await axios.post(
           `${API_URL}/api/agora/token`,
           {
@@ -647,23 +657,17 @@ export default function VideoCallScreen() {
               emotionConfidence: undefined,
             };
 
-            console.log("✅ New participant created:", newParticipant);
-
             setParticipants((prev) => {
               if (prev.find((p) => p.uid === remoteUid)) {
-                console.log("⚠️ Participant already exists, skipping add");
                 return prev;
               }
-              console.log("➕ Adding participant to list");
               return [...prev, newParticipant];
             });
 
             setMainParticipant((currentMain) => {
               if (!currentMain) {
-                console.log("🎯 Setting as MAIN participant (was null)");
                 return newParticipant;
               }
-              console.log("ℹ️ Main participant already set, keeping current");
               return currentMain;
             });
 
@@ -673,6 +677,7 @@ export default function VideoCallScreen() {
               }, 500);
             }
           },
+          // ⭐ FIXED: Don't auto-end on user offline for group calls
           onUserOffline: (connection, remoteUid, reason) => {
             console.log(
               "👤 Remote user offline:",
@@ -683,13 +688,19 @@ export default function VideoCallScreen() {
 
             remoteVideoSetupRef.current.delete(remoteUid);
 
-            if (!isGroupCall) {
+            const updatedParticipants = participants.filter(
+              (p) => p.uid !== remoteUid
+            );
+
+            // ⭐ Only auto-end for 1-1 calls
+            if (!isGroupCall && updatedParticipants.length === 0) {
               console.log("🔚 Other participant went offline in 1-1 call");
               cleanupAndLeave(true, "Call ended");
               return;
             }
 
-            setParticipants((prev) => prev.filter((p) => p.uid !== remoteUid));
+            // For group calls, just update list
+            setParticipants(updatedParticipants);
 
             if (mainParticipant?.uid === remoteUid) {
               setMainParticipant(null);
@@ -706,25 +717,16 @@ export default function VideoCallScreen() {
               remoteUid,
               state,
               reason,
-              elapsed,
             });
 
             if (state === 2) {
-              console.log(
-                "✅ Remote video is now decoding for uid:",
-                remoteUid
-              );
-
               if (
                 !remoteVideoSetupRef.current.has(remoteUid) &&
                 callType === "video"
               ) {
                 setupRemoteVideoStream(remoteUid);
               }
-            } else if (state === 0) {
-              console.log("⚠️ Remote video stopped for uid:", remoteUid);
             } else if (state === 4) {
-              console.log("❌ Remote video failed for uid:", remoteUid);
               remoteVideoSetupRef.current.delete(remoteUid);
               setTimeout(() => {
                 setupRemoteVideoStream(remoteUid);
@@ -733,19 +735,12 @@ export default function VideoCallScreen() {
 
             const isVideoOff = state === 0;
 
-            console.log(
-              `📹 Setting isVideoOff=${isVideoOff} for uid:${remoteUid}, state:${state}`
-            );
-
             setParticipants((prev) =>
               prev.map((p) => (p.uid === remoteUid ? { ...p, isVideoOff } : p))
             );
 
             setMainParticipant((prev) => {
               if (prev?.uid === remoteUid) {
-                console.log(
-                  `📹 Updating mainParticipant isVideoOff=${isVideoOff}`
-                );
                 return { ...prev, isVideoOff };
               }
               return prev;
@@ -758,12 +753,6 @@ export default function VideoCallScreen() {
             reason,
             elapsed
           ) => {
-            console.log("🎤 Remote audio state changed:", {
-              remoteUid,
-              state,
-              reason,
-            });
-
             const isMuted = state === 0 || state === 4;
 
             setParticipants((prev) =>
@@ -775,62 +764,6 @@ export default function VideoCallScreen() {
                 return { ...prev, isMuted };
               }
               return prev;
-            });
-          },
-          onVideoSubscribeStateChanged: (
-            channelId,
-            uid,
-            oldState,
-            newState,
-            elapseSinceLastState
-          ) => {
-            console.log("📹 Video subscribe state changed:", {
-              uid,
-              oldState,
-              newState,
-              elapsed: elapseSinceLastState,
-            });
-
-            if (newState === 3) {
-              console.log("✅ Successfully subscribed to remote video:", uid);
-            } else if (newState === 1) {
-              console.log("⚠️ Not subscribed to remote video:", uid);
-              if (
-                !remoteVideoSetupRef.current.has(uid) &&
-                callType === "video"
-              ) {
-                setTimeout(() => {
-                  setupRemoteVideoStream(uid);
-                }, 500);
-              }
-            } else if (newState === 2) {
-              console.log("🔄 Subscribing to remote video:", uid);
-            }
-          },
-          onRemoteVideoStats: (connection, stats) => {
-            if (stats.receivedBitrate > 0) {
-              console.log("📊 Remote video stats:", {
-                uid: stats.uid,
-                receivedBitrate: stats.receivedBitrate,
-                decoderOutputFrameRate: stats.decoderOutputFrameRate,
-                rendererOutputFrameRate: stats.rendererOutputFrameRate,
-                width: stats.width,
-                height: stats.height,
-              });
-            }
-          },
-          onFirstRemoteVideoDecoded: (
-            connection,
-            remoteUid,
-            width,
-            height,
-            elapsed
-          ) => {
-            console.log("🎬 First remote video frame decoded:", {
-              remoteUid,
-              width,
-              height,
-              elapsed,
             });
           },
         });
@@ -1064,12 +997,15 @@ export default function VideoCallScreen() {
     }
   };
 
+  // ⭐ FIXED: End call - pass duration
   const endCall = async () => {
     try {
       const authToken = await getToken();
       await axios.post(
         `${API_URL}/api/calls/${callId}/end`,
-        {},
+        {
+          duration: callDuration,
+        },
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -1077,6 +1013,8 @@ export default function VideoCallScreen() {
         }
       );
 
+      // For group calls, you might get a message that you left
+      // For 1-1 calls, everyone gets callEnded event
       cleanupAndLeave(false);
     } catch (error) {
       console.error("❌ Error ending call:", error);
@@ -1387,8 +1325,7 @@ export default function VideoCallScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* 🎬 NEW: Minimize to PiP button */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.minimizeButton}
               onPress={handleMinimize}
             >
@@ -1724,7 +1661,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  // 🎬 NEW: Minimize button styles
   minimizeButton: {
     flexDirection: "row",
     alignItems: "center",

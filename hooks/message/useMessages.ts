@@ -1144,29 +1144,42 @@ export const useMessages = (
             formData.append("tempId", tempId);
             bodyToSend = formData;
           } else {
-            console.log("📦 [SEND] No encryption - creating FormData");
-            const formData = new FormData();
-            if (data.content) formData.append("content", data.content);
-            formData.append("type", data.type);
-            if (data.replyTo) formData.append("replyTo", data.replyTo);
+  // ✅ FIX: Send GIF/Sticker as JSON
+  if (data.type === 'gif' || data.type === 'sticker') {
+    console.log(`🎬 [SEND] Sending ${data.type} as JSON`);
+    
+    isJson = true;
+    const jsonPayload: any = {
+      content: data.content,
+      type: data.type,
+      richMedia: (data as any).richMedia,
+    };
 
-            if (data.attachments && data.attachments.length > 0) {
-              data.attachments.forEach((att) => {
-                formData.append("attachments[]", att);
-              });
-            }
+    if (data.replyTo) {
+      jsonPayload.replyTo = data.replyTo;
+    }
 
-            // ❌ BUG: richMedia được thêm nhưng KHÔNG được stringify!
-            if ((data as any).richMedia) {
-              formData.append(
-                "richMedia",
-                JSON.stringify((data as any).richMedia)
-              );
-            }
+    bodyToSend = JSON.stringify(jsonPayload);
+    
+    console.log("📤 [SEND] JSON payload:", jsonPayload);
+  } else {
+    // Original FormData logic for other types
+    console.log("📦 [SEND] No encryption - creating FormData");
+    const formData = new FormData();
+    if (data.content) formData.append("content", data.content);
+    formData.append("type", data.type);
+    if (data.replyTo) formData.append("replyTo", data.replyTo);
 
-            formData.append("tempId", tempId);
-            bodyToSend = formData;
-          }
+    if (data.attachments && data.attachments.length > 0) {
+      data.attachments.forEach((att) => {
+        formData.append("attachments[]", att);
+      });
+    }
+
+    formData.append("tempId", tempId);
+    bodyToSend = formData;
+  }
+}
         }
 
         console.log("📡 [SEND] Sending to server:", {
